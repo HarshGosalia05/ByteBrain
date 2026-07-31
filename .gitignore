@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# environment variables
+.env
+.env.local
+.env.*
+
+# virtual environments
+.venv/
+venv/
+
+# python
+__pycache__/
+*.pyc
+
+# build output
+dist/
+build/
+coverage/
+
+# misc
+.DS_Store
+*.log
+*.pem
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
