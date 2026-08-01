@@ -1,11 +1,21 @@
 import { requireRole } from "@/lib/session"
+import { getDashboardData } from "@/lib/student-api"
 
-export default async function Page() {
+import { DashboardView } from "@/components/student/dashboard/dashboard-view"
+import { ErrorState } from "@/components/shared/state/error-state"
+
+export default async function DashboardPage() {
   await requireRole("Student")
 
-  return (
-    <main className="flex min-h-svh items-center justify-center">
-      <h1 className="text-2xl font-medium">Welcome to Student Dashboard</h1>
-    </main>
-  )
+  const result = await getDashboardData()
+
+  if (!result.ok) {
+    return (
+      <div className="flex flex-col gap-6">
+        <ErrorState title="Dashboard unavailable" description={result.error.message} />
+      </div>
+    )
+  }
+
+  return <DashboardView data={result.data} fetchedAt={result.fetchedAt} />
 }
