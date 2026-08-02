@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    
+    # Faculty analytics flag thresholds (configurable, not hardcoded)
+    FACULTY_PERFORMANCE_THRESHOLD: float = 60.0
+    FACULTY_ATTENDANCE_THRESHOLD: float = 75.0
 
     model_config = SettingsConfigDict(env_file="../.env.local", env_file_encoding="utf-8", extra="ignore")
 
