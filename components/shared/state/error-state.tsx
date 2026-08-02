@@ -22,15 +22,17 @@ export function ErrorState({
     <div
       role="alert"
       className={cn(
-        "flex flex-col items-center justify-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-6 py-10 text-center",
+        "flex flex-col items-center justify-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-6 py-12 text-center",
         className,
       )}
       {...props}
     >
-      <CircleAlert className="size-6 text-destructive" />
-      <div className="flex flex-col gap-1">
+      <div className="flex size-11 items-center justify-center rounded-full bg-destructive/10">
+        <CircleAlert className="size-5 text-destructive" />
+      </div>
+      <div className="flex max-w-sm flex-col gap-1">
         <p className="text-sm font-medium">{title}</p>
-        {description && <p className="max-w-sm text-sm text-muted-foreground">{description}</p>}
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
       {onRetry && (
         <Button variant="outline" size="sm" onClick={onRetry}>

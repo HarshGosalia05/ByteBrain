@@ -78,6 +78,8 @@ export default async function AttendancePage({
                 }))}
                 xKey="semester"
                 series={[{ key: "attendance", label: "Attendance %", color: "var(--chart-2)" }]}
+                yDomain={[0, 100]}
+                yTickSuffix="%"
               />
             )}
           </section>
@@ -119,12 +121,12 @@ export default async function AttendancePage({
                   {subjectsWithAttendance.map((subject) => {
                     const attendance = subject.attendance_percentage ?? 0
                     return (
-                      <tr key={subject.subject_code} className="border-b last:border-0">
+                      <tr key={subject.subject_code} className="border-b transition-colors last:border-0 hover:bg-muted/40">
                         <td className="py-3 pl-4 pr-4 font-mono text-xs text-muted-foreground">
                           {subject.subject_code}
                         </td>
                         <td className="py-3 pr-4 font-medium">{subject.subject_name}</td>
-                        <td className="py-3 pr-4 text-right">
+                        <td className="py-3 pr-4 text-right tabular-nums">
                           {attendance.toFixed(1)}%
                         </td>
                         <td className="py-3 pr-4">

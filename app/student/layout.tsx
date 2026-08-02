@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/session"
+import { getStudentProfile } from "@/lib/student-api"
 import { StudentShell } from "@/components/student/shell"
 
 export default async function StudentLayout({
@@ -8,5 +9,8 @@ export default async function StudentLayout({
 }>) {
   await requireRole("Student")
 
-  return <StudentShell>{children}</StudentShell>
+  const profileResult = await getStudentProfile()
+  const profile = profileResult.ok ? profileResult.data : null
+
+  return <StudentShell profile={profile}>{children}</StudentShell>
 }

@@ -31,7 +31,14 @@ function formatRelative(iso: string, now: number): string {
 
 export function FreshnessBadge({ fetchedAt }: { fetchedAt?: string | null }) {
   const now = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true)
+  }, [])
 
   if (!fetchedAt) return null
+  if (!mounted) return <Badge variant="muted">Updated just now</Badge>
   return <Badge variant="muted">Updated {formatRelative(fetchedAt, now)}</Badge>
 }

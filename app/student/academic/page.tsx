@@ -87,13 +87,13 @@ export default async function AcademicPage({
               </thead>
               <tbody>
                 {visible.map((item) => (
-                  <tr key={item.semester} className="border-b last:border-0">
+                  <tr key={item.semester} className="border-b transition-colors last:border-0 hover:bg-muted/40">
                     <td className="py-3 pl-4 pr-4 font-medium">Semester {item.semester}</td>
-                    <td className="py-3 pr-4 text-right">{item.sgpa.toFixed(2)}</td>
-                    <td className="py-3 pr-4 text-right">
+                    <td className="py-3 pr-4 text-right tabular-nums">{item.sgpa.toFixed(2)}</td>
+                    <td className="py-3 pr-4 text-right tabular-nums">
                       {item.attendance_percentage.toFixed(1)}%
                     </td>
-                    <td className="py-3 pr-4 text-right">{item.total_credits_earned}</td>
+                    <td className="py-3 pr-4 text-right tabular-nums">{item.total_credits_earned}</td>
                     <td className="py-3 pr-4">
                       {item.active_backlogs > 0 ? (
                         <Badge variant="destructive">{item.active_backlogs} backlog</Badge>

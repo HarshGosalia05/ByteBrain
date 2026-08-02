@@ -234,8 +234,8 @@ export async function getDashboardData(): Promise<BffResult<DashboardData>> {
   const latestSummary =
     summary.data.summaries.length > 0
       ? summary.data.summaries.reduce((max, item) =>
-          item.semester > max.semester ? item : max,
-        )
+        item.semester > max.semester ? item : max,
+      )
       : null
   const currentSemester = profile.data.current_semester
   const fetchedAt = [profile.fetchedAt, summary.fetchedAt, performance.fetchedAt].sort().pop()!

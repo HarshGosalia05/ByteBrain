@@ -62,6 +62,13 @@ const columns = [
   }),
 ]
 
+const NUMBERED_COLUMNS = new Set([
+  "internal_marks",
+  "external_marks",
+  "total_marks",
+  "attendance_percentage",
+])
+
 function SortHeader({ column }: { column: Column<SubjectPerformanceItem, unknown> }) {
   const isSorted = column.getIsSorted()
   const label =
@@ -70,7 +77,8 @@ function SortHeader({ column }: { column: Column<SubjectPerformanceItem, unknown
     <button
       type="button"
       onClick={column.getToggleSortingHandler()}
-      className="flex items-center gap-1 hover:text-foreground"
+      aria-label={`Sort by ${label}`}
+      className="flex min-h-6 items-center gap-1 rounded-sm font-medium transition-colors outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       {label}
       {isSorted === "asc" ? (
@@ -97,8 +105,8 @@ export function SubjectTable({ rows }: { rows: SubjectPerformanceItem[] }) {
   })
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+    <div className="max-h-[440px] overflow-auto">
+      <table className="w-full min-w-[720px] text-sm">
         <caption className="sr-only">Subject performance</caption>
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -107,15 +115,16 @@ export function SubjectTable({ rows }: { rows: SubjectPerformanceItem[] }) {
                 <th
                   key={header.id}
                   scope="col"
-                  aria-sort={header.column.getIsSorted() === "asc" ? "ascending" : header.column.getIsSorted() === "desc" ? "descending" : undefined}
+                  aria-sort={
+                    header.column.getIsSorted() === "asc"
+                      ? "ascending"
+                      : header.column.getIsSorted() === "desc"
+                        ? "descending"
+                        : undefined
+                  }
                   className={cn(
-                    "py-3 pr-4 font-medium first:pl-4",
-                    header.column.id === "total_marks" ||
-                      header.column.id === "internal_marks" ||
-                      header.column.id === "external_marks" ||
-                      header.column.id === "attendance_percentage"
-                      ? "text-right"
-                      : "",
+                    "sticky top-0 z-10 border-b bg-card py-3 pr-4 font-medium whitespace-nowrap first:pl-4",
+                    NUMBERED_COLUMNS.has(header.column.id) ? "text-right" : "",
                   )}
                 >
                   <SortHeader column={header.column} />
@@ -126,18 +135,16 @@ export function SubjectTable({ rows }: { rows: SubjectPerformanceItem[] }) {
         </thead>
         <tbody>
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="border-b last:border-0">
+            <tr
+              key={row.id}
+              className="border-b transition-colors last:border-0 hover:bg-muted/40"
+            >
               {row.getVisibleCells().map((cell) => (
                 <td
                   key={cell.id}
                   className={cn(
-                    "py-2.5 pr-4 first:pl-4",
-                    cell.column.id === "total_marks" ||
-                      cell.column.id === "internal_marks" ||
-                      cell.column.id === "external_marks" ||
-                      cell.column.id === "attendance_percentage"
-                      ? "text-right"
-                      : "",
+                    "py-2.5 pr-4 tabular-nums whitespace-nowrap first:pl-4",
+                    NUMBERED_COLUMNS.has(cell.column.id) ? "text-right" : "",
                   )}
                 >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}

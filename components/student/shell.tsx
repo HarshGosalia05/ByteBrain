@@ -7,6 +7,7 @@ import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SideNav } from "@/components/student/side-nav"
 import { TopBar } from "@/components/student/top-bar"
+import type { StudentProfile } from "@/lib/student-api"
 
 function Brand() {
   return (
@@ -19,8 +20,15 @@ function Brand() {
   )
 }
 
-export function StudentShell({ children }: { children: React.ReactNode }) {
+export function StudentShell({
+  children,
+  profile,
+}: {
+  children: React.ReactNode
+  profile: StudentProfile | null
+}) {
   const [open, setOpen] = React.useState(false)
+  const closeButtonRef = React.useRef<HTMLButtonElement>(null)
 
   React.useEffect(() => {
     if (!open) return
@@ -28,6 +36,7 @@ export function StudentShell({ children }: { children: React.ReactNode }) {
       if (event.key === "Escape") setOpen(false)
     }
     window.addEventListener("keydown", onKeyDown)
+    closeButtonRef.current?.focus()
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [open])
 
@@ -43,11 +52,11 @@ export function StudentShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-svh">
       <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-svh lg:w-64 lg:shrink-0 lg:flex-col lg:gap-6 lg:border-r lg:border-sidebar-border lg:bg-sidebar lg:px-4 lg:py-6">
         <Brand />
-        <SideNav />
+        <SideNav profile={profile} />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar menuOpen={open} onMenu={() => setOpen(true)} />
+        <TopBar menuOpen={open} onMenu={() => setOpen(true)} profile={profile} />
         <main className="flex-1 px-4 py-6 lg:px-8">{children}</main>
       </div>
 
@@ -62,10 +71,11 @@ export function StudentShell({ children }: { children: React.ReactNode }) {
             className="absolute inset-0 bg-background/60 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[80vw] flex-col gap-6 border-r border-sidebar-border bg-sidebar px-4 py-6 shadow-lg">
+          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col gap-6 border-r border-sidebar-border bg-sidebar px-4 py-6 shadow-xl">
             <div className="flex items-center justify-between">
               <Brand />
               <Button
+                ref={closeButtonRef}
                 variant="ghost"
                 size="icon"
                 aria-label="Close navigation menu"
@@ -74,7 +84,7 @@ export function StudentShell({ children }: { children: React.ReactNode }) {
                 <X className="size-4" />
               </Button>
             </div>
-            <SideNav />
+            <SideNav profile={profile} />
           </div>
         </div>
       )}

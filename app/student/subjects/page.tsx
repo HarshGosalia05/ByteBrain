@@ -36,7 +36,7 @@ export default async function SubjectsPage({
 
   const visible = performance.filter((item) => item.semester === activeSemester)
   const barData = visible.map((item) => ({
-    subject: item.subject_name.length > 18 ? `${item.subject_name.slice(0, 18)}…` : item.subject_name,
+    subject: item.subject_name,
     total: item.total_marks ?? 0,
   }))
 
@@ -78,9 +78,11 @@ export default async function SubjectsPage({
             )}
           </section>
 
-          <section className="rounded-xl bg-card ring-1 ring-foreground/10">
-            {visible.length === 0 ? null : <SubjectTable rows={visible} />}
-          </section>
+          {visible.length > 0 && (
+            <section className="rounded-xl bg-card ring-1 ring-foreground/10">
+              <SubjectTable rows={visible} />
+            </section>
+          )}
         </>
       )}
     </div>

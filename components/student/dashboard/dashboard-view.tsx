@@ -6,7 +6,6 @@ import {
   Gauge,
   GraduationCap,
   ListChecks,
-  Sparkles,
   TriangleAlert,
 } from "lucide-react"
 
@@ -28,18 +27,22 @@ export function DashboardView({
 }) {
   const { profile, summaries, latestSummary, currentSemesterSubjects } = data
 
+  const department = profile.department_name ?? "No department assigned"
+
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <AvatarInitials firstName={profile.first_name} lastName={profile.last_name} />
+      <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-card p-5 ring-1 ring-foreground/10">
+        <div className="flex items-center gap-3.5">
+          <AvatarInitials firstName={profile.first_name} lastName={profile.last_name} size="md" />
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">
+            <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+              Student overview
+            </p>
+            <h1 className="text-2xl font-semibold tracking-tight">
               Welcome back, {profile.first_name}!
             </h1>
-            <p className="text-sm text-muted-foreground">
-              {profile.department_name ?? "No department assigned"} · Enrollment{" "}
-              {profile.enrollment_no} · Semester {profile.current_semester}
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {department} · Semester {profile.current_semester} · Enrollment {profile.enrollment_no}
             </p>
           </div>
         </div>
@@ -58,12 +61,14 @@ export function DashboardView({
           value={latestSummary ? `${latestSummary.attendance_percentage.toFixed(1)}%` : "—"}
           icon={CalendarCheck}
           hint={latestSummary ? `Semester ${latestSummary.semester}` : "No data yet"}
+          tone="success"
         />
         <StatCard
           label="Active backlogs"
           value={latestSummary ? String(latestSummary.active_backlogs) : "—"}
           icon={TriangleAlert}
           hint="Latest semester"
+          tone={latestSummary ? (latestSummary.active_backlogs > 0 ? "warning" : "success") : undefined}
         />
         <StatCard
           label="Credits earned"
@@ -73,10 +78,13 @@ export function DashboardView({
         />
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid gap-4 lg:grid-cols-2" aria-label="Academic trends">
         <div className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">SGPA trend</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold">SGPA trend</h2>
+              <p className="text-xs text-muted-foreground">Semester-by-semester performance</p>
+            </div>
             <Link
               href="/student/academic"
               className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
@@ -98,13 +106,17 @@ export function DashboardView({
               }))}
               xKey="semester"
               series={[{ key: "sgpa", label: "SGPA", color: "var(--chart-1)" }]}
+              yDomain={[0, 10]}
             />
           )}
         </div>
 
         <div className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Attendance trend</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold">Attendance trend</h2>
+              <p className="text-xs text-muted-foreground">Semester-by-semester attendance</p>
+            </div>
             <Link
               href="/student/attendance"
               className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
@@ -126,14 +138,21 @@ export function DashboardView({
               }))}
               xKey="semester"
               series={[{ key: "attendance", label: "Attendance %", color: "var(--chart-2)" }]}
+              yDomain={[0, 100]}
+              yTickSuffix="%"
             />
           )}
         </div>
       </section>
 
       <section className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Current-semester subjects</h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold">Current-semester subjects</h2>
+            <p className="text-xs text-muted-foreground">
+              Performance for semester {profile.current_semester}
+            </p>
+          </div>
           <Link
             href="/student/subjects"
             className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
@@ -171,18 +190,23 @@ export function DashboardView({
               </thead>
               <tbody>
                 {currentSemesterSubjects.map((subject) => (
-                  <tr key={subject.subject_code} className="border-b last:border-0">
+                  <tr
+                    key={subject.subject_code}
+                    className="border-b transition-colors last:border-0 hover:bg-muted/40"
+                  >
                     <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">
                       {subject.subject_code}
                     </td>
-                    <td className="py-2 pr-4 font-medium">{subject.subject_name}</td>
-                    <td className="py-2 pr-4 text-right">
+                    <td className="py-2 pr-4 font-medium whitespace-nowrap">
+                      {subject.subject_name}
+                    </td>
+                    <td className="py-2 pr-4 text-right tabular-nums">
                       {subject.total_marks !== null ? subject.total_marks.toFixed(1) : "—"}
                     </td>
-                    <td className="py-2 pr-4">
+                    <td className="py-2 pr-4 whitespace-nowrap">
                       <GradeBadge grade={subject.grade} />
                     </td>
-                    <td className="py-2 text-right">
+                    <td className="py-2 text-right tabular-nums">
                       {subject.attendance_percentage !== null
                         ? `${subject.attendance_percentage.toFixed(1)}%`
                         : "—"}
@@ -193,15 +217,6 @@ export function DashboardView({
             </table>
           </div>
         )}
-      </section>
-
-      <section className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
-        <h2 className="mb-4 text-sm font-semibold">AI insights</h2>
-        <EmptyState
-          icon={Sparkles}
-          title="Grounded AI summaries are coming soon"
-          description="Personalised, data-grounded insights will appear here with the GenAI insight layer."
-        />
       </section>
 
       <section className="grid gap-4 sm:grid-cols-3">
@@ -228,13 +243,14 @@ export function DashboardView({
           <Link
             key={item.href}
             href={item.href}
-            className="flex flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition-colors hover:bg-muted/60"
+            className="group flex flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition-colors outline-none hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <item.icon className="size-5 text-primary" />
             <div>
               <p className="text-sm font-medium">{item.label}</p>
               <p className="text-xs text-muted-foreground">{item.description}</p>
             </div>
+            <ArrowRight className="ml-auto size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
           </Link>
         ))}
       </section>
