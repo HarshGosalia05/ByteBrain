@@ -66,6 +66,186 @@ export type FacultyDashboardSummary = {
   needs_attention: NeedsAttentionItem[]
 }
 
+export type FacultySubjectOption = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+}
+
+export type FacultyTermOption = {
+  semester_no: number
+  academic_year: string
+}
+
+export type FacultyClassesSummary = {
+  total_classes: number
+  total_subjects: number
+  total_students: number
+  current_semester: number | null
+  current_academic_year: string | null
+}
+
+export type FacultyClassesFilters = {
+  semesters: number[]
+  academic_years: string[]
+  subjects: FacultySubjectOption[]
+  term_options: FacultyTermOption[]
+  grades: string[]
+  result_statuses: string[]
+  enrollment_statuses: string[]
+  attendance_ranges: string[]
+  sgpa_ranges: string[]
+}
+
+export type FacultyClassCard = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  credits: number | null
+  semester_no: number
+  academic_year: string
+  class_strength: number
+  average_attendance: number | null
+  average_percentage: number | null
+  highest_marks: number | null
+  lowest_marks: number | null
+  average_grade: string | null
+  pass_percentage: number | null
+}
+
+export type FacultyClassStudentRow = {
+  enrollment_record_id: string
+  student_id: string
+  enrollment_no: number
+  semester_no: number
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  enrollment_status: string
+  first_name: string
+  last_name: string
+  email: string | null
+  internal_marks: number | null
+  external_marks: number | null
+  total_marks: number | null
+  grade: string | null
+  attendance_percentage: number | null
+  latest_sgpa: number | null
+  academic_standing: string | null
+}
+
+export type FacultyAppliedFilters = {
+  semester: number | null
+  academic_year: string | null
+  subject_id: string | null
+  attendance_range: string | null
+  sgpa_range: string | null
+  grade: string | null
+  result_status: string | null
+  student_status: string | null
+}
+
+export type FacultyPagination = {
+  page: number
+  page_size: number
+  total: number
+  total_pages: number
+}
+
+export type FacultyClassesResponse = {
+  faculty_id: string
+  summary: FacultyClassesSummary
+  filters: FacultyClassesFilters
+  applied: FacultyAppliedFilters
+  class_cards: FacultyClassCard[]
+  rows: FacultyClassStudentRow[]
+  pagination: FacultyPagination
+}
+
+export type FacultyMenteeFilters = {
+  semesters: number[]
+  standings: string[]
+}
+
+export type FacultyMenteeFlagRules = {
+  attendance_below: number
+  backlogs_above: number
+  sgpa_below: number
+}
+
+export type FacultyMenteeSummary = {
+  total_mentees: number
+  needs_attention: number
+  good_standing: number
+  average_attendance: number | null
+  average_sgpa: number | null
+  flag_rules: FacultyMenteeFlagRules
+}
+
+export type FacultyMenteeRow = {
+  student_id: string
+  enrollment_no: number
+  first_name: string
+  last_name: string
+  email: string | null
+  semester: number
+  attendance_percentage: number | null
+  latest_sgpa: number | null
+  backlogs: number | null
+  academic_standing: string | null
+  flagged: boolean
+  flag_reasons: string[]
+}
+
+export type FacultyMenteeAppliedFilters = {
+  semester: number | null
+  standing: string | null
+}
+
+export type FacultyMenteesResponse = {
+  faculty_id: string
+  summary: FacultyMenteeSummary
+  filters: FacultyMenteeFilters
+  applied: FacultyMenteeAppliedFilters
+  rows: FacultyMenteeRow[]
+  pagination: FacultyPagination
+}
+
+export type FacultySemesterSummaryItem = {
+  semester_no: number
+  semester_sgpa: number | null
+  semester_attendance_percentage: number | null
+  backlog_count: number | null
+  academic_standing: string | null
+}
+
+export type FacultyStudentSubjectItem = {
+  semester_no: number
+  subject_code: string
+  subject_name: string
+  internal_marks: number | null
+  external_marks: number | null
+  total_marks: number | null
+  grade: string | null
+  attendance_percentage: number | null
+}
+
+export type FacultyStudentOverview = {
+  student_id: string
+  enrollment_no: number
+  first_name: string
+  last_name: string
+  email: string | null
+  current_semester: number | null
+  latest_sgpa: number | null
+  overall_attendance_percentage: number | null
+  total_backlogs: number | null
+  academic_standing: string | null
+  relationship: string
+  semester_summaries: FacultySemesterSummaryItem[]
+  subject_performance: FacultyStudentSubjectItem[]
+}
+
 export type BffErrorCode =
   | "unauthorized"
   | "unlinked"
@@ -223,6 +403,72 @@ export function getFacultyProfile(): Promise<BffResult<FacultyProfile>> {
 
 export function getFacultyDashboard(): Promise<BffResult<FacultyDashboardSummary>> {
   return callFastapi<FacultyDashboardSummary>("dashboard/summary", BFF_TTL_MS)
+}
+
+export function getFacultyClasses(params?: {
+  semester?: number | null
+  academic_year?: string | null
+  subject_id?: string | null
+  search?: string | null
+  attendance_range?: string | null
+  sgpa_range?: string | null
+  grade?: string | null
+  result_status?: string | null
+  student_status?: string | null
+  page?: number
+  page_size?: number
+  sort?: string
+  order?: "asc" | "desc"
+}): Promise<BffResult<FacultyClassesResponse>> {
+  const searchParams = new URLSearchParams()
+  if (params?.semester) searchParams.set("semester", params.semester.toString())
+  if (params?.academic_year) searchParams.set("academic_year", params.academic_year)
+  if (params?.subject_id) searchParams.set("subject_id", params.subject_id)
+  if (params?.search) searchParams.set("search", params.search)
+  if (params?.attendance_range) searchParams.set("attendance_range", params.attendance_range)
+  if (params?.sgpa_range) searchParams.set("sgpa_range", params.sgpa_range)
+  if (params?.grade) searchParams.set("grade", params.grade)
+  if (params?.result_status) searchParams.set("result_status", params.result_status)
+  if (params?.student_status) searchParams.set("student_status", params.student_status)
+  if (params?.page) searchParams.set("page", params.page.toString())
+  if (params?.page_size) searchParams.set("page_size", params.page_size.toString())
+  if (params?.sort) searchParams.set("sort", params.sort)
+  if (params?.order) searchParams.set("order", params.order)
+
+  const query = searchParams.toString()
+  const path = query ? `students/classes?${query}` : "students/classes"
+  return callFastapi<FacultyClassesResponse>(path, BFF_TTL_MS)
+}
+
+export function getFacultyMentees(params?: {
+  semester?: number | null
+  standing?: string | null
+  search?: string | null
+  flagged_only?: boolean
+  page?: number
+  page_size?: number
+  sort?: string
+  order?: "asc" | "desc"
+}): Promise<BffResult<FacultyMenteesResponse>> {
+  const searchParams = new URLSearchParams()
+  if (params?.semester) searchParams.set("semester", params.semester.toString())
+  if (params?.standing) searchParams.set("standing", params.standing)
+  if (params?.search) searchParams.set("search", params.search)
+  if (params?.flagged_only) searchParams.set("flagged_only", "true")
+  if (params?.page) searchParams.set("page", params.page.toString())
+  if (params?.page_size) searchParams.set("page_size", params.page_size.toString())
+  if (params?.sort) searchParams.set("sort", params.sort)
+  if (params?.order) searchParams.set("order", params.order)
+
+  const query = searchParams.toString()
+  const path = query ? `students/mentees?${query}` : "students/mentees"
+  return callFastapi<FacultyMenteesResponse>(path, BFF_TTL_MS)
+}
+
+export function getFacultyStudentOverview(
+  studentId: string
+): Promise<BffResult<FacultyStudentOverview>> {
+  return callFastapi<FacultyStudentOverview>(`students/${studentId}/overview`, BFF_TTL_MS)
 }
 
 export type ContactUpdateInput = {

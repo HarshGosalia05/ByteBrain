@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     FACULTY_PERFORMANCE_THRESHOLD: float = 60.0
     FACULTY_ATTENDANCE_THRESHOLD: float = 75.0
 
+    # Faculty mentee rule-based flag thresholds (attendance %, backlog count, latest SGPA)
+    FACULTY_MENTEE_ATTENDANCE_THRESHOLD: float = 75.0
+    FACULTY_MENTEE_BACKLOG_THRESHOLD: int = 2
+    FACULTY_MENTEE_SGPA_THRESHOLD: float = 6.0
+
     model_config = SettingsConfigDict(env_file="../.env.local", env_file_encoding="utf-8", extra="ignore")
 
     @property
