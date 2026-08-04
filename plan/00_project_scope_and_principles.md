@@ -125,6 +125,44 @@ This glossary establishes the vocabulary used across the rest of the plan folder
 | Module complete           | A development milestone where backend logic, verification, and only then UI completion are considered done for a module     |
 | Placeholder dashboard     | The current minimal dashboard state that confirms routing and session flow but not the final product experience             |
 
+### Performance Highlights
+
+Rule-based descriptive observations generated from deterministic thresholds, statistical calculations, trend comparisons, and business rules.
+
+Performance Highlights never use AI, ML, or LLM reasoning.
+
+These are intended for Faculty, HOD, Admin, and TPO analytical dashboards.
+
+### Analytics Highlight
+
+A rule-based informational, warning, or attention message generated from descriptive analytics.
+
+Used wherever threshold-based analytics are displayed.
+
+### Threshold Engine
+
+The centralized reusable configuration layer responsible for all analytics thresholds including:
+
+- Performance
+- Attendance
+- Learning Gap
+- Pass Rate
+- Distinction
+- Exam Eligibility
+
+This engine must be reused across every analytics module.
+
+### Rule-Based Insight Engine
+
+A deterministic template engine that converts structured statistical results into human-readable Performance Highlights.
+
+This engine does NOT use:
+
+- AI
+- ML
+- LLM
+- Prediction
+
 ### 6.1 Canonical Usage Rules
 
 - Use `Student_ID` as the default reference key when discussing stitching or identity resolution.
@@ -133,6 +171,10 @@ This glossary establishes the vocabulary used across the rest of the plan folder
 - Use “ML” only for predictive or classification behavior.
 - Use “GenAI” only for grounded narrative generation, not generic text generation.
 - Use “BFF” only for thin screen-shaping routes in Next.js.
+- **Rule 1**: Use the term "Performance Highlights" (or "Analytics Highlights") ONLY for deterministic rule-based analytics.
+- **Rule 2**: Reserve the term "GenAI Insights" EXCLUSIVELY for the future GenAI module. It must never refer to rule-based analytics.
+- **Rule 3**: Avoid using the standalone term "Insights" inside descriptive analytics modules. Use Performance Highlights instead.
+- **Rule 4**: Prediction terminology is reserved exclusively for future Machine Learning modules. Rule-based analytics must never use predictive terminology.
 
 ## 7. Documentation Rules for the Rest of the Plan Folder
 
@@ -173,6 +215,14 @@ The documentation should answer the questions a coding agent or human maintainer
 ### 7.5 Maintenance Rule
 
 When the implementation changes, update the owning plan file first, then review dependent files for any downstream wording that is now stale. This keeps the documentation scalable as the project grows.
+
+### 7.6 Canonical Terminology Rule
+
+Every future planning document, implementation document, UI component, API, and documentation update must reuse the canonical terminology defined in this master document.
+
+Developers must not introduce alternate terminology for an already-defined concept.
+
+If a new term is required, it must first be added to this glossary before being used anywhere else in the project.
 
 ## 8. Source-of-Truth Hierarchy for This Project
 
