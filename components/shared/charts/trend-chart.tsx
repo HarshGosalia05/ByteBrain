@@ -5,6 +5,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  ReferenceLine,
   Tooltip,
   XAxis,
   YAxis,
@@ -16,6 +17,12 @@ export type ChartSeries = {
   key: string
   label: string
   color: string
+}
+
+export type TrendReferenceLine = {
+  y: number
+  label?: string
+  stroke?: string
 }
 
 type ChartTooltipProps = {
@@ -54,6 +61,7 @@ export function TrendChart({
   height = 240,
   yDomain,
   yTickSuffix,
+  referenceLines,
 }: {
   data: Array<Record<string, string | number>>
   xKey: string
@@ -61,6 +69,7 @@ export function TrendChart({
   height?: number
   yDomain?: [number | "auto", number | "auto"]
   yTickSuffix?: string
+  referenceLines?: TrendReferenceLine[]
 }) {
   const uid = React.useId()
 
@@ -115,6 +124,25 @@ export function TrendChart({
               cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
               wrapperStyle={{ outline: "none" }}
             />
+            {referenceLines?.map((rl, i) => (
+              <ReferenceLine
+                key={i}
+                y={rl.y}
+                stroke={rl.stroke ?? "var(--destructive)"}
+                strokeWidth={1.5}
+                strokeDasharray="5 5"
+                label={
+                  rl.label
+                    ? {
+                        value: rl.label,
+                        fontSize: 11,
+                        fill: "var(--muted-foreground)",
+                        position: "insideTopLeft",
+                      }
+                    : undefined
+                }
+              />
+            ))}
             {series.map((s) => (
               <Area
                 key={s.key}

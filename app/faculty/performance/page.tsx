@@ -1,14 +1,22 @@
+import { Suspense } from "react"
+
 import { requireRole } from "@/lib/session"
 import {
   getFacultyPerformanceSummary,
   type PerformanceAppliedFilters,
   type PerformanceFilters,
+  type PerformanceSummaryParams,
 } from "@/lib/faculty-api"
 
 import { PerformanceView } from "@/components/faculty/performance/performance-view"
 import { PerformanceFilterBar } from "@/components/faculty/performance/filter-bar"
 import { FreshnessStrip } from "@/components/faculty/performance/freshness-strip"
+import { ChartsSection } from "@/components/faculty/performance/charts-section"
+import { InsightsSection } from "@/components/faculty/performance/insights-section"
+import { LearningGapsSection } from "@/components/faculty/performance/learning-gaps-section"
+import { StudentsSection } from "@/components/faculty/performance/students-section"
 import { ErrorState } from "@/components/shared/state/error-state"
+import { LoadingSkeleton } from "@/components/shared/state/loading-skeleton"
 
 function buildScopeLabel(
   applied: PerformanceAppliedFilters,
@@ -24,6 +32,14 @@ function buildScopeLabel(
   return parts.join(" · ")
 }
 
+function sectionFallback() {
+  return (
+    <div className="flex flex-col gap-4">
+      <LoadingSkeleton />
+    </div>
+  )
+}
+
 export default async function PerformancePage(props: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
@@ -37,8 +53,17 @@ export default async function PerformancePage(props: {
   const subject_id =
     typeof searchParams.subject_id === "string" ? searchParams.subject_id : undefined
   const compare = searchParams.compare === "true"
+  const search = typeof searchParams.search === "string" ? searchParams.search : undefined
+  const gapStatus =
+    typeof searchParams.gap_status === "string" ? searchParams.gap_status : undefined
+  const page = typeof searchParams.page === "string" ? parseInt(searchParams.page, 10) || 1 : 1
+  const sort = typeof searchParams.sort === "string" ? searchParams.sort : undefined
+  const order =
+    typeof searchParams.order === "string"
+      ? (searchParams.order as "asc" | "desc")
+      : undefined
 
-  const filters = {
+  const filters: PerformanceSummaryParams = {
     semester: semester === 0 ? null : semester,
     academic_year,
     subject_id,
@@ -68,7 +93,27 @@ export default async function PerformancePage(props: {
         filters={res.data.filters}
         hasPreviousTerm={res.data.previous_term !== null}
       />
-      <PerformanceView data={res.data} />
+      <PerformanceView data={res.data}>
+        <Suspense fallback={sectionFallback()}>
+          <ChartsSection filters={filters} thresholds={res.data.thresholds} />
+        </Suspense>
+        <Suspense fallback={sectionFallback()}>
+          <InsightsSection filters={filters} />
+        </Suspense>
+        <Suspense fallback={sectionFallback()}>
+          <LearningGapsSection filters={filters} />
+        </Suspense>
+        <Suspense fallback={sectionFallback()}>
+          <StudentsSection
+            filters={filters}
+            search={search}
+            gapStatus={gapStatus}
+            page={page}
+            sort={sort}
+            order={order}
+          />
+        </Suspense>
+      </PerformanceView>
     </div>
   )
 }

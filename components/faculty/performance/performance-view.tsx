@@ -1,3 +1,6 @@
+"use client"
+
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   Award,
   BadgeCheck,
@@ -28,34 +31,6 @@ function kpiTone(kpi: PerformanceKpi): StatCardTone {
   }
 }
 
-export function PerformanceView({ data }: { data: PerformanceSummary }) {
-  return (
-    <div className="flex flex-col gap-6">
-      <section
-        className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
-        aria-label="Executive performance KPIs"
-      >
-        {data.kpis.map((kpi) => (
-          <StatCard
-            key={kpi.key}
-            label={kpi.label}
-            value={kpi.display}
-            icon={kpiIcon(kpi.key)}
-            tone={kpiTone(kpi)}
-            hint={
-              <SoSDelta
-                delta={kpi.delta}
-                hasPrevious={kpi.has_previous}
-                previousDisplay={kpi.previous_display}
-              />
-            }
-          />
-        ))}
-      </section>
-    </div>
-  )
-}
-
 function kpiIcon(key: string) {
   switch (key) {
     case "subjects":
@@ -77,4 +52,76 @@ function kpiIcon(key: string) {
     default:
       return Gauge
   }
+}
+
+function kpiAnchor(key: string): string {
+  switch (key) {
+    case "avg_performance":
+    case "avg_attendance":
+    case "pass_rate":
+    case "subjects":
+      return "performance-charts"
+    case "distinction_count":
+    case "below_count":
+    case "ineligible_count":
+      return "learning-gaps"
+    default:
+      return "students"
+  }
+}
+
+export function PerformanceView({
+  data,
+  children,
+}: {
+  data: PerformanceSummary
+  children?: React.ReactNode
+}) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  const handleKpiClick = (kpi: PerformanceKpi) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (kpi.key === "ineligible_count" || kpi.key === "below_count") {
+      params.delete("gap_status")
+      params.set("page", "1")
+    }
+    router.push(`${pathname}?${params.toString()}#${kpiAnchor(kpi.key)}`)
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <section
+        className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
+        aria-label="Executive performance KPIs"
+      >
+        {data.kpis.map((kpi) => (
+          <button
+            key={kpi.key}
+            type="button"
+            onClick={() => handleKpiClick(kpi)}
+            className="text-left transition-opacity hover:opacity-80"
+            aria-label={`${kpi.label}: ${kpi.display}. Click to drill down.`}
+          >
+            <StatCard
+              label={kpi.label}
+              value={kpi.display}
+              icon={kpiIcon(kpi.key)}
+              tone={kpiTone(kpi)}
+              hint={
+                <SoSDelta
+                  delta={kpi.delta}
+                  hasPrevious={kpi.has_previous}
+                  previousDisplay={kpi.previous_display}
+                />
+              }
+            />
+          </button>
+        ))}
+      </section>
+
+      {children}
+    </div>
+  )
 }

@@ -652,6 +652,15 @@ export type PerformanceFilters = {
   term_options: FacultyTermOption[]
 }
 
+export type PerformanceThresholds = {
+  performance: number
+  attendance: number
+  critical_performance: number
+  pass_rate_watch: number
+  pass_rate_healthy: number
+  distinction_grade_point: number
+}
+
 export type PerformanceSummary = {
   faculty_id: string
   kpis: PerformanceKpi[]
@@ -659,6 +668,7 @@ export type PerformanceSummary = {
   applied: PerformanceAppliedFilters
   current_term: FacultyTermOption | null
   previous_term: FacultyTermOption | null
+  thresholds: PerformanceThresholds
 }
 
 export type DistributionItem = {
@@ -776,21 +786,165 @@ export type PerformanceSummaryParams = {
   compare?: boolean
 }
 
+export type PerformanceStudentsParams = PerformanceSummaryParams & {
+  page?: number
+  page_size?: number
+  search?: string | null
+  gap_status?: string | null
+  sort?: string
+  order?: "asc" | "desc"
+}
+
+export type PerformanceExportParams = PerformanceSummaryParams & {
+  search?: string | null
+  student_ids?: string[]
+}
+
+function performanceScopeQuery(params: PerformanceStudentsParams): string {
+  const searchParams = new URLSearchParams()
+  if (params.semester !== undefined && params.semester !== null) {
+    searchParams.set("semester", String(params.semester))
+  }
+  if (params.academic_year) searchParams.set("academic_year", params.academic_year)
+  if (params.subject_id) searchParams.set("subject_id", params.subject_id)
+  if (params.compare) searchParams.set("compare", "true")
+  if (params.page !== undefined && params.page !== null) {
+    searchParams.set("page", String(params.page))
+  }
+  if (params.page_size !== undefined && params.page_size !== null) {
+    searchParams.set("page_size", String(params.page_size))
+  }
+  if (params.search) searchParams.set("search", params.search)
+  if (params.gap_status) searchParams.set("gap_status", params.gap_status)
+  if (params.sort) searchParams.set("sort", params.sort)
+  if (params.order) searchParams.set("order", params.order)
+  return searchParams.toString()
+}
+
 export function getFacultyPerformanceSummary(
   params?: PerformanceSummaryParams,
   opts?: { bypassCache?: boolean },
 ): Promise<BffResult<PerformanceSummary>> {
+  const query = performanceScopeQuery(params ?? {})
+  const path = query ? `performance/summary?${query}` : "performance/summary"
+  return callFastapi<PerformanceSummary>(path, BFF_TTL_MS, opts?.bypassCache)
+}
+
+export function getFacultyPerformanceDistributions(
+  params?: PerformanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<PerformanceDistributions>> {
+  const query = performanceScopeQuery(params ?? {})
+  const path = query ? `performance/distributions?${query}` : "performance/distributions"
+  return callFastapi<PerformanceDistributions>(path, BFF_TTL_MS, opts?.bypassCache)
+}
+
+export function getFacultyPerformanceSubjectBreakdown(
+  params?: PerformanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<PerformanceSubjectBreakdown>> {
+  const query = performanceScopeQuery(params ?? {})
+  const path = query ? `performance/subject-breakdown?${query}` : "performance/subject-breakdown"
+  return callFastapi<PerformanceSubjectBreakdown>(path, BFF_TTL_MS, opts?.bypassCache)
+}
+
+export function getFacultyPerformanceTrends(
+  params?: PerformanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<PerformanceTrends>> {
+  const query = performanceScopeQuery(params ?? {})
+  const path = query ? `performance/trends?${query}` : "performance/trends"
+  return callFastapi<PerformanceTrends>(path, BFF_TTL_MS, opts?.bypassCache)
+}
+
+export function getFacultyPerformanceLearningGaps(
+  params?: PerformanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<PerformanceLearningGaps>> {
+  const query = performanceScopeQuery(params ?? {})
+  const path = query ? `performance/learning-gaps?${query}` : "performance/learning-gaps"
+  return callFastapi<PerformanceLearningGaps>(path, BFF_TTL_MS, opts?.bypassCache)
+}
+
+export function getFacultyPerformanceStudents(
+  params?: PerformanceStudentsParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<PerformanceStudentsResponse>> {
+  const query = performanceScopeQuery(params ?? {})
+  const path = query ? `performance/students?${query}` : "performance/students"
+  return callFastapi<PerformanceStudentsResponse>(path, BFF_TTL_MS, opts?.bypassCache)
+}
+
+export function getFacultyPerformanceInsights(
+  params?: PerformanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<PerformanceInsightsResponse>> {
+  const query = performanceScopeQuery(params ?? {})
+  const path = query ? `performance/insights?${query}` : "performance/insights"
+  return callFastapi<PerformanceInsightsResponse>(path, BFF_TTL_MS, opts?.bypassCache)
+}
+
+export async function getFacultyPerformanceExport(
+  params?: PerformanceExportParams,
+): Promise<BffResult<string>> {
+  const user = await getSessionUser()
+  if (!user) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to export this data.",
+      },
+    }
+  }
+  if (user.role !== "Faculty" || !user.faculty_id) {
+    return {
+      ok: false,
+      error: {
+        status: 403,
+        code: "unauthorized",
+        message: "This account is not allowed to export faculty data.",
+      },
+    }
+  }
+
   const searchParams = new URLSearchParams()
   if (params?.semester !== undefined && params?.semester !== null) {
     searchParams.set("semester", String(params.semester))
   }
   if (params?.academic_year) searchParams.set("academic_year", params.academic_year)
   if (params?.subject_id) searchParams.set("subject_id", params.subject_id)
-  if (params?.compare) searchParams.set("compare", "true")
-
+  if (params?.search) searchParams.set("search", params.search)
+  if (params?.student_ids?.length) {
+    searchParams.set("student_ids", params.student_ids.join(","))
+  }
   const query = searchParams.toString()
-  const path = query ? `performance/summary?${query}` : "performance/summary"
-  return callFastapi<PerformanceSummary>(path, BFF_TTL_MS, opts?.bypassCache)
+  const path = query
+    ? `/api/v1/faculty/performance/export?${query}`
+    : "/api/v1/faculty/performance/export"
+
+  try {
+    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const res = await fetch(`${FASTAPI_URL}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      return { ok: false, error: toBffError(res.status) }
+    }
+    const text = await res.text()
+    return { ok: true, data: text, fetchedAt: new Date().toISOString() }
+  } catch {
+    return {
+      ok: false,
+      error: {
+        status: 503,
+        code: "unavailable",
+        message: "The academic service is temporarily unavailable. Please try again later.",
+      },
+    }
+  }
 }
 
 export type ContactUpdateInput = {

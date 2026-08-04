@@ -1,10 +1,10 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useTransition } from "react"
 import { Database, RefreshCw } from "lucide-react"
 
-import { refreshPerformanceSummaryAction } from "@/app/faculty/performance/actions"
+import { refreshPerformanceDataAction } from "@/app/faculty/performance/actions"
 import type { PerformanceSummaryParams } from "@/lib/faculty-api"
 
 import { FreshnessBadge } from "@/components/shared/data/freshness-badge"
@@ -19,17 +19,32 @@ type FreshnessStripProps = {
 
 export function FreshnessStrip({ fetchedAt, scopeLabel, filters }: FreshnessStripProps) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [pending, startTransition] = useTransition()
 
   const handleRefresh = () => {
     startTransition(async () => {
-      await refreshPerformanceSummaryAction(filters)
+      const page = searchParams.get("page")
+      const pageNum = page ? parseInt(page, 10) || 1 : 1
+      await refreshPerformanceDataAction(filters, {
+        semester: filters.semester,
+        academic_year: filters.academic_year,
+        subject_id: filters.subject_id,
+        page: pageNum,
+        page_size: 10,
+        search: searchParams.get("search"),
+        gap_status: searchParams.get("gap_status"),
+        sort: searchParams.get("sort") || "name",
+        order: (searchParams.get("order") as "asc" | "desc") || "asc",
+      })
+      router.push(`${pathname}?${searchParams.toString()}`)
       router.refresh()
     })
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl bg-card px-4 py-3 text-xs text-muted-foreground ring-1 ring-foreground/10">
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl bg-card px-4 py-3 text-xs text-muted-foreground ring-1 ring-foreground/10 print:hidden">
       <div className="flex items-center gap-1.5">
         <span className="font-medium text-foreground">Last updated</span>
         <FreshnessBadge fetchedAt={fetchedAt} />

@@ -5,6 +5,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ReferenceLine,
   Tooltip,
   XAxis,
   YAxis,
@@ -41,18 +42,38 @@ function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
   )
 }
 
+export type ChartBar = {
+  dataKey: string
+  name: string
+  color: string
+}
+
+export type ChartReferenceLine = {
+  x?: string | number
+  y?: string | number
+  label?: string
+  position?: "start" | "middle" | "end"
+  stroke?: string
+}
+
 export function SubjectBarChart({
   data,
   xKey,
   dataKey,
   color,
   height = 260,
+  onBarClick,
+  bars,
+  referenceLines,
 }: {
   data: Array<Record<string, string | number>>
   xKey: string
-  dataKey: string
-  color: string
+  dataKey?: string
+  color?: string
   height?: number
+  onBarClick?: (entry: Record<string, string | number>) => void
+  bars?: ChartBar[]
+  referenceLines?: ChartReferenceLine[]
 }) {
   const uid = React.useId()
   const frameRef = React.useRef<HTMLDivElement>(null)
@@ -69,20 +90,39 @@ export function SubjectBarChart({
   }, [])
 
   const maxChars = width >= 900 ? 20 : width >= 560 ? 14 : 10
+  const series: ChartBar[] =
+    bars ?? (dataKey && color ? [{ dataKey, name: "Count", color }] : [])
 
   function formatTick(value: string | number): string {
     const text = String(value)
     return text.length > maxChars ? `${text.slice(0, maxChars)}…` : text
   }
 
+  if (series.length === 0) {
+    return null
+  }
+
   return (
     <div ref={frameRef} className="w-full">
+      {bars && (
+        <div className="mb-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+          {bars.map((b) => (
+            <span
+              key={b.dataKey}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
+            >
+              <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
+              {b.name}
+            </span>
+          ))}
+        </div>
+      )}
       <ChartContainer height={height}>
         <BarChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 0 }} barCategoryGap="28%">
           <defs>
             <linearGradient id={`${uid}-bar`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity={0.9} />
-              <stop offset="100%" stopColor={color} stopOpacity={0.55} />
+              <stop offset="0%" stopColor={series[0].color} stopOpacity={0.9} />
+              <stop offset="100%" stopColor={series[0].color} stopOpacity={0.55} />
             </linearGradient>
           </defs>
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -112,15 +152,47 @@ export function SubjectBarChart({
             cursor={{ fill: "var(--muted)", opacity: 0.5 }}
             wrapperStyle={{ outline: "none" }}
           />
-          <Bar
-            dataKey={dataKey}
-            fill={`url(#${uid}-bar)`}
-            radius={[6, 6, 2, 2]}
-            maxBarSize={48}
-            isAnimationActive
-            animationDuration={600}
-            animationEasing="ease-out"
-          />
+          {referenceLines?.map((rl, i) => (
+            <ReferenceLine
+              key={i}
+              x={rl.x}
+              y={rl.y}
+              stroke={rl.stroke ?? "var(--destructive)"}
+              strokeWidth={1.5}
+              strokeDasharray="5 5"
+              position={rl.position}
+              label={
+                rl.label
+                  ? {
+                      value: rl.label,
+                      fontSize: 11,
+                      fill: "var(--muted-foreground)",
+                      position: rl.x !== undefined ? "insideTop" : "insideTopLeft",
+                    }
+                  : undefined
+              }
+            />
+          ))}
+          {series.map((s) => (
+            <Bar
+              key={s.dataKey}
+              dataKey={s.dataKey}
+              name={s.name}
+              fill={bars ? s.color : `url(#${uid}-bar)`}
+              radius={[6, 6, 2, 2]}
+              maxBarSize={48}
+              isAnimationActive
+              animationDuration={600}
+              animationEasing="ease-out"
+              {...(onBarClick
+                ? {
+                    onClick: (data: { payload?: Record<string, string | number> }) =>
+                      onBarClick(data.payload ?? {}),
+                    className: "cursor-pointer",
+                  }
+                : {})}
+            />
+          ))}
         </BarChart>
       </ChartContainer>
     </div>
