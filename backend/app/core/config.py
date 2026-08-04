@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     FACULTY_PASS_RATE_WATCH_THRESHOLD: float = 80.0
     FACULTY_PASS_RATE_HEALTHY_THRESHOLD: float = 90.0
 
+    # Attendance Analytics band thresholds (single source of truth for the Threshold Engine)
+    FACULTY_ATTENDANCE_CRITICAL_THRESHOLD: float = 60.0
+    FACULTY_ATTENDANCE_EXCELLENT_THRESHOLD: float = 90.0
+
     # Faculty mentee rule-based flag thresholds (attendance %, backlog count, latest SGPA)
     FACULTY_MENTEE_ATTENDANCE_THRESHOLD: float = 75.0
     FACULTY_MENTEE_BACKLOG_THRESHOLD: int = 2

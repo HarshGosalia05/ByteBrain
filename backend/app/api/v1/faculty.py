@@ -21,6 +21,15 @@ from app.schemas.faculty import (
     PerformanceLearningGaps,
     PerformanceStudentsResponse,
     PerformanceInsightsResponse,
+    AttendanceSummary,
+    AttendanceDistributions,
+    AttendanceSubjectBreakdown,
+    AttendanceTrends,
+    AttendanceGovernance,
+    AttendanceHealthScore,
+    AttendanceStudentsResponse,
+    AttendanceHighlightsResponse,
+    AttendanceCorrelation,
 )
 
 router = APIRouter()
@@ -282,4 +291,177 @@ async def export_performance(
         content="\r\n".join(lines),
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="faculty_performance.csv"'},
+    )
+
+@router.get("/attendance/summary", response_model=AttendanceSummary)
+async def get_attendance_summary(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    compare: bool = Query(False),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_attendance_summary(
+        _faculty_id_or_error(user), semester, academic_year, subject_id, compare,
+    )
+
+@router.get("/attendance/distributions", response_model=AttendanceDistributions)
+async def get_attendance_distributions(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_attendance_distributions(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/attendance/subject-breakdown", response_model=AttendanceSubjectBreakdown)
+async def get_attendance_subject_breakdown(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    compare: bool = Query(False),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_attendance_subject_breakdown(
+        _faculty_id_or_error(user), semester, academic_year, subject_id, compare,
+    )
+
+@router.get("/attendance/trends", response_model=AttendanceTrends)
+async def get_attendance_trends(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_attendance_trends(_faculty_id_or_error(user), subject_id)
+
+@router.get("/attendance/governance", response_model=AttendanceGovernance)
+async def get_attendance_governance(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    band: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_attendance_governance(
+        _faculty_id_or_error(user), semester, academic_year, subject_id, band,
+    )
+
+@router.get("/attendance/health-score", response_model=AttendanceHealthScore)
+async def get_attendance_health_score(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_attendance_health_score(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/attendance/students", response_model=AttendanceStudentsResponse)
+async def get_attendance_students(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    attendance_range: Optional[str] = Query(None),
+    attendance_status: Optional[str] = Query(None),
+    defaulter_status: Optional[str] = Query(None),
+    student_status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
+    sort: str = Query("name"),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_attendance_students(
+        _faculty_id_or_error(user),
+        semester, academic_year, subject_id, search,
+        attendance_range, attendance_status, defaulter_status, student_status,
+        page, page_size, sort, order,
+    )
+
+@router.get("/attendance/highlights", response_model=AttendanceHighlightsResponse)
+async def get_attendance_highlights(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_attendance_highlights(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/attendance/correlation", response_model=AttendanceCorrelation)
+async def get_attendance_correlation(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_attendance_correlation(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/attendance/export")
+async def export_attendance(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    student_ids: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    ids: List[str] = [s for s in (student_ids.split(",") if student_ids else []) if s]
+    rows = await service.get_attendance_export_rows(
+        _faculty_id_or_error(user), semester, academic_year, subject_id, search, ids,
+    )
+
+    def _cell(value: str) -> str:
+        if "," in value or '"' in value or "\n" in value:
+            return f'"{value.replace(chr(34), chr(34) * 2)}"'
+        return value
+
+    header = [
+        "Enrollment No", "Student Name", "Semester", "Academic Year",
+        "Subject Code", "Subject Name", "Attendance %", "Classes Attended",
+        "Classes Conducted", "Attendance Status", "Eligibility", "Defaulter Status",
+    ]
+    lines = [",".join(header)]
+    for r in rows:
+        att = f"{float(r['attendance_percentage']):.1f}" if r.get("attendance_percentage") is not None else ""
+        attended = str(r["attended_classes"]) if r.get("attended_classes") is not None else ""
+        conducted = str(r["total_classes"]) if r.get("total_classes") is not None else ""
+        lines.append(",".join(
+            _cell(str(v)) for v in [
+                r["enrollment_no"],
+                f"{r['first_name']} {r['last_name']}",
+                r["semester_no"],
+                r["academic_year"],
+                r["subject_code"],
+                r["subject_name"],
+                att,
+                attended,
+                conducted,
+                r.get("attendance_status") or "",
+                r.get("eligibility_status") or "",
+                r.get("defaulter_status") or "",
+            ]
+        ))
+    return Response(
+        content="\r\n".join(lines),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="faculty_attendance.csv"'},
     )

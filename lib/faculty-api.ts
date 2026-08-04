@@ -779,6 +779,232 @@ export type PerformanceInsightsResponse = {
   items: PerformanceInsight[]
 }
 
+export type AttendanceFilters = {
+  semesters: number[]
+  academic_years: string[]
+  subjects: FacultySubjectOption[]
+  term_options: FacultyTermOption[]
+  attendance_ranges: string[]
+  attendance_statuses: string[]
+  defaulter_statuses: string[]
+  student_statuses: string[]
+}
+
+export type AttendanceAppliedFilters = {
+  semester: number | null
+  academic_year: string | null
+  subject_id: string | null
+  compare: boolean
+  attendance_range: string | null
+  attendance_status: string | null
+  defaulter_status: string | null
+  student_status: string | null
+}
+
+export type AttendanceThresholds = {
+  compliance: number
+  critical: number
+  excellent: number
+}
+
+export type AttendanceSummary = {
+  faculty_id: string
+  kpis: PerformanceKpi[]
+  filters: AttendanceFilters
+  applied: AttendanceAppliedFilters
+  current_term: FacultyTermOption | null
+  previous_term: FacultyTermOption | null
+  thresholds: AttendanceThresholds
+}
+
+export type AttendanceHeatmapCell = {
+  student_id: string
+  subject_id: string
+  subject_code: string
+  first_name: string
+  last_name: string
+  attendance_percentage: number | null
+}
+
+export type AttendanceDistributions = {
+  status_distribution: DistributionItem[]
+  attendance_bands: DistributionItem[]
+  heatmap: AttendanceHeatmapCell[]
+  above_below: DistributionItem[]
+}
+
+export type AttendanceSubjectItem = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  semester_no: number
+  academic_year: string
+  enrollments: number
+  average_attendance: number | null
+  above_threshold: number
+  below_threshold: number
+  compliance_percentage: number | null
+  health_band: string
+  reason: string | null
+  previous_average_attendance: number | null
+  previous_academic_year: string | null
+}
+
+export type AttendanceSubjectBreakdown = {
+  items: AttendanceSubjectItem[]
+}
+
+export type AttendanceTrendItem = {
+  label: string
+  semester_no: number
+  academic_year: string
+  average_attendance: number | null
+}
+
+export type AttendanceTrendBySubjectItem = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  semester_no: number
+  academic_year: string
+  average_attendance: number | null
+}
+
+export type AttendanceTrends = {
+  items: AttendanceTrendItem[]
+  by_subject: AttendanceTrendBySubjectItem[]
+}
+
+export type AttendanceGovernanceItem = {
+  enrollment_record_id: string
+  student_id: string
+  enrollment_no: number
+  semester_no: number
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  first_name: string
+  last_name: string
+  attendance_percentage: number | null
+  attendance_status: string | null
+  eligibility_status: string | null
+  shortage_flag: string | null
+  band: "Critical" | "Watch" | "Healthy"
+  reason: string
+  delta: number | null
+  previous_display: string | null
+  previous_reason: string | null
+  total_classes: number | null
+  attended_classes: number | null
+}
+
+export type AttendanceGovernance = {
+  items: AttendanceGovernanceItem[]
+  critical_count: number
+  watch_count: number
+  healthy_count: number
+  band: string | null
+}
+
+export type AttendanceHealthScoreItem = {
+  subject_id: string | null
+  subject_code: string | null
+  subject_name: string | null
+  student_id: string | null
+  enrollment_no: number | null
+  student_name: string | null
+  band: string
+  reason: string
+  attendance_percentage: number | null
+}
+
+export type AttendanceHealthScore = {
+  scope_band: string
+  scope_reason: string
+  subjects: AttendanceHealthScoreItem[]
+  students: AttendanceHealthScoreItem[]
+}
+
+export type AttendanceStudentRow = {
+  enrollment_record_id: string
+  student_id: string
+  enrollment_no: number
+  semester_no: number
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  first_name: string
+  last_name: string
+  attendance_percentage: number | null
+  attended_classes: number | null
+  total_classes: number | null
+  attendance_status: string | null
+  eligibility_status: string | null
+  defaulter_status: "Defaulter" | "Non-Defaulter"
+  band: "Critical" | "Watch" | "Healthy"
+  reason: string
+}
+
+export type AttendanceStudentsResponse = {
+  faculty_id: string
+  applied: AttendanceAppliedFilters
+  rows: AttendanceStudentRow[]
+  pagination: FacultyPagination
+}
+
+export type AttendanceHighlight = {
+  id: string
+  severity: "info" | "warning" | "critical"
+  message: string
+  subject_id: string | null
+  subject_code: string | null
+  term_label: string | null
+}
+
+export type AttendanceHighlightsResponse = {
+  items: AttendanceHighlight[]
+}
+
+export type AttendanceCorrelationPoint = {
+  attendance_percentage: number | null
+  performance_percentage: number | null
+}
+
+export type AttendanceCorrelation = {
+  points: AttendanceCorrelationPoint[]
+  pearson: number | null
+  descriptor: string | null
+  sample_size: number
+}
+
+export type AttendanceSummaryParams = {
+  semester?: number | null
+  academic_year?: string | null
+  subject_id?: string | null
+  compare?: boolean
+}
+
+export type AttendanceStudentsParams = AttendanceSummaryParams & {
+  page?: number
+  page_size?: number
+  search?: string | null
+  attendance_range?: string | null
+  attendance_status?: string | null
+  defaulter_status?: string | null
+  student_status?: string | null
+  sort?: string
+  order?: "asc" | "desc"
+}
+
+export type AttendanceGovernanceParams = AttendanceSummaryParams & {
+  band?: string | null
+}
+
+export type AttendanceExportParams = AttendanceSummaryParams & {
+  search?: string | null
+  student_ids?: string[]
+}
+
 export type PerformanceSummaryParams = {
   semester?: number | null
   academic_year?: string | null
@@ -923,6 +1149,240 @@ export async function getFacultyPerformanceExport(
   const path = query
     ? `/api/v1/faculty/performance/export?${query}`
     : "/api/v1/faculty/performance/export"
+
+  try {
+    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const res = await fetch(`${FASTAPI_URL}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      return { ok: false, error: toBffError(res.status) }
+    }
+    const text = await res.text()
+    return { ok: true, data: text, fetchedAt: new Date().toISOString() }
+  } catch {
+    return {
+      ok: false,
+      error: {
+        status: 503,
+        code: "unavailable",
+        message: "The academic service is temporarily unavailable. Please try again later.",
+      },
+    }
+  }
+}
+
+function attendanceScopeQuery(params: {
+  semester?: number | null
+  academic_year?: string | null
+  subject_id?: string | null
+  compare?: boolean
+  page?: number
+  page_size?: number
+  search?: string | null
+  attendance_range?: string | null
+  attendance_status?: string | null
+  defaulter_status?: string | null
+  student_status?: string | null
+  band?: string | null
+  sort?: string
+  order?: "asc" | "desc"
+}): string {
+  const searchParams = new URLSearchParams()
+  if (params.semester !== undefined && params.semester !== null) {
+    searchParams.set("semester", String(params.semester))
+  }
+  if (params.academic_year) {
+    searchParams.set("academic_year", params.academic_year)
+  }
+  if (params.subject_id) {
+    searchParams.set("subject_id", params.subject_id)
+  }
+  if (params.compare) {
+    searchParams.set("compare", "true")
+  }
+  if (params.page !== undefined && params.page !== null) {
+    searchParams.set("page", String(params.page))
+  }
+  if (params.page_size !== undefined && params.page_size !== null) {
+    searchParams.set("page_size", String(params.page_size))
+  }
+  if (params.search) {
+    searchParams.set("search", params.search)
+  }
+  if (params.attendance_range) {
+    searchParams.set("attendance_range", params.attendance_range)
+  }
+  if (params.attendance_status) {
+    searchParams.set("attendance_status", params.attendance_status)
+  }
+  if (params.defaulter_status) {
+    searchParams.set("defaulter_status", params.defaulter_status)
+  }
+  if (params.student_status) {
+    searchParams.set("student_status", params.student_status)
+  }
+  if (params.band) {
+    searchParams.set("band", params.band)
+  }
+  if (params.sort) {
+    searchParams.set("sort", params.sort)
+  }
+  if (params.order) {
+    searchParams.set("order", params.order)
+  }
+  return searchParams.toString()
+}
+
+function attendancePath(segment: string, query: string): string {
+  return query ? `attendance/${segment}?${query}` : `attendance/${segment}`
+}
+
+export function getFacultyAttendanceSummary(
+  params?: AttendanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<AttendanceSummary>> {
+  return callFastapi<AttendanceSummary>(
+    attendancePath("summary", attendanceScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyAttendanceDistributions(
+  params?: AttendanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<AttendanceDistributions>> {
+  return callFastapi<AttendanceDistributions>(
+    attendancePath("distributions", attendanceScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyAttendanceSubjectBreakdown(
+  params?: AttendanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<AttendanceSubjectBreakdown>> {
+  return callFastapi<AttendanceSubjectBreakdown>(
+    attendancePath("subject-breakdown", attendanceScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyAttendanceTrends(
+  params?: AttendanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<AttendanceTrends>> {
+  return callFastapi<AttendanceTrends>(
+    attendancePath("trends", attendanceScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyAttendanceGovernance(
+  params?: AttendanceGovernanceParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<AttendanceGovernance>> {
+  return callFastapi<AttendanceGovernance>(
+    attendancePath("governance", attendanceScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyAttendanceHealthScore(
+  params?: AttendanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<AttendanceHealthScore>> {
+  return callFastapi<AttendanceHealthScore>(
+    attendancePath("health-score", attendanceScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyAttendanceStudents(
+  params?: AttendanceStudentsParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<AttendanceStudentsResponse>> {
+  return callFastapi<AttendanceStudentsResponse>(
+    attendancePath("students", attendanceScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyAttendanceHighlights(
+  params?: AttendanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<AttendanceHighlightsResponse>> {
+  return callFastapi<AttendanceHighlightsResponse>(
+    attendancePath("highlights", attendanceScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyAttendanceCorrelation(
+  params?: AttendanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<AttendanceCorrelation>> {
+  return callFastapi<AttendanceCorrelation>(
+    attendancePath("correlation", attendanceScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export async function getFacultyAttendanceExport(
+  params?: AttendanceExportParams,
+): Promise<BffResult<string>> {
+  const user = await getSessionUser()
+  if (!user) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to export this data.",
+      },
+    }
+  }
+  if (user.role !== "Faculty" || !user.faculty_id) {
+    return {
+      ok: false,
+      error: {
+        status: 403,
+        code: "unauthorized",
+        message: "This account is not allowed to export faculty data.",
+      },
+    }
+  }
+
+  const searchParams = new URLSearchParams()
+  if (params?.semester !== undefined && params?.semester !== null) {
+    searchParams.set("semester", String(params.semester))
+  }
+  if (params?.academic_year) {
+    searchParams.set("academic_year", params.academic_year)
+  }
+  if (params?.subject_id) {
+    searchParams.set("subject_id", params.subject_id)
+  }
+  if (params?.search) {
+    searchParams.set("search", params.search)
+  }
+  if (params?.student_ids?.length) {
+    searchParams.set("student_ids", params.student_ids.join(","))
+  }
+  const query = searchParams.toString()
+  const path = query
+    ? `/api/v1/faculty/attendance/export?${query}`
+    : "/api/v1/faculty/attendance/export"
 
   try {
     const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")

@@ -1203,6 +1203,540 @@ class FacultyRepository:
             rows = await conn.fetch(query, *params)
             return [dict(row) for row in rows]
 
+    def _attendance_where(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> tuple:
+        clauses = ["sse.faculty_id = $1", "sse.enrollment_status = 'Active'"]
+        params: List[Any] = [faculty_id]
+        if semester_no is not None:
+            params.append(semester_no)
+            clauses.append(f"sse.semester_no = ${len(params)}")
+        if academic_year is not None:
+            params.append(academic_year)
+            clauses.append(f"sse.academic_year = ${len(params)}")
+        if subject_id is not None:
+            params.append(subject_id)
+            clauses.append(f"sse.subject_id = ${len(params)}")
+        return f"WHERE {' AND '.join(clauses)}", params
+
+    async def get_attendance_filter_options(self, faculty_id: str) -> Dict[str, Any]:
+        async with self.pool.acquire() as conn:
+            statuses = await conn.fetch(
+                """
+                SELECT DISTINCT a.attendance_status
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                WHERE sse.faculty_id = $1 AND sse.enrollment_status = 'Active'
+                    AND a.attendance_status IS NOT NULL
+                ORDER BY a.attendance_status ASC
+                """,
+                faculty_id,
+            )
+            student_statuses = await conn.fetch(
+                """
+                SELECT DISTINCT sse.enrollment_status
+                FROM student_subject_enrollment sse
+                WHERE sse.faculty_id = $1 AND sse.enrollment_status IS NOT NULL
+                ORDER BY sse.enrollment_status ASC
+                """,
+                faculty_id,
+            )
+        return {
+            "attendance_statuses": [r["attendance_status"] for r in statuses],
+            "student_statuses": [r["enrollment_status"] for r in student_statuses],
+        }
+
+    async def get_attendance_aggregates(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        attendance_threshold: float,
+    ) -> Dict[str, Any]:
+        where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
+        params.append(attendance_threshold)
+        query = f"""
+            SELECT 
+                count(DISTINCT (sse.subject_id, sse.semester_no, sse.academic_year)) AS subjects,
+                count(*) AS enrollments,
+                count(a.attendance_id) AS attendance_records,
+                AVG(a.attendance_percentage) AS avg_attendance,
+                CASE WHEN SUM(a.total_classes) > 0
+                    THEN ROUND(SUM(a.attended_classes) * 100.0 / SUM(a.total_classes), 2)
+                END AS overall_attendance,
+                AVG(a.total_classes) AS avg_total_classes,
+                count(*) FILTER (WHERE a.attendance_percentage >= ${len(params)}) AS above_count,
+                count(*) FILTER (WHERE a.attendance_percentage < ${len(params)}) AS below_count,
+                count(*) FILTER (WHERE a.eligibility_status = 'Not Eligible') AS ineligible_count
+            FROM student_subject_enrollment sse
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, *params)
+            return dict(row) if row else {
+                "subjects": 0, "enrollments": 0, "attendance_records": 0,
+                "avg_attendance": None, "overall_attendance": None,
+                "avg_total_classes": None, "above_count": 0, "below_count": 0,
+                "ineligible_count": 0,
+            }
+
+    async def get_attendance_subject_breakdown(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        attendance_threshold: float,
+    ) -> List[Dict[str, Any]]:
+        where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
+        params.append(attendance_threshold)
+        query = f"""
+            SELECT 
+                sse.subject_id, sse.subject_code, sse.subject_name,
+                sse.semester_no, sse.academic_year,
+                count(DISTINCT sse.student_id) AS enrollments,
+                AVG(a.attendance_percentage) AS average_attendance,
+                count(*) FILTER (WHERE a.attendance_percentage >= ${len(params)}) AS above_count,
+                count(*) FILTER (WHERE a.attendance_percentage < ${len(params)}) AS below_count
+            FROM student_subject_enrollment sse
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            GROUP BY sse.subject_id, sse.subject_code, sse.subject_name,
+                sse.semester_no, sse.academic_year
+            ORDER BY sse.subject_name ASC, sse.semester_no ASC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    async def get_attendance_status_distribution(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
+        query = f"""
+            SELECT a.attendance_status AS status, count(DISTINCT sse.enrollment_record_id) AS count
+            FROM student_subject_enrollment sse
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            AND a.attendance_status IS NOT NULL
+            GROUP BY a.attendance_status
+            ORDER BY MIN(a.attendance_percentage) DESC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    async def get_attendance_heatmap(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
+        query = f"""
+            SELECT 
+                sse.student_id, st.first_name, st.last_name,
+                sse.subject_id, sse.subject_code,
+                a.attendance_percentage
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            AND a.attendance_percentage IS NOT NULL
+            ORDER BY st.first_name ASC, st.last_name ASC, sse.subject_code ASC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    async def get_attendance_above_below(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        attendance_threshold: float,
+    ) -> List[Dict[str, Any]]:
+        where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
+        params.append(attendance_threshold)
+        query = f"""
+            SELECT
+                CASE WHEN a.attendance_percentage >= ${len(params)} 
+                    THEN 'Above Threshold' ELSE 'Below Threshold' END AS band,
+                count(DISTINCT sse.enrollment_record_id) AS count
+            FROM student_subject_enrollment sse
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            AND a.attendance_percentage IS NOT NULL
+            GROUP BY band
+            ORDER BY band ASC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    async def get_attendance_trends(
+        self,
+        faculty_id: str,
+        subject_id: Optional[str],
+    ) -> Dict[str, Any]:
+        clauses = ["sse.faculty_id = $1", "sse.enrollment_status = 'Active'"]
+        params: List[Any] = [faculty_id]
+        if subject_id is not None:
+            params.append(subject_id)
+            clauses.append(f"sse.subject_id = ${len(params)}")
+        where = f"WHERE {' AND '.join(clauses)}"
+        term_query = f"""
+            SELECT 
+                sse.semester_no, sse.academic_year,
+                AVG(a.attendance_percentage) AS average_attendance
+            FROM student_subject_enrollment sse
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            GROUP BY sse.semester_no, sse.academic_year
+            ORDER BY sse.academic_year ASC, sse.semester_no ASC
+        """
+        subject_query = f"""
+            SELECT 
+                sse.subject_id, sse.subject_code, sse.subject_name,
+                sse.semester_no, sse.academic_year,
+                AVG(a.attendance_percentage) AS average_attendance
+            FROM student_subject_enrollment sse
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            GROUP BY sse.subject_id, sse.subject_code, sse.subject_name,
+                sse.semester_no, sse.academic_year
+            ORDER BY sse.academic_year ASC, sse.semester_no ASC, sse.subject_name ASC
+        """
+        async with self.pool.acquire() as conn:
+            terms = await conn.fetch(term_query, *params)
+            by_subject = await conn.fetch(subject_query, *params)
+        return {
+            "terms": [dict(r) for r in terms],
+            "by_subject": [dict(r) for r in by_subject],
+        }
+
+    async def get_attendance_governance(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
+        query = f"""
+            SELECT 
+                sse.enrollment_record_id, sse.student_id, sse.enrollment_no, sse.semester_no,
+                sse.subject_id, sse.subject_code, sse.subject_name,
+                st.first_name, st.last_name,
+                a.attendance_percentage, a.attendance_status, a.eligibility_status, a.shortage_flag,
+                a.total_classes, a.attended_classes
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            ORDER BY a.attendance_percentage ASC NULLS LAST, st.first_name ASC, st.last_name ASC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    async def get_attendance_history(self, faculty_id: str) -> List[Dict[str, Any]]:
+        query = """
+            SELECT 
+                sse.enrollment_record_id, sse.student_id, sse.subject_id,
+                sse.semester_no, sse.academic_year,
+                a.attendance_percentage
+            FROM student_subject_enrollment sse
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            WHERE sse.faculty_id = $1 AND sse.enrollment_status = 'Active'
+                AND a.attendance_percentage IS NOT NULL
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, faculty_id)
+            return [dict(row) for row in rows]
+
+    async def get_attendance_health_score(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> Dict[str, Any]:
+        where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
+        subject_query = f"""
+            SELECT 
+                sse.subject_id, sse.subject_code, sse.subject_name,
+                AVG(a.attendance_percentage) AS average_attendance,
+                count(DISTINCT sse.student_id) AS enrollments
+            FROM student_subject_enrollment sse
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            GROUP BY sse.subject_id, sse.subject_code, sse.subject_name
+            ORDER BY sse.subject_name ASC
+        """
+        student_query = f"""
+            SELECT 
+                sse.student_id, sse.enrollment_no, st.first_name, st.last_name,
+                sse.subject_id, sse.subject_code, sse.subject_name,
+                a.attendance_percentage, a.eligibility_status, a.shortage_flag
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            ORDER BY st.first_name ASC, st.last_name ASC, sse.subject_name ASC
+        """
+        async with self.pool.acquire() as conn:
+            subjects = await conn.fetch(subject_query, *params)
+            students = await conn.fetch(student_query, *params)
+        return {
+            "subjects": [dict(r) for r in subjects],
+            "students": [dict(r) for r in students],
+        }
+
+    async def get_attendance_correlation(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
+        query = f"""
+            SELECT a.attendance_percentage, sp.percentage AS performance_percentage
+            FROM student_subject_enrollment sse
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_subject_performance sp 
+                ON sp.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            AND a.attendance_percentage IS NOT NULL AND sp.percentage IS NOT NULL
+            ORDER BY a.attendance_percentage ASC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    def _attendance_students_where(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        search: Optional[str],
+        attendance_range: Optional[str],
+        attendance_status: Optional[str],
+        defaulter_status: Optional[str],
+        student_status: Optional[str],
+        critical_threshold: float,
+        attendance_threshold: float,
+        excellent_threshold: float,
+    ) -> tuple:
+        clauses = ["sse.faculty_id = $1"]
+        params: List[Any] = [faculty_id]
+
+        if student_status:
+            params.append(student_status)
+            clauses.append(f"sse.enrollment_status = ${len(params)}")
+        else:
+            clauses.append("sse.enrollment_status = 'Active'")
+
+        if semester_no is not None:
+            params.append(semester_no)
+            clauses.append(f"sse.semester_no = ${len(params)}")
+        if academic_year is not None:
+            params.append(academic_year)
+            clauses.append(f"sse.academic_year = ${len(params)}")
+        if subject_id is not None:
+            params.append(subject_id)
+            clauses.append(f"sse.subject_id = ${len(params)}")
+
+        if attendance_status is not None:
+            params.append(attendance_status)
+            clauses.append(f"a.attendance_status = ${len(params)}")
+
+        if attendance_range is not None:
+            if attendance_range == f"< {critical_threshold:.0f}%":
+                params.append(critical_threshold)
+                clauses.append(
+                    f"a.attendance_percentage IS NOT NULL AND a.attendance_percentage < ${len(params)}"
+                )
+            elif attendance_range == f"{critical_threshold:.0f}% - {attendance_threshold:.0f}%":
+                params.append(critical_threshold)
+                params.append(attendance_threshold)
+                clauses.append(
+                    f"a.attendance_percentage IS NOT NULL "
+                    f"AND a.attendance_percentage >= ${len(params) - 1} "
+                    f"AND a.attendance_percentage < ${len(params)}"
+                )
+            elif attendance_range == f"{attendance_threshold:.0f}% - {excellent_threshold:.0f}%":
+                params.append(attendance_threshold)
+                params.append(excellent_threshold)
+                clauses.append(
+                    f"a.attendance_percentage IS NOT NULL "
+                    f"AND a.attendance_percentage >= ${len(params) - 1} "
+                    f"AND a.attendance_percentage < ${len(params)}"
+                )
+            elif attendance_range == f">= {excellent_threshold:.0f}%":
+                params.append(excellent_threshold)
+                clauses.append(
+                    f"a.attendance_percentage IS NOT NULL AND a.attendance_percentage >= ${len(params)}"
+                )
+
+        if defaulter_status is not None:
+            if defaulter_status == "Defaulter":
+                params.append(attendance_threshold)
+                clauses.append(
+                    f"a.attendance_percentage IS NOT NULL AND a.attendance_percentage < ${len(params)}"
+                )
+            elif defaulter_status == "Non-Defaulter":
+                params.append(attendance_threshold)
+                clauses.append(
+                    f"(a.attendance_percentage IS NULL OR a.attendance_percentage >= ${len(params)})"
+                )
+
+        if search:
+            params.append(f"%{search}%")
+            clauses.append(
+                f"(st.enrollment_no::text ILIKE ${len(params)} "
+                f"OR st.first_name ILIKE ${len(params)} "
+                f"OR st.last_name ILIKE ${len(params)})"
+            )
+
+        return f"WHERE {' AND '.join(clauses)}", params
+
+    async def count_attendance_students(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        search: Optional[str],
+        attendance_range: Optional[str],
+        attendance_status: Optional[str],
+        defaulter_status: Optional[str],
+        student_status: Optional[str],
+        critical_threshold: float,
+        attendance_threshold: float,
+        excellent_threshold: float,
+    ) -> int:
+        where, params = self._attendance_students_where(
+            faculty_id, semester_no, academic_year, subject_id, search,
+            attendance_range, attendance_status, defaulter_status, student_status,
+            critical_threshold, attendance_threshold, excellent_threshold,
+        )
+        query = f"""
+            SELECT count(DISTINCT sse.enrollment_record_id)
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+        """
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(query, *params)
+
+    async def get_attendance_students(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        search: Optional[str],
+        attendance_range: Optional[str],
+        attendance_status: Optional[str],
+        defaulter_status: Optional[str],
+        student_status: Optional[str],
+        critical_threshold: float,
+        attendance_threshold: float,
+        excellent_threshold: float,
+        order_by: str,
+        limit: int,
+        offset: int,
+    ) -> List[Dict[str, Any]]:
+        where, params = self._attendance_students_where(
+            faculty_id, semester_no, academic_year, subject_id, search,
+            attendance_range, attendance_status, defaulter_status, student_status,
+            critical_threshold, attendance_threshold, excellent_threshold,
+        )
+        params.extend([limit, offset])
+        query = f"""
+            SELECT 
+                sse.enrollment_record_id, sse.student_id, sse.enrollment_no, sse.semester_no,
+                sse.subject_id, sse.subject_code, sse.subject_name,
+                st.first_name, st.last_name,
+                a.attendance_percentage, a.attended_classes, a.total_classes,
+                a.attendance_status, a.eligibility_status, a.shortage_flag
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            ORDER BY {order_by}
+            LIMIT ${len(params) - 1} OFFSET ${len(params)}
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    async def get_attendance_export_rows(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        search: Optional[str],
+        student_ids: Optional[List[str]],
+        critical_threshold: float,
+        attendance_threshold: float,
+        excellent_threshold: float,
+    ) -> List[Dict[str, Any]]:
+        where, params = self._attendance_students_where(
+            faculty_id, semester_no, academic_year, subject_id, search,
+            None, None, None, None, critical_threshold, attendance_threshold, excellent_threshold,
+        )
+        if student_ids:
+            params.append(tuple(student_ids))
+            where += f" AND sse.enrollment_record_id = ANY(${len(params)})"
+        query = f"""
+            SELECT 
+                sse.enrollment_no, st.first_name, st.last_name, sse.semester_no,
+                sse.academic_year, sse.subject_code, sse.subject_name,
+                a.attendance_percentage, a.attended_classes, a.total_classes,
+                a.attendance_status, a.eligibility_status
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            ORDER BY st.first_name ASC, st.last_name ASC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
     async def get_performance_export_rows(
         self,
         faculty_id: str,

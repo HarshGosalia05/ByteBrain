@@ -1,4 +1,5 @@
 import asyncpg
+import math
 from typing import Any, Dict, List, Optional
 from app.core.config import settings
 from app.repositories.faculty_repo import FacultyRepository
@@ -56,6 +57,27 @@ from app.schemas.faculty import (
     PerformanceStudentsResponse,
     PerformanceInsight,
     PerformanceInsightsResponse,
+    AttendanceFilters,
+    AttendanceAppliedFilters,
+    AttendanceThresholds,
+    AttendanceSummary,
+    AttendanceHeatmapCell,
+    AttendanceDistributions,
+    AttendanceSubjectItem,
+    AttendanceSubjectBreakdown,
+    AttendanceTrendItem,
+    AttendanceTrendBySubjectItem,
+    AttendanceTrends,
+    AttendanceGovernanceItem,
+    AttendanceGovernance,
+    AttendanceHealthScoreItem,
+    AttendanceHealthScore,
+    AttendanceStudentRow,
+    AttendanceStudentsResponse,
+    AttendanceHighlight,
+    AttendanceHighlightsResponse,
+    AttendanceCorrelationPoint,
+    AttendanceCorrelation,
 )
 from fastapi import HTTPException, status
 
@@ -100,6 +122,15 @@ PERFORMANCE_SORT_EXPRESSIONS: Dict[str, str] = {
     "total_marks": "sp.total_marks",
     "grade": "sp.grade_point",
     "result_status": "sp.result_status",
+}
+
+ATTENDANCE_SORT_EXPRESSIONS: Dict[str, str] = {
+    "name": "st.first_name",
+    "enrollment_no": "sse.enrollment_no",
+    "semester": "sse.semester_no",
+    "subject": "sse.subject_name",
+    "attendance": "a.attendance_percentage",
+    "compliance": "a.attendance_percentage",
 }
 
 class FacultyService:
@@ -1300,3 +1331,981 @@ class FacultyService:
         return await self.repo.get_performance_export_rows(
             faculty_id, semester_no, academic_year, subject_id, clean_search, student_ids
         )
+
+    def _attendance_band(
+        self,
+        percentage: Optional[float],
+        shortage_flag: Optional[str],
+        eligibility_status: Optional[str],
+        attendance_status: Optional[str] = None,
+    ) -> tuple:
+        critical = settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD
+        compliance = settings.FACULTY_ATTENDANCE_THRESHOLD
+        if percentage is None:
+            if eligibility_status == "Not Eligible":
+                return "Critical", "Marked exam-ineligible"
+            if shortage_flag == "Yes":
+                return "Critical", "Marked with attendance shortage"
+            if attendance_status == "Poor":
+                return "Watch", "Attendance status is Poor"
+            return "Healthy", "No attendance record in scope"
+        if percentage < critical or shortage_flag == "Yes" or eligibility_status == "Not Eligible":
+            reasons = []
+            if percentage < critical:
+                reasons.append(
+                    f"Attendance {percentage:.1f}% is below the {critical:.0f}% critical baseline"
+                )
+            if shortage_flag == "Yes":
+                reasons.append("Marked with attendance shortage")
+            if eligibility_status == "Not Eligible":
+                reasons.append("Marked exam-ineligible")
+            return "Critical", "; ".join(reasons)
+        if percentage < compliance:
+            return "Watch", (
+                f"Attendance {percentage:.1f}% is below the {compliance:.0f}% compliance baseline"
+            )
+        if attendance_status == "Poor":
+            return "Watch", "Attendance status is Poor"
+        return "Healthy", (
+            f"Attendance {percentage:.1f}% is at or above the {compliance:.0f}% compliance baseline"
+        )
+
+    def _attendance_health_band(
+        self,
+        percentage: Optional[float],
+        shortage_flag: Optional[str],
+        eligibility_status: Optional[str],
+    ) -> tuple:
+        critical = settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD
+        compliance = settings.FACULTY_ATTENDANCE_THRESHOLD
+        excellent = settings.FACULTY_ATTENDANCE_EXCELLENT_THRESHOLD
+        if percentage is None:
+            if eligibility_status == "Not Eligible":
+                return "Critical", "Marked exam-ineligible"
+            if shortage_flag == "Yes":
+                return "Critical", "Marked with attendance shortage"
+            return "No Data", "No attendance record in scope"
+        if percentage < critical or shortage_flag == "Yes" or eligibility_status == "Not Eligible":
+            reasons = []
+            if percentage < critical:
+                reasons.append(
+                    f"Attendance {percentage:.1f}% is below the {critical:.0f}% critical baseline"
+                )
+            if shortage_flag == "Yes":
+                reasons.append("Marked with attendance shortage")
+            if eligibility_status == "Not Eligible":
+                reasons.append("Marked exam-ineligible")
+            return "Critical", "; ".join(reasons)
+        if percentage < compliance:
+            return "Watch", (
+                f"Attendance {percentage:.1f}% is below the {compliance:.0f}% compliance baseline"
+            )
+        if percentage < excellent:
+            return "Good", (
+                f"Attendance {percentage:.1f}% is between the {compliance:.0f}% and "
+                f"{excellent:.0f}% bands"
+            )
+        return "Excellent", (
+            f"Attendance {percentage:.1f}% is at or above the {excellent:.0f}% excellent band"
+        )
+
+    def _compliance_pct(self, agg: Dict[str, Any]) -> Optional[float]:
+        above = int(agg.get("above_count") or 0)
+        below = int(agg.get("below_count") or 0)
+        total = above + below
+        if not total:
+            return None
+        return round(above / total * 100, 1)
+
+    def _attendance_kpi(
+        self,
+        key: str,
+        label: str,
+        kind: str,
+        current: Dict[str, Any],
+        previous: Optional[Dict[str, Any]],
+    ) -> PerformanceKpi:
+        cur_val = current.get(key)
+        prev_val = previous.get(key) if previous is not None else None
+        if kind == "percent":
+            cur_val = float(cur_val) if cur_val is not None else None
+            prev_val = float(prev_val) if prev_val is not None else None
+            display = f"{cur_val:.1f}%" if cur_val is not None else "—"
+            previous_display = f"{prev_val:.1f}%" if prev_val is not None else "—"
+            value = cur_val
+        elif kind == "int":
+            cur_val = int(cur_val) if cur_val is not None else None
+            prev_val = int(prev_val) if prev_val is not None else None
+            display = str(cur_val) if cur_val is not None else "—"
+            previous_display = str(prev_val) if prev_val is not None else "—"
+            value = cur_val
+        else:
+            cur_val = float(cur_val) if cur_val is not None else None
+            prev_val = float(prev_val) if prev_val is not None else None
+            display = f"{cur_val:.1f}" if cur_val is not None else "—"
+            previous_display = f"{prev_val:.1f}" if prev_val is not None else "—"
+            value = cur_val
+        has_previous = prev_val is not None
+        delta = None
+        if has_previous and cur_val is not None and prev_val is not None:
+            delta = round(cur_val - prev_val, 1)
+        return PerformanceKpi(
+            key=key,
+            label=label,
+            value=value,
+            display=display,
+            delta=delta,
+            previous_display=previous_display,
+            has_previous=has_previous,
+        )
+
+    def _subject_attendance_kpi(
+        self,
+        key: str,
+        label: str,
+        subject_key: str,
+        current: Dict[str, Any],
+        previous: Optional[Dict[str, Any]],
+    ) -> PerformanceKpi:
+        cur_subj = current.get(subject_key) if current else None
+        prev_subj = previous.get(subject_key) if previous else None
+        cur_pct = (
+            float(cur_subj["average_attendance"])
+            if cur_subj and cur_subj.get("average_attendance") is not None else None
+        )
+        prev_pct = (
+            float(prev_subj["average_attendance"])
+            if prev_subj and prev_subj.get("average_attendance") is not None else None
+        )
+        display = f"{cur_subj['subject_code']} · {cur_pct:.1f}%" if cur_pct is not None else "—"
+        previous_display = f"{prev_subj['subject_code']} · {prev_pct:.1f}%" if prev_pct is not None else "—"
+        has_previous = prev_pct is not None
+        delta = round(cur_pct - prev_pct, 1) if has_previous and cur_pct is not None else None
+        return PerformanceKpi(
+            key=key,
+            label=label,
+            value=cur_pct,
+            display=display,
+            delta=delta,
+            previous_display=previous_display,
+            has_previous=has_previous,
+        )
+
+    def _build_attendance_kpis(
+        self,
+        current: Dict[str, Any],
+        previous: Optional[Dict[str, Any]],
+    ) -> List[PerformanceKpi]:
+        return [
+            self._attendance_kpi("overall_attendance", "Overall Attendance", "percent", current, previous),
+            self._attendance_kpi("avg_attendance", "Average Attendance", "percent", current, previous),
+            self._subject_attendance_kpi("highest_subject", "Highest Attendance Subject", "highest_subject", current, previous),
+            self._subject_attendance_kpi("lowest_subject", "Lowest Attendance Subject", "lowest_subject", current, previous),
+            self._attendance_kpi("above_count", "Students Above Threshold", "int", current, previous),
+            self._attendance_kpi("below_count", "Students Below Threshold", "int", current, previous),
+            self._attendance_kpi("ineligible_count", "Exam Ineligible", "int", current, previous),
+            self._attendance_kpi("avg_total_classes", "Avg Classes Conducted", "float", current, previous),
+            self._attendance_kpi("attendance_records", "Total Attendance Records", "int", current, previous),
+            self._attendance_kpi("compliance_pct", "Attendance Compliance", "percent", current, previous),
+        ]
+
+    async def _offering_sets(self, faculty_id: str) -> Dict[int, set]:
+        offering_sets: Dict[int, set] = {}
+        for h in await self.repo.get_subject_offering_history(faculty_id):
+            offering_sets.setdefault(int(h["semester_no"]), set()).add(h["subject_id"])
+        return offering_sets
+
+    async def get_attendance_summary(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        compare: bool,
+    ) -> AttendanceSummary:
+        await self._ensure_profile(faculty_id)
+        filter_data = await self.repo.get_performance_filters(faculty_id)
+        option_data = await self.repo.get_attendance_filter_options(faculty_id)
+        terms = await self.repo.get_taught_terms(faculty_id)
+
+        current_term = None
+        previous_term = None
+        if semester_no is not None:
+            matched = next((t for t in terms if t["semester_no"] == semester_no), None)
+            if matched:
+                current_term = {
+                    "semester_no": semester_no,
+                    "academic_year": academic_year or matched["academic_year"],
+                }
+            elif academic_year:
+                current_term = {"semester_no": semester_no, "academic_year": academic_year}
+            offering_sets = await self._offering_sets(faculty_id)
+            prev = self._find_previous_term(terms, semester_no, offering_sets, subject_id)
+            if prev is not None:
+                previous_term = prev
+
+        threshold = settings.FACULTY_ATTENDANCE_THRESHOLD
+        current = await self.repo.get_attendance_aggregates(
+            faculty_id, semester_no, academic_year, subject_id, threshold
+        )
+        breakdown = await self.repo.get_attendance_subject_breakdown(
+            faculty_id, semester_no, academic_year, subject_id, threshold
+        )
+        att_subjects = [b for b in breakdown if b.get("average_attendance") is not None]
+        current["highest_subject"] = (
+            max(att_subjects, key=lambda b: b["average_attendance"]) if att_subjects else None
+        )
+        current["lowest_subject"] = (
+            min(att_subjects, key=lambda b: b["average_attendance"]) if att_subjects else None
+        )
+        current["compliance_pct"] = self._compliance_pct(current)
+
+        previous = None
+        if compare and previous_term:
+            previous = await self.repo.get_attendance_aggregates(
+                faculty_id,
+                previous_term["semester_no"],
+                previous_term["academic_year"],
+                subject_id,
+                threshold,
+            )
+            prev_breakdown = await self.repo.get_attendance_subject_breakdown(
+                faculty_id,
+                previous_term["semester_no"],
+                previous_term["academic_year"],
+                subject_id,
+                threshold,
+            )
+            prev_att = [b for b in prev_breakdown if b.get("average_attendance") is not None]
+            previous["highest_subject"] = (
+                max(prev_att, key=lambda b: b["average_attendance"]) if prev_att else None
+            )
+            previous["lowest_subject"] = (
+                min(prev_att, key=lambda b: b["average_attendance"]) if prev_att else None
+            )
+            previous["compliance_pct"] = self._compliance_pct(previous)
+
+        critical = settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD
+        excellent = settings.FACULTY_ATTENDANCE_EXCELLENT_THRESHOLD
+        attendance_ranges = [
+            f"< {critical:.0f}%",
+            f"{critical:.0f}% - {threshold:.0f}%",
+            f"{threshold:.0f}% - {excellent:.0f}%",
+            f">= {excellent:.0f}%",
+        ]
+
+        return AttendanceSummary(
+            faculty_id=faculty_id,
+            kpis=self._build_attendance_kpis(current, previous),
+            filters=AttendanceFilters(
+                semesters=filter_data["semesters"],
+                academic_years=filter_data["academic_years"],
+                subjects=[FacultySubjectOption(**s) for s in filter_data["subjects"]],
+                term_options=[FacultyTermOption(**t) for t in filter_data["term_options"]],
+                attendance_ranges=attendance_ranges,
+                attendance_statuses=option_data["attendance_statuses"],
+                defaulter_statuses=["Defaulter", "Non-Defaulter"],
+                student_statuses=option_data["student_statuses"],
+            ),
+            applied=AttendanceAppliedFilters(
+                semester=semester_no,
+                academic_year=academic_year,
+                subject_id=subject_id,
+                compare=compare,
+            ),
+            current_term=FacultyTermOption(**current_term) if current_term else None,
+            previous_term=FacultyTermOption(**previous_term) if previous_term else None,
+            thresholds=AttendanceThresholds(
+                compliance=threshold,
+                critical=critical,
+                excellent=excellent,
+            ),
+        )
+
+    async def get_attendance_distributions(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> AttendanceDistributions:
+        await self._ensure_profile(faculty_id)
+        threshold = settings.FACULTY_ATTENDANCE_THRESHOLD
+        statuses = await self.repo.get_attendance_status_distribution(
+            faculty_id, semester_no, academic_year, subject_id
+        )
+        bands = await self.repo.get_attendance_bands(
+            faculty_id, semester_no, academic_year, subject_id
+        )
+        heatmap = await self.repo.get_attendance_heatmap(
+            faculty_id, semester_no, academic_year, subject_id
+        )
+        above_below = await self.repo.get_attendance_above_below(
+            faculty_id, semester_no, academic_year, subject_id, threshold
+        )
+        return AttendanceDistributions(
+            status_distribution=[
+                DistributionItem(label=r["status"], count=int(r["count"])) for r in statuses
+            ],
+            attendance_bands=[
+                DistributionItem(label=r["band"], count=int(r["count"])) for r in bands
+            ],
+            heatmap=[
+                AttendanceHeatmapCell(
+                    student_id=r["student_id"],
+                    subject_id=r["subject_id"],
+                    subject_code=r["subject_code"],
+                    first_name=r["first_name"],
+                    last_name=r["last_name"],
+                    attendance_percentage=float(r["attendance_percentage"])
+                    if r.get("attendance_percentage") is not None else None,
+                )
+                for r in heatmap
+            ],
+            above_below=[
+                DistributionItem(label=r["band"], count=int(r["count"])) for r in above_below
+            ],
+        )
+
+    async def get_attendance_subject_breakdown(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        compare: bool,
+    ) -> AttendanceSubjectBreakdown:
+        await self._ensure_profile(faculty_id)
+        threshold = settings.FACULTY_ATTENDANCE_THRESHOLD
+        rows = await self.repo.get_attendance_subject_breakdown(
+            faculty_id, semester_no, academic_year, subject_id, threshold
+        )
+
+        previous_rows: Dict[str, Dict[str, Any]] = {}
+        previous_term = None
+        if compare and semester_no is not None:
+            terms = await self.repo.get_taught_terms(faculty_id)
+            offering_sets = await self._offering_sets(faculty_id)
+            prev = self._find_previous_term(terms, semester_no, offering_sets, subject_id)
+            if prev is not None:
+                previous_term = prev
+                for r in await self.repo.get_attendance_subject_breakdown(
+                    faculty_id, prev["semester_no"], prev["academic_year"], subject_id, threshold
+                ):
+                    previous_rows[r["subject_id"]] = r
+
+        items = []
+        for r in rows:
+            avg = float(r["average_attendance"]) if r.get("average_attendance") is not None else None
+            above = int(r.get("above_count") or 0)
+            below = int(r.get("below_count") or 0)
+            total = above + below
+            compliance = round(above / total * 100, 1) if total else None
+            band, reason = (
+                self._attendance_health_band(avg, None, None)
+                if avg is not None
+                else ("No Data", "No attendance record in scope")
+            )
+            prev = previous_rows.get(r["subject_id"])
+            prev_avg = (
+                float(prev["average_attendance"])
+                if prev and prev.get("average_attendance") is not None else None
+            )
+            items.append(
+                AttendanceSubjectItem(
+                    subject_id=r["subject_id"],
+                    subject_code=r["subject_code"],
+                    subject_name=r["subject_name"],
+                    semester_no=int(r["semester_no"]),
+                    academic_year=r["academic_year"],
+                    enrollments=int(r["enrollments"]),
+                    average_attendance=avg,
+                    above_threshold=above,
+                    below_threshold=below,
+                    compliance_percentage=compliance,
+                    health_band=band,
+                    reason=reason,
+                    previous_average_attendance=prev_avg,
+                    previous_academic_year=(
+                        previous_term["academic_year"] if previous_term is not None and prev_avg is not None else None
+                    ),
+                )
+            )
+        return AttendanceSubjectBreakdown(items=items)
+
+    async def get_attendance_trends(
+        self,
+        faculty_id: str,
+        subject_id: Optional[str],
+    ) -> AttendanceTrends:
+        await self._ensure_profile(faculty_id)
+        data = await self.repo.get_attendance_trends(faculty_id, subject_id)
+        return AttendanceTrends(
+            items=[
+                AttendanceTrendItem(
+                    label=f"Sem {r['semester_no']} · {r['academic_year']}",
+                    semester_no=int(r["semester_no"]),
+                    academic_year=r["academic_year"],
+                    average_attendance=float(r["average_attendance"])
+                    if r.get("average_attendance") is not None else None,
+                )
+                for r in data["terms"]
+            ],
+            by_subject=[
+                AttendanceTrendBySubjectItem(
+                    subject_id=r["subject_id"],
+                    subject_code=r["subject_code"],
+                    subject_name=r["subject_name"],
+                    semester_no=int(r["semester_no"]),
+                    academic_year=r["academic_year"],
+                    average_attendance=float(r["average_attendance"])
+                    if r.get("average_attendance") is not None else None,
+                )
+                for r in data["by_subject"]
+            ],
+        )
+
+    async def get_attendance_governance(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        band: Optional[str],
+    ) -> AttendanceGovernance:
+        await self._ensure_profile(faculty_id)
+        rows = await self.repo.get_attendance_governance(
+            faculty_id, semester_no, academic_year, subject_id
+        )
+        history = await self.repo.get_attendance_history(faculty_id)
+        prev_map: Dict[tuple, List[Dict[str, Any]]] = {}
+        for h in history:
+            key = (h["student_id"], h["subject_id"])
+            prev_map.setdefault(key, []).append(h)
+        for entries in prev_map.values():
+            entries.sort(key=lambda t: (int(t["semester_no"]), t["academic_year"]))
+
+        items = []
+        for r in rows:
+            pct = (
+                float(r["attendance_percentage"])
+                if r.get("attendance_percentage") is not None else None
+            )
+            band_status, reason = self._attendance_band(
+                pct, r.get("shortage_flag"), r.get("eligibility_status"), r.get("attendance_status")
+            )
+            if band and band_status != band:
+                continue
+
+            delta = None
+            previous_display = None
+            previous_reason = None
+            prev_entries = [
+                h for h in prev_map.get((r["student_id"], r["subject_id"]), [])
+                if int(h["semester_no"]) < int(r["semester_no"])
+            ]
+            if prev_entries:
+                pe = prev_entries[-1]
+                prev_pct = (
+                    float(pe["attendance_percentage"])
+                    if pe.get("attendance_percentage") is not None else None
+                )
+                if prev_pct is not None:
+                    previous_display = f"{prev_pct:.1f}%"
+                    if pct is not None:
+                        delta = round(pct - prev_pct, 1)
+                        if delta >= 1:
+                            previous_reason = (
+                                f"Attendance improved because attendance went from "
+                                f"{prev_pct:.1f}% to {pct:.1f}%."
+                            )
+                        elif delta <= -1:
+                            previous_reason = (
+                                f"Attendance decreased because attendance went from "
+                                f"{prev_pct:.1f}% to {pct:.1f}%."
+                            )
+                        else:
+                            previous_reason = (
+                                "Attendance was unchanged because attendance moved less "
+                                "than 1 percentage point between terms."
+                            )
+
+            items.append(
+                AttendanceGovernanceItem(
+                    enrollment_record_id=r["enrollment_record_id"],
+                    student_id=r["student_id"],
+                    enrollment_no=int(r["enrollment_no"]),
+                    semester_no=int(r["semester_no"]),
+                    subject_id=r["subject_id"],
+                    subject_code=r["subject_code"],
+                    subject_name=r["subject_name"],
+                    first_name=r["first_name"],
+                    last_name=r["last_name"],
+                    attendance_percentage=pct,
+                    attendance_status=r.get("attendance_status"),
+                    eligibility_status=r.get("eligibility_status"),
+                    shortage_flag=r.get("shortage_flag"),
+                    band=band_status,
+                    reason=reason,
+                    delta=delta,
+                    previous_display=previous_display,
+                    previous_reason=previous_reason,
+                    total_classes=int(r["total_classes"]) if r.get("total_classes") is not None else None,
+                    attended_classes=int(r["attended_classes"]) if r.get("attended_classes") is not None else None,
+                )
+            )
+
+        counts = {"Critical": 0, "Watch": 0, "Healthy": 0}
+        for item in items:
+            counts[item.band] = counts.get(item.band, 0) + 1
+        return AttendanceGovernance(
+            items=items,
+            critical_count=counts["Critical"],
+            watch_count=counts["Watch"],
+            healthy_count=counts["Healthy"],
+            band=band,
+        )
+
+    async def get_attendance_health_score(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> AttendanceHealthScore:
+        await self._ensure_profile(faculty_id)
+        threshold = settings.FACULTY_ATTENDANCE_THRESHOLD
+        agg = await self.repo.get_attendance_aggregates(
+            faculty_id, semester_no, academic_year, subject_id, threshold
+        )
+        data = await self.repo.get_attendance_health_score(
+            faculty_id, semester_no, academic_year, subject_id
+        )
+
+        scope_avg = None
+        if agg.get("overall_attendance") is not None:
+            scope_avg = float(agg["overall_attendance"])
+        elif agg.get("avg_attendance") is not None:
+            scope_avg = float(agg["avg_attendance"])
+        scope_band, scope_reason = self._attendance_health_band(scope_avg, None, None)
+
+        subjects = []
+        for r in data["subjects"]:
+            avg = float(r["average_attendance"]) if r.get("average_attendance") is not None else None
+            band, reason = (
+                self._attendance_health_band(avg, None, None)
+                if avg is not None
+                else ("No Data", "No attendance record in scope")
+            )
+            subjects.append(
+                AttendanceHealthScoreItem(
+                    subject_id=r["subject_id"],
+                    subject_code=r["subject_code"],
+                    subject_name=r["subject_name"],
+                    band=band,
+                    reason=reason,
+                    attendance_percentage=avg,
+                )
+            )
+
+        students = []
+        for r in data["students"]:
+            pct = float(r["attendance_percentage"]) if r.get("attendance_percentage") is not None else None
+            band, reason = self._attendance_health_band(
+                pct, r.get("shortage_flag"), r.get("eligibility_status")
+            )
+            students.append(
+                AttendanceHealthScoreItem(
+                    subject_id=r["subject_id"],
+                    subject_code=r["subject_code"],
+                    subject_name=r["subject_name"],
+                    student_id=r["student_id"],
+                    enrollment_no=int(r["enrollment_no"]),
+                    student_name=f"{r['first_name']} {r['last_name']}",
+                    band=band,
+                    reason=reason,
+                    attendance_percentage=pct,
+                )
+            )
+
+        return AttendanceHealthScore(
+            scope_band=scope_band,
+            scope_reason=scope_reason,
+            subjects=subjects,
+            students=students,
+        )
+
+    async def get_attendance_students(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        search: Optional[str],
+        attendance_range: Optional[str],
+        attendance_status: Optional[str],
+        defaulter_status: Optional[str],
+        student_status: Optional[str],
+        page: int,
+        page_size: int,
+        sort: str,
+        order: str,
+    ) -> AttendanceStudentsResponse:
+        await self._ensure_profile(faculty_id)
+        clean_search = search.strip()[:100] if search else None
+        sort_key = sort if sort in ATTENDANCE_SORT_EXPRESSIONS or sort == "name" else "name"
+        direction = "DESC" if order == "desc" else "ASC"
+        order_by = (
+            f"st.first_name {direction}, st.last_name {direction}"
+            if sort_key == "name"
+            else f"{ATTENDANCE_SORT_EXPRESSIONS[sort_key]} {direction} NULLS LAST"
+        )
+        critical = settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD
+        threshold = settings.FACULTY_ATTENDANCE_THRESHOLD
+        excellent = settings.FACULTY_ATTENDANCE_EXCELLENT_THRESHOLD
+
+        total = await self.repo.count_attendance_students(
+            faculty_id, semester_no, academic_year, subject_id, clean_search,
+            attendance_range, attendance_status, defaulter_status, student_status,
+            critical, threshold, excellent,
+        )
+        total_pages = max(1, -(-total // page_size)) if total else 0
+        row_start = (page - 1) * page_size
+        row_data = []
+        if total > 0:
+            row_data = await self.repo.get_attendance_students(
+                faculty_id, semester_no, academic_year, subject_id, clean_search,
+                attendance_range, attendance_status, defaulter_status, student_status,
+                critical, threshold, excellent, order_by, page_size, row_start,
+            )
+
+        rows = []
+        for row in row_data:
+            pct = (
+                float(row["attendance_percentage"])
+                if row.get("attendance_percentage") is not None else None
+            )
+            band, reason = self._attendance_band(
+                pct, row.get("shortage_flag"), row.get("eligibility_status"), row.get("attendance_status")
+            )
+            defaulter = (
+                "Defaulter" if pct is not None and pct < threshold else "Non-Defaulter"
+            )
+            rows.append(
+                AttendanceStudentRow(
+                    enrollment_record_id=row["enrollment_record_id"],
+                    student_id=row["student_id"],
+                    enrollment_no=int(row["enrollment_no"]),
+                    semester_no=int(row["semester_no"]),
+                    subject_id=row["subject_id"],
+                    subject_code=row["subject_code"],
+                    subject_name=row["subject_name"],
+                    first_name=row["first_name"],
+                    last_name=row["last_name"],
+                    attendance_percentage=pct,
+                    attended_classes=int(row["attended_classes"]) if row.get("attended_classes") is not None else None,
+                    total_classes=int(row["total_classes"]) if row.get("total_classes") is not None else None,
+                    attendance_status=row.get("attendance_status"),
+                    eligibility_status=row.get("eligibility_status"),
+                    defaulter_status=defaulter,
+                    band=band,
+                    reason=reason,
+                )
+            )
+        return AttendanceStudentsResponse(
+            faculty_id=faculty_id,
+            applied=AttendanceAppliedFilters(
+                semester=semester_no,
+                academic_year=academic_year,
+                subject_id=subject_id,
+                compare=False,
+                attendance_range=attendance_range,
+                attendance_status=attendance_status,
+                defaulter_status=defaulter_status,
+                student_status=student_status,
+            ),
+            rows=rows,
+            pagination=FacultyPagination(
+                page=page,
+                page_size=page_size,
+                total=int(total),
+                total_pages=total_pages,
+            ),
+        )
+
+    async def get_attendance_highlights(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> AttendanceHighlightsResponse:
+        await self._ensure_profile(faculty_id)
+        threshold = settings.FACULTY_ATTENDANCE_THRESHOLD
+        current = await self.repo.get_attendance_aggregates(
+            faculty_id, semester_no, academic_year, subject_id, threshold
+        )
+        breakdown = await self.repo.get_attendance_subject_breakdown(
+            faculty_id, semester_no, academic_year, subject_id, threshold
+        )
+        terms = await self.repo.get_taught_terms(faculty_id)
+
+        items: List[AttendanceHighlight] = []
+        term_label = f"Sem {semester_no}" if semester_no is not None else "current scope"
+
+        previous = None
+        if semester_no is not None:
+            offering_sets = await self._offering_sets(faculty_id)
+            prev_term = self._find_previous_term(terms, semester_no, offering_sets, subject_id)
+            if prev_term is not None:
+                previous = await self.repo.get_attendance_aggregates(
+                    faculty_id, prev_term["semester_no"], prev_term["academic_year"],
+                    subject_id, threshold,
+                )
+
+        cur_overall = None
+        if current.get("overall_attendance") is not None:
+            cur_overall = float(current["overall_attendance"])
+        elif current.get("avg_attendance") is not None:
+            cur_overall = float(current["avg_attendance"])
+
+        prev_overall = None
+        if previous is not None:
+            if previous.get("overall_attendance") is not None:
+                prev_overall = float(previous["overall_attendance"])
+            elif previous.get("avg_attendance") is not None:
+                prev_overall = float(previous["avg_attendance"])
+
+        if cur_overall is not None and prev_overall is not None:
+            diff = round(cur_overall - prev_overall, 1)
+            if diff >= 2:
+                items.append(
+                    AttendanceHighlight(
+                        id="attendance-gain",
+                        severity="info",
+                        message=f"Attendance improved by {diff:.1f}% compared with the previous term.",
+                        term_label=term_label,
+                    )
+                )
+            elif diff <= -2:
+                items.append(
+                    AttendanceHighlight(
+                        id="attendance-drop",
+                        severity="warning",
+                        message=f"Attendance dropped by {abs(diff):.1f}% compared with the previous term.",
+                        term_label=term_label,
+                    )
+                )
+
+        for b in breakdown:
+            if b.get("average_attendance") is None:
+                continue
+            if float(b["average_attendance"]) < threshold:
+                items.append(
+                    AttendanceHighlight(
+                        id=f"subject-below-{b['subject_code']}",
+                        severity="warning",
+                        message=(
+                            f"{b['subject_name']} attendance is {float(b['average_attendance']):.1f}%, "
+                            f"below the {threshold:.0f}% compliance baseline."
+                        ),
+                        subject_id=b["subject_id"],
+                        subject_code=b["subject_code"],
+                        term_label=f"Sem {b['semester_no']} · {b['academic_year']}",
+                    )
+                )
+
+        att_subjects = [b for b in breakdown if b.get("average_attendance") is not None]
+        if att_subjects:
+            top = max(att_subjects, key=lambda b: b["average_attendance"])
+            low = min(att_subjects, key=lambda b: b["average_attendance"])
+            top_pct = float(top["average_attendance"])
+            low_pct = float(low["average_attendance"])
+            items.append(
+                AttendanceHighlight(
+                    id="highest-subject",
+                    severity="info",
+                    message=f"{top['subject_name']} has the highest attendance ({top_pct:.1f}%).",
+                    subject_id=top["subject_id"],
+                    subject_code=top["subject_code"],
+                    term_label=f"Sem {top['semester_no']} · {top['academic_year']}",
+                )
+            )
+            if low["subject_id"] != top["subject_id"]:
+                if low_pct < threshold:
+                    items.append(
+                        AttendanceHighlight(
+                            id="lowest-subject",
+                            severity="warning",
+                            message=(
+                                f"{low['subject_name']} has the lowest attendance ({low_pct:.1f}%), "
+                                f"below the {threshold:.0f}% compliance baseline."
+                            ),
+                            subject_id=low["subject_id"],
+                            subject_code=low["subject_code"],
+                            term_label=f"Sem {low['semester_no']} · {low['academic_year']}",
+                        )
+                    )
+                else:
+                    items.append(
+                        AttendanceHighlight(
+                            id="lowest-subject",
+                            severity="info",
+                            message=f"{low['subject_name']} has the lowest attendance ({low_pct:.1f}%).",
+                            subject_id=low["subject_id"],
+                            subject_code=low["subject_code"],
+                            term_label=f"Sem {low['semester_no']} · {low['academic_year']}",
+                        )
+                    )
+
+        cur_compliance = self._compliance_pct(current)
+        prev_compliance = self._compliance_pct(previous) if previous is not None else None
+        if cur_compliance is not None and prev_compliance is not None:
+            compliance_diff = round(cur_compliance - prev_compliance, 1)
+            if compliance_diff >= 2:
+                items.append(
+                    AttendanceHighlight(
+                        id="compliance-gain",
+                        severity="info",
+                        message=(
+                            f"Attendance compliance improved compared with the previous semester "
+                            f"({prev_compliance:.1f}% → {cur_compliance:.1f}%)."
+                        ),
+                        term_label=term_label,
+                    )
+                )
+            elif compliance_diff <= -2:
+                items.append(
+                    AttendanceHighlight(
+                        id="compliance-drop",
+                        severity="warning",
+                        message=(
+                            f"Attendance compliance decreased compared with the previous semester "
+                            f"({prev_compliance:.1f}% → {cur_compliance:.1f}%)."
+                        ),
+                        term_label=term_label,
+                    )
+                )
+
+        with_below = [b for b in breakdown if int(b.get("below_count") or 0) > 0]
+        if with_below:
+            worst = max(with_below, key=lambda b: int(b["below_count"]))
+            items.append(
+                AttendanceHighlight(
+                    id="below-baseline",
+                    severity="warning",
+                    message=(
+                        f"{int(worst['below_count'])} student(s) are below the {threshold:.0f}% "
+                        f"attendance baseline in {worst['subject_code']} (Sem {worst['semester_no']})."
+                    ),
+                    subject_id=worst["subject_id"],
+                    subject_code=worst["subject_code"],
+                    term_label=f"Sem {worst['semester_no']} · {worst['academic_year']}",
+                )
+            )
+
+        if int(current.get("ineligible_count") or 0) > 0:
+            items.append(
+                AttendanceHighlight(
+                    id="ineligible",
+                    severity="warning",
+                    message=(
+                        f"{int(current['ineligible_count'])} student(s) are marked exam-ineligible "
+                        "in the current scope."
+                    ),
+                    term_label=term_label,
+                )
+            )
+
+        if not items:
+            items.append(
+                AttendanceHighlight(
+                    id="quiet",
+                    severity="info",
+                    message="All your cohorts are at or above the configured attendance baselines.",
+                    term_label=term_label,
+                )
+            )
+
+        return AttendanceHighlightsResponse(items=items)
+
+    def _pearson(self, xs: List[float], ys: List[float]) -> Optional[float]:
+        n = len(xs)
+        if n < 2:
+            return None
+        mean_x = sum(xs) / n
+        mean_y = sum(ys) / n
+        num = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+        denom = math.sqrt(
+            sum((x - mean_x) ** 2 for x in xs) * sum((y - mean_y) ** 2 for y in ys)
+        )
+        if denom == 0:
+            return None
+        return round(num / denom, 2)
+
+    def _correlation_descriptor(self, r: float) -> str:
+        strength = "Weak"
+        if abs(r) > 0.6:
+            strength = "Strong"
+        elif abs(r) > 0.3:
+            strength = "Moderate"
+        direction = "positive" if r > 0 else "negative"
+        return f"{strength} {direction} correlation"
+
+    async def get_attendance_correlation(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> AttendanceCorrelation:
+        await self._ensure_profile(faculty_id)
+        rows = await self.repo.get_attendance_correlation(
+            faculty_id, semester_no, academic_year, subject_id
+        )
+        points: List[AttendanceCorrelationPoint] = []
+        xs: List[float] = []
+        ys: List[float] = []
+        for r in rows:
+            x = float(r["attendance_percentage"]) if r.get("attendance_percentage") is not None else None
+            y = float(r["performance_percentage"]) if r.get("performance_percentage") is not None else None
+            if x is None or y is None:
+                continue
+            points.append(AttendanceCorrelationPoint(attendance_percentage=x, performance_percentage=y))
+            xs.append(x)
+            ys.append(y)
+        pearson = self._pearson(xs, ys)
+        return AttendanceCorrelation(
+            points=points,
+            pearson=pearson,
+            descriptor=self._correlation_descriptor(pearson) if pearson is not None else None,
+            sample_size=len(points),
+        )
+
+    async def get_attendance_export_rows(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        search: Optional[str],
+        student_ids: Optional[List[str]],
+    ) -> List[Dict[str, Any]]:
+        await self._ensure_profile(faculty_id)
+        clean_search = search.strip()[:100] if search else None
+        threshold = settings.FACULTY_ATTENDANCE_THRESHOLD
+        rows = await self.repo.get_attendance_export_rows(
+            faculty_id, semester_no, academic_year, subject_id, clean_search, student_ids,
+            settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD,
+            threshold,
+            settings.FACULTY_ATTENDANCE_EXCELLENT_THRESHOLD,
+        )
+        for row in rows:
+            pct = (
+                float(row["attendance_percentage"])
+                if row.get("attendance_percentage") is not None else None
+            )
+            row["defaulter_status"] = (
+                "Defaulter" if pct is not None and pct < threshold else "Non-Defaulter"
+            )
+        return rows

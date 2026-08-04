@@ -439,3 +439,180 @@ class PerformanceInsight(BaseModel):
 
 class PerformanceInsightsResponse(BaseModel):
     items: List[PerformanceInsight]
+
+class AttendanceFilters(BaseModel):
+    semesters: List[int]
+    academic_years: List[str]
+    subjects: List[FacultySubjectOption]
+    term_options: List[FacultyTermOption]
+    attendance_ranges: List[str]
+    attendance_statuses: List[str]
+    defaulter_statuses: List[str]
+    student_statuses: List[str]
+
+class AttendanceAppliedFilters(BaseModel):
+    semester: Optional[int] = None
+    academic_year: Optional[str] = None
+    subject_id: Optional[str] = None
+    compare: bool
+    attendance_range: Optional[str] = None
+    attendance_status: Optional[str] = None
+    defaulter_status: Optional[str] = None
+    student_status: Optional[str] = None
+
+class AttendanceThresholds(BaseModel):
+    compliance: float
+    critical: float
+    excellent: float
+
+class AttendanceSummary(BaseModel):
+    faculty_id: str
+    kpis: List[PerformanceKpi]
+    filters: AttendanceFilters
+    applied: AttendanceAppliedFilters
+    current_term: Optional[FacultyTermOption] = None
+    previous_term: Optional[FacultyTermOption] = None
+    thresholds: AttendanceThresholds
+
+class AttendanceHeatmapCell(BaseModel):
+    student_id: str
+    subject_id: str
+    subject_code: str
+    first_name: str
+    last_name: str
+    attendance_percentage: Optional[float] = None
+
+class AttendanceDistributions(BaseModel):
+    status_distribution: List[DistributionItem]
+    attendance_bands: List[DistributionItem]
+    heatmap: List[AttendanceHeatmapCell]
+    above_below: List[DistributionItem]
+
+class AttendanceSubjectItem(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    academic_year: str
+    enrollments: int
+    average_attendance: Optional[float] = None
+    above_threshold: int
+    below_threshold: int
+    compliance_percentage: Optional[float] = None
+    health_band: str
+    reason: Optional[str] = None
+    previous_average_attendance: Optional[float] = None
+    previous_academic_year: Optional[str] = None
+
+class AttendanceSubjectBreakdown(BaseModel):
+    items: List[AttendanceSubjectItem]
+
+class AttendanceTrendItem(BaseModel):
+    label: str
+    semester_no: int
+    academic_year: str
+    average_attendance: Optional[float] = None
+
+class AttendanceTrendBySubjectItem(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    academic_year: str
+    average_attendance: Optional[float] = None
+
+class AttendanceTrends(BaseModel):
+    items: List[AttendanceTrendItem]
+    by_subject: List[AttendanceTrendBySubjectItem]
+
+class AttendanceGovernanceItem(BaseModel):
+    enrollment_record_id: str
+    student_id: str
+    enrollment_no: int
+    semester_no: int
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    first_name: str
+    last_name: str
+    attendance_percentage: Optional[float] = None
+    attendance_status: Optional[str] = None
+    eligibility_status: Optional[str] = None
+    shortage_flag: Optional[str] = None
+    band: str
+    reason: str
+    delta: Optional[float] = None
+    previous_display: Optional[str] = None
+    previous_reason: Optional[str] = None
+    total_classes: Optional[int] = None
+    attended_classes: Optional[int] = None
+
+class AttendanceGovernance(BaseModel):
+    items: List[AttendanceGovernanceItem]
+    critical_count: int
+    watch_count: int
+    healthy_count: int
+    band: Optional[str] = None
+
+class AttendanceHealthScoreItem(BaseModel):
+    subject_id: Optional[str] = None
+    subject_code: Optional[str] = None
+    subject_name: Optional[str] = None
+    student_id: Optional[str] = None
+    enrollment_no: Optional[int] = None
+    student_name: Optional[str] = None
+    band: str
+    reason: str
+    attendance_percentage: Optional[float] = None
+
+class AttendanceHealthScore(BaseModel):
+    scope_band: str
+    scope_reason: str
+    subjects: List[AttendanceHealthScoreItem]
+    students: List[AttendanceHealthScoreItem]
+
+class AttendanceStudentRow(BaseModel):
+    enrollment_record_id: str
+    student_id: str
+    enrollment_no: int
+    semester_no: int
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    first_name: str
+    last_name: str
+    attendance_percentage: Optional[float] = None
+    attended_classes: Optional[int] = None
+    total_classes: Optional[int] = None
+    attendance_status: Optional[str] = None
+    eligibility_status: Optional[str] = None
+    defaulter_status: str
+    band: str
+    reason: str
+
+class AttendanceStudentsResponse(BaseModel):
+    faculty_id: str
+    applied: AttendanceAppliedFilters
+    rows: List[AttendanceStudentRow]
+    pagination: FacultyPagination
+
+class AttendanceHighlight(BaseModel):
+    id: str
+    severity: str
+    message: str
+    subject_id: Optional[str] = None
+    subject_code: Optional[str] = None
+    term_label: Optional[str] = None
+
+class AttendanceHighlightsResponse(BaseModel):
+    items: List[AttendanceHighlight]
+
+class AttendanceCorrelationPoint(BaseModel):
+    attendance_percentage: Optional[float] = None
+    performance_percentage: Optional[float] = None
+
+class AttendanceCorrelation(BaseModel):
+    points: List[AttendanceCorrelationPoint]
+    pearson: Optional[float] = None
+    descriptor: Optional[str] = None
+    sample_size: int
