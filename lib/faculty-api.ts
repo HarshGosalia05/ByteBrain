@@ -246,6 +246,105 @@ export type FacultyStudentOverview = {
   subject_performance: FacultyStudentSubjectItem[]
 }
 
+export type FacultySubjectsSummary = {
+  total_subjects: number
+  total_students: number
+  current_semester: number | null
+  current_academic_year: string | null
+  average_attendance: number | null
+  average_performance: number | null
+}
+
+export type FacultySubjectsFilters = {
+  semesters: number[]
+  academic_years: string[]
+}
+
+export type FacultySubjectsAppliedFilters = {
+  semester: number | null
+  academic_year: string | null
+  search: string | null
+}
+
+export type FacultySubjectsResponse = {
+  faculty_id: string
+  summary: FacultySubjectsSummary
+  filters: FacultySubjectsFilters
+  applied: FacultySubjectsAppliedFilters
+  cards: FacultyClassCard[]
+  pagination: FacultyPagination
+}
+
+export type FacultySubjectGradeItem = {
+  grade: string
+  count: number
+}
+
+export type FacultySubjectAttendanceItem = {
+  band: string
+  count: number
+}
+
+export type FacultySubjectEnrolledStudent = {
+  student_id: string
+  enrollment_no: number
+  first_name: string
+  last_name: string
+  attendance_percentage: number | null
+  total_marks: number | null
+  grade: string | null
+}
+
+export type FacultySubjectLearningGap = {
+  flagged: boolean
+  reason: string | null
+  threshold: number
+  average_performance: number | null
+}
+
+export type FacultySubjectSummary = {
+  total_enrolled: number
+  average_percentage: number | null
+  average_attendance: number | null
+  pass_percentage: number | null
+  average_grade: string | null
+}
+
+export type FacultySubjectDetail = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  credits: number | null
+  semester_no: number
+  academic_year: string
+  subject_type: string | null
+  assessment_type: string | null
+  department_name: string | null
+  summary: FacultySubjectSummary
+  grade_distribution: FacultySubjectGradeItem[]
+  attendance_distribution: FacultySubjectAttendanceItem[]
+  learning_gap: FacultySubjectLearningGap
+  enrolled_students: FacultySubjectEnrolledStudent[]
+}
+
+export type FacultySubjectHistoryItem = {
+  semester_no: number
+  academic_year: string
+  students: number
+  average_performance: number | null
+  average_attendance: number | null
+  pass_percentage: number | null
+}
+
+export type FacultySubjectHistory = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  current_semester: number | null
+  current_academic_year: string | null
+  semesters_taught: FacultySubjectHistoryItem[]
+}
+
 export type BffErrorCode =
   | "unauthorized"
   | "unlinked"
@@ -271,11 +370,14 @@ function cached<T>(
   key: string,
   ttlMs: number,
   load: () => Promise<BffResult<T>>,
+  bypassCache = false,
 ): Promise<BffResult<T>> {
   const now = Date.now()
-  const hit = bffCache.get(key)
-  if (hit && hit.expiresAt > now) {
-    return Promise.resolve(hit.value as BffResult<T>)
+  if (!bypassCache) {
+    const hit = bffCache.get(key)
+    if (hit && hit.expiresAt > now) {
+      return Promise.resolve(hit.value as BffResult<T>)
+    }
   }
   return load().then((value) => {
     if (value.ok) {
@@ -338,7 +440,11 @@ function toBffError(status: number): BffError {
   }
 }
 
-async function callFastapi<T>(path: string, ttlMs: number): Promise<BffResult<T>> {
+async function callFastapi<T>(
+  path: string,
+  ttlMs: number,
+  bypassCache = false,
+): Promise<BffResult<T>> {
   const user = await getSessionUser()
   if (!user) {
     return {
@@ -372,29 +478,34 @@ async function callFastapi<T>(path: string, ttlMs: number): Promise<BffResult<T>
   }
 
   const key = `${user.faculty_id}:${path}`
-  return cached(key, ttlMs, async () => {
-    try {
-      const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
-      const res = await fetch(`${FASTAPI_URL}/api/v1/faculty/${path}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      })
-      if (!res.ok) {
-        return { ok: false, error: toBffError(res.status) }
+  return cached(
+    key,
+    ttlMs,
+    async () => {
+      try {
+        const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+        const res = await fetch(`${FASTAPI_URL}/api/v1/faculty/${path}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        })
+        if (!res.ok) {
+          return { ok: false, error: toBffError(res.status) }
+        }
+        const data = (await res.json()) as T
+        return { ok: true, data, fetchedAt: new Date().toISOString() }
+      } catch {
+        return {
+          ok: false,
+          error: {
+            status: 503,
+            code: "unavailable",
+            message: "The academic service is temporarily unavailable. Please try again later.",
+          },
+        }
       }
-      const data = (await res.json()) as T
-      return { ok: true, data, fetchedAt: new Date().toISOString() }
-    } catch {
-      return {
-        ok: false,
-        error: {
-          status: 503,
-          code: "unavailable",
-          message: "The academic service is temporarily unavailable. Please try again later.",
-        },
-      }
-    }
-  })
+    },
+    bypassCache,
+  )
 }
 
 export function getFacultyProfile(): Promise<BffResult<FacultyProfile>> {
@@ -469,6 +580,217 @@ export function getFacultyStudentOverview(
   studentId: string
 ): Promise<BffResult<FacultyStudentOverview>> {
   return callFastapi<FacultyStudentOverview>(`students/${studentId}/overview`, BFF_TTL_MS)
+}
+
+export function getFacultySubjects(params?: {
+  semester?: string | number | null
+  academic_year?: string | null
+  search?: string | null
+  page?: number
+  page_size?: number
+  sort?: string
+  order?: "asc" | "desc"
+}): Promise<BffResult<FacultySubjectsResponse>> {
+  const searchParams = new URLSearchParams()
+  if (params?.semester !== undefined) searchParams.set("semester", String(params.semester))
+  if (params?.academic_year !== undefined)
+    searchParams.set("academic_year", params.academic_year ?? "")
+  if (params?.search) searchParams.set("search", params.search)
+  if (params?.page) searchParams.set("page", params.page.toString())
+  if (params?.page_size) searchParams.set("page_size", params.page_size.toString())
+  if (params?.sort) searchParams.set("sort", params.sort)
+  if (params?.order) searchParams.set("order", params.order)
+
+  const query = searchParams.toString()
+  const path = query ? `subjects?${query}` : "subjects"
+  return callFastapi<FacultySubjectsResponse>(path, BFF_TTL_MS)
+}
+
+export function getFacultySubjectDetail(
+  subjectId: string,
+  params?: {
+    semester?: number | null
+    academic_year?: string | null
+  }
+): Promise<BffResult<FacultySubjectDetail>> {
+  const searchParams = new URLSearchParams()
+  if (params?.semester) searchParams.set("semester", params.semester.toString())
+  if (params?.academic_year) searchParams.set("academic_year", params.academic_year)
+
+  const query = searchParams.toString()
+  const path = query ? `subjects/${subjectId}?${query}` : `subjects/${subjectId}`
+  return callFastapi<FacultySubjectDetail>(path, BFF_TTL_MS)
+}
+
+export function getFacultySubjectHistory(
+  subjectId: string
+): Promise<BffResult<FacultySubjectHistory>> {
+  return callFastapi<FacultySubjectHistory>(`subjects/${subjectId}/history`, BFF_TTL_MS)
+}
+
+export type PerformanceAppliedFilters = {
+  semester: number | null
+  academic_year: string | null
+  subject_id: string | null
+  compare: boolean
+}
+
+export type PerformanceKpi = {
+  key: string
+  label: string
+  value: number | null
+  display: string
+  delta: number | null
+  previous_display: string | null
+  has_previous: boolean
+}
+
+export type PerformanceFilters = {
+  semesters: number[]
+  academic_years: string[]
+  subjects: FacultySubjectOption[]
+  term_options: FacultyTermOption[]
+}
+
+export type PerformanceSummary = {
+  faculty_id: string
+  kpis: PerformanceKpi[]
+  filters: PerformanceFilters
+  applied: PerformanceAppliedFilters
+  current_term: FacultyTermOption | null
+  previous_term: FacultyTermOption | null
+}
+
+export type DistributionItem = {
+  label: string
+  count: number
+}
+
+export type AttemptItem = {
+  attempt: string
+  pass_count: number
+  fail_count: number
+}
+
+export type PerformanceDistributions = {
+  grade_distribution: FacultySubjectGradeItem[]
+  performance_bands: DistributionItem[]
+  attendance_bands: DistributionItem[]
+  attempt_analysis: AttemptItem[]
+  category_distribution: DistributionItem[]
+}
+
+export type SubjectBreakdownItem = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  semester_no: number
+  academic_year: string
+  enrollments: number
+  average_performance: number | null
+  average_attendance: number | null
+  pass_percentage: number | null
+}
+
+export type PerformanceSubjectBreakdown = {
+  items: SubjectBreakdownItem[]
+}
+
+export type PerformanceTrendItem = {
+  label: string
+  semester_no: number
+  academic_year: string
+  average_performance: number | null
+  average_attendance: number | null
+  pass_percentage: number | null
+}
+
+export type PerformanceTrends = {
+  items: PerformanceTrendItem[]
+}
+
+export type LearningGapItem = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  semester_no: number
+  academic_year: string
+  status: "Critical" | "Watch" | "Healthy"
+  average_performance: number | null
+  average_attendance: number | null
+  pass_percentage: number | null
+  reason: string | null
+  delta: number | null
+  below_baseline_count: number
+  ineligible_count: number
+}
+
+export type PerformanceLearningGaps = {
+  items: LearningGapItem[]
+  critical_count: number
+  watch_count: number
+  healthy_count: number
+}
+
+export type PerformanceStudentRow = {
+  enrollment_record_id: string
+  student_id: string
+  enrollment_no: number
+  semester_no: number
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  first_name: string
+  last_name: string
+  attendance_percentage: number | null
+  total_marks: number | null
+  grade: string | null
+  result_status: string | null
+  gap_status: string
+}
+
+export type PerformanceStudentsResponse = {
+  faculty_id: string
+  applied: PerformanceAppliedFilters
+  rows: PerformanceStudentRow[]
+  pagination: FacultyPagination
+}
+
+export type PerformanceInsight = {
+  id: string
+  severity: "info" | "warning" | "critical"
+  message: string
+  subject_id: string | null
+  subject_code: string | null
+  term_label: string | null
+}
+
+export type PerformanceInsightsResponse = {
+  items: PerformanceInsight[]
+}
+
+export type PerformanceSummaryParams = {
+  semester?: number | null
+  academic_year?: string | null
+  subject_id?: string | null
+  compare?: boolean
+}
+
+export function getFacultyPerformanceSummary(
+  params?: PerformanceSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<PerformanceSummary>> {
+  const searchParams = new URLSearchParams()
+  if (params?.semester !== undefined && params?.semester !== null) {
+    searchParams.set("semester", String(params.semester))
+  }
+  if (params?.academic_year) searchParams.set("academic_year", params.academic_year)
+  if (params?.subject_id) searchParams.set("subject_id", params.subject_id)
+  if (params?.compare) searchParams.set("compare", "true")
+
+  const query = searchParams.toString()
+  const path = query ? `performance/summary?${query}` : "performance/summary"
+  return callFastapi<PerformanceSummary>(path, BFF_TTL_MS, opts?.bypassCache)
 }
 
 export type ContactUpdateInput = {

@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     # Faculty analytics flag thresholds (configurable, not hardcoded)
     FACULTY_PERFORMANCE_THRESHOLD: float = 60.0
     FACULTY_ATTENDANCE_THRESHOLD: float = 75.0
+    CRITICAL_PERFORMANCE_THRESHOLD: float = 50.0
+    DISTINCTION_GRADE_POINT: float = 9.0
+    FACULTY_PASS_RATE_WATCH_THRESHOLD: float = 80.0
+    FACULTY_PASS_RATE_HEALTHY_THRESHOLD: float = 90.0
 
     # Faculty mentee rule-based flag thresholds (attendance %, backlog count, latest SGPA)
     FACULTY_MENTEE_ATTENDANCE_THRESHOLD: float = 75.0

@@ -219,3 +219,223 @@ class FacultyStudentOverview(BaseModel):
     relationship: str
     semester_summaries: List[FacultySemesterSummaryItem]
     subject_performance: List[FacultyStudentSubjectItem]
+
+class FacultySubjectsSummary(BaseModel):
+    total_subjects: int
+    total_students: int
+    current_semester: Optional[int]
+    current_academic_year: Optional[str]
+    average_attendance: Optional[float]
+    average_performance: Optional[float]
+
+class FacultySubjectsFilters(BaseModel):
+    semesters: List[int]
+    academic_years: List[str]
+
+class FacultySubjectsAppliedFilters(BaseModel):
+    semester: Optional[int]
+    academic_year: Optional[str]
+    search: Optional[str]
+
+class FacultySubjectsResponse(BaseModel):
+    faculty_id: str
+    summary: FacultySubjectsSummary
+    filters: FacultySubjectsFilters
+    applied: FacultySubjectsAppliedFilters
+    cards: List[FacultyClassCard]
+    pagination: FacultyPagination
+
+class FacultySubjectGradeItem(BaseModel):
+    grade: str
+    count: int
+
+class FacultySubjectAttendanceItem(BaseModel):
+    band: str
+    count: int
+
+class FacultySubjectEnrolledStudent(BaseModel):
+    student_id: str
+    enrollment_no: int
+    first_name: str
+    last_name: str
+    attendance_percentage: Optional[float]
+    total_marks: Optional[float]
+    grade: Optional[str]
+
+class FacultySubjectLearningGap(BaseModel):
+    flagged: bool
+    reason: Optional[str]
+    threshold: float
+    average_performance: Optional[float]
+
+class FacultySubjectSummary(BaseModel):
+    total_enrolled: int
+    average_percentage: Optional[float]
+    average_attendance: Optional[float]
+    pass_percentage: Optional[float]
+    average_grade: Optional[str]
+
+class FacultySubjectDetail(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    credits: Optional[int]
+    semester_no: int
+    academic_year: str
+    subject_type: Optional[str]
+    assessment_type: Optional[str]
+    department_name: Optional[str]
+    summary: FacultySubjectSummary
+    grade_distribution: List[FacultySubjectGradeItem]
+    attendance_distribution: List[FacultySubjectAttendanceItem]
+    learning_gap: FacultySubjectLearningGap
+    enrolled_students: List[FacultySubjectEnrolledStudent]
+
+class FacultySubjectHistoryItem(BaseModel):
+    semester_no: int
+    academic_year: str
+    students: int
+    average_performance: Optional[float]
+    average_attendance: Optional[float]
+    pass_percentage: Optional[float]
+
+class FacultySubjectHistory(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    current_semester: Optional[int]
+    current_academic_year: Optional[str]
+    semesters_taught: List[FacultySubjectHistoryItem]
+
+class PerformanceFilters(BaseModel):
+    semesters: List[int]
+    academic_years: List[str]
+    subjects: List[FacultySubjectOption]
+    term_options: List[FacultyTermOption]
+
+class PerformanceAppliedFilters(BaseModel):
+    semester: Optional[int] = None
+    academic_year: Optional[str] = None
+    subject_id: Optional[str] = None
+    compare: bool
+
+class PerformanceKpi(BaseModel):
+    key: str
+    label: str
+    value: Optional[float] = None
+    display: str
+    delta: Optional[float] = None
+    previous_display: Optional[str] = None
+    has_previous: bool
+
+class PerformanceThresholds(BaseModel):
+    performance: float
+    attendance: float
+    critical_performance: float
+    pass_rate_watch: float
+    pass_rate_healthy: float
+    distinction_grade_point: float
+
+class PerformanceSummary(BaseModel):
+    faculty_id: str
+    kpis: List[PerformanceKpi]
+    filters: PerformanceFilters
+    applied: PerformanceAppliedFilters
+    current_term: Optional[FacultyTermOption] = None
+    previous_term: Optional[FacultyTermOption] = None
+    thresholds: PerformanceThresholds
+
+class DistributionItem(BaseModel):
+    label: str
+    count: int
+
+class AttemptItem(BaseModel):
+    attempt: str
+    pass_count: int
+    fail_count: int
+
+class PerformanceDistributions(BaseModel):
+    grade_distribution: List[FacultySubjectGradeItem]
+    performance_bands: List[DistributionItem]
+    attendance_bands: List[DistributionItem]
+    attempt_analysis: List[AttemptItem]
+    category_distribution: List[DistributionItem]
+
+class SubjectBreakdownItem(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    academic_year: str
+    enrollments: int
+    average_performance: Optional[float] = None
+    average_attendance: Optional[float] = None
+    pass_percentage: Optional[float] = None
+
+class PerformanceSubjectBreakdown(BaseModel):
+    items: List[SubjectBreakdownItem]
+
+class PerformanceTrendItem(BaseModel):
+    label: str
+    semester_no: int
+    academic_year: str
+    average_performance: Optional[float] = None
+    average_attendance: Optional[float] = None
+    pass_percentage: Optional[float] = None
+
+class PerformanceTrends(BaseModel):
+    items: List[PerformanceTrendItem]
+
+class LearningGapItem(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    academic_year: str
+    status: str
+    average_performance: Optional[float] = None
+    average_attendance: Optional[float] = None
+    pass_percentage: Optional[float] = None
+    reason: Optional[str] = None
+    delta: Optional[float] = None
+    below_baseline_count: int
+    ineligible_count: int
+
+class PerformanceLearningGaps(BaseModel):
+    items: List[LearningGapItem]
+    critical_count: int
+    watch_count: int
+    healthy_count: int
+
+class PerformanceStudentRow(BaseModel):
+    enrollment_record_id: str
+    student_id: str
+    enrollment_no: int
+    semester_no: int
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    first_name: str
+    last_name: str
+    attendance_percentage: Optional[float] = None
+    total_marks: Optional[float] = None
+    grade: Optional[str] = None
+    result_status: Optional[str] = None
+    gap_status: str
+
+class PerformanceStudentsResponse(BaseModel):
+    faculty_id: str
+    applied: PerformanceAppliedFilters
+    rows: List[PerformanceStudentRow]
+    pagination: FacultyPagination
+
+class PerformanceInsight(BaseModel):
+    id: str
+    severity: str
+    message: str
+    subject_id: Optional[str] = None
+    subject_code: Optional[str] = None
+    term_label: Optional[str] = None
+
+class PerformanceInsightsResponse(BaseModel):
+    items: List[PerformanceInsight]

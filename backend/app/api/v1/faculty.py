@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 import asyncpg
-from typing import Optional
+from typing import List, Optional
 from app.api.dependencies import get_db_pool, require_faculty_role
 from app.services.faculty_service import FacultyService
 from app.schemas.faculty import (
@@ -10,6 +11,16 @@ from app.schemas.faculty import (
     FacultyClassesResponse,
     FacultyMenteesResponse,
     FacultyStudentOverview,
+    FacultySubjectsResponse,
+    FacultySubjectDetail,
+    FacultySubjectHistory,
+    PerformanceSummary,
+    PerformanceDistributions,
+    PerformanceSubjectBreakdown,
+    PerformanceTrends,
+    PerformanceLearningGaps,
+    PerformanceStudentsResponse,
+    PerformanceInsightsResponse,
 )
 
 router = APIRouter()
@@ -96,3 +107,179 @@ async def get_student_overview(
     service: FacultyService = Depends(get_faculty_service)
 ):
     return await service.get_student_overview(_faculty_id_or_error(user), student_id)
+
+@router.get("/subjects", response_model=FacultySubjectsResponse)
+async def get_my_subjects(
+    semester: Optional[str] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
+    sort: str = Query("name"),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    semester_no = int(semester) if semester and semester.strip() else None
+    year = academic_year if academic_year and academic_year.strip() else None
+    return await service.get_subjects(
+        _faculty_id_or_error(user),
+        semester_no, year, search, page, page_size, sort, order,
+    )
+
+@router.get("/subjects/{subject_id}/history", response_model=FacultySubjectHistory)
+async def get_subject_history(
+    subject_id: str,
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_subject_history(_faculty_id_or_error(user), subject_id)
+
+@router.get("/subjects/{subject_id}", response_model=FacultySubjectDetail)
+async def get_subject_detail(
+    subject_id: str,
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_subject_detail(
+        _faculty_id_or_error(user), subject_id, semester, academic_year,
+    )
+
+@router.get("/performance/summary", response_model=PerformanceSummary)
+async def get_performance_summary(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    compare: bool = Query(False),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_performance_summary(
+        _faculty_id_or_error(user), semester, academic_year, subject_id, compare,
+    )
+
+@router.get("/performance/distributions", response_model=PerformanceDistributions)
+async def get_performance_distributions(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_performance_distributions(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/performance/subject-breakdown", response_model=PerformanceSubjectBreakdown)
+async def get_performance_subject_breakdown(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_performance_subject_breakdown(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/performance/trends", response_model=PerformanceTrends)
+async def get_performance_trends(
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_performance_trends(_faculty_id_or_error(user), subject_id)
+
+@router.get("/performance/learning-gaps", response_model=PerformanceLearningGaps)
+async def get_performance_learning_gaps(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_performance_learning_gaps(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/performance/students", response_model=PerformanceStudentsResponse)
+async def get_performance_students(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    gap_status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
+    sort: str = Query("name"),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_performance_students(
+        _faculty_id_or_error(user),
+        semester, academic_year, subject_id, search, gap_status,
+        page, page_size, sort, order,
+    )
+
+@router.get("/performance/insights", response_model=PerformanceInsightsResponse)
+async def get_performance_insights(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_performance_insights(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/performance/export")
+async def export_performance(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    student_ids: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    ids: List[str] = [s for s in (student_ids.split(",") if student_ids else []) if s]
+    rows = await service.get_performance_export_rows(
+        _faculty_id_or_error(user), semester, academic_year, subject_id, search, ids,
+    )
+
+    def _cell(value: str) -> str:
+        if "," in value or '"' in value or "\n" in value:
+            return f'"{value.replace(chr(34), chr(34) * 2)}"'
+        return value
+
+    header = [
+        "Enrollment No", "Student Name", "Semester", "Academic Year",
+        "Subject Code", "Subject Name", "Attendance %", "Total Marks", "Grade", "Result",
+    ]
+    lines = [",".join(header)]
+    for r in rows:
+        att = f"{float(r['attendance_percentage']):.1f}" if r.get("attendance_percentage") is not None else ""
+        marks = f"{float(r['total_marks']):.0f}" if r.get("total_marks") is not None else ""
+        lines.append(",".join(
+            _cell(str(v)) for v in [
+                r["enrollment_no"],
+                f"{r['first_name']} {r['last_name']}",
+                r["semester_no"],
+                r["academic_year"],
+                r["subject_code"],
+                r["subject_name"],
+                att,
+                marks,
+                r.get("grade") or "",
+                r.get("result_status") or "",
+            ]
+        ))
+    return Response(
+        content="\r\n".join(lines),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="faculty_performance.csv"'},
+    )

@@ -15,7 +15,7 @@ type StatCardProps = React.ComponentProps<"div"> & {
   label: string
   value: string
   icon: LucideIcon
-  hint?: string
+  hint?: React.ReactNode
   tone?: StatCardTone
 }
 
