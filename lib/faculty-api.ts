@@ -350,6 +350,7 @@ export type BffErrorCode =
   | "unlinked"
   | "unavailable"
   | "not_found"
+  | "empty"
   | "server_error"
 
 export type BffError = {
@@ -1383,6 +1384,660 @@ export async function getFacultyAttendanceExport(
   const path = query
     ? `/api/v1/faculty/attendance/export?${query}`
     : "/api/v1/faculty/attendance/export"
+
+  try {
+    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const res = await fetch(`${FASTAPI_URL}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      return { ok: false, error: toBffError(res.status) }
+    }
+    const text = await res.text()
+    return { ok: true, data: text, fetchedAt: new Date().toISOString() }
+  } catch {
+    return {
+      ok: false,
+      error: {
+        status: 503,
+        code: "unavailable",
+        message: "The academic service is temporarily unavailable. Please try again later.",
+      },
+    }
+  }
+}
+
+export type WorkloadFilters = {
+  semesters: number[]
+  academic_years: string[]
+  subjects: FacultySubjectOption[]
+  term_options: FacultyTermOption[]
+  subject_types: string[]
+  workload_statuses: string[]
+}
+
+export type WorkloadAppliedFilters = {
+  semester: number | null
+  academic_year: string | null
+  subject_id: string | null
+  compare: boolean
+}
+
+export type WorkloadThresholds = {
+  capacity_weekly_hours: number
+  weeks_per_semester: number
+  overload_threshold: number
+  underutilized_threshold: number
+  balance_watch: number
+  coverage_watch: number
+  credit_imbalance_ratio: number
+  student_imbalance_ratio: number
+  health_excellent: number
+  health_good: number
+  health_watch: number
+  health_critical: number
+}
+
+export type WorkloadHealthItem = {
+  score: number | null
+  band: string
+  reason: string
+}
+
+export type WorkloadSummary = {
+  faculty_id: string
+  kpis: PerformanceKpi[]
+  filters: WorkloadFilters
+  applied: WorkloadAppliedFilters
+  current_term: FacultyTermOption | null
+  previous_term: FacultyTermOption | null
+  thresholds: WorkloadThresholds
+  health: WorkloadHealthItem
+}
+
+export type WorkloadSubjectItem = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  semester_no: number
+  academic_year: string
+  subject_type: string | null
+  credits: number | null
+  students: number
+  classes: number | null
+  weekly_hours: number | null
+}
+
+export type WorkloadTypeItem = {
+  label: string
+  count: number
+  credits: number | null
+}
+
+export type WorkloadBalanceMatrixCell = {
+  subject_id: string
+  subject_code: string
+  metric: string
+  value: number
+  normalized: number
+  band?: string | null
+}
+
+export type WorkloadSubjectBreakdown = {
+  items: WorkloadSubjectItem[]
+  type_distribution: WorkloadTypeItem[]
+  theory_practical: WorkloadTypeItem[]
+  balance_matrix: WorkloadBalanceMatrixCell[]
+}
+
+export type WorkloadTrendItem = {
+  label: string
+  semester_no: number
+  academic_year: string
+  subjects: number
+  credits: number
+  students: number
+  classes: number | null
+  weekly_hours: number
+}
+
+export type WorkloadTrendBySubjectItem = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  semester_no: number
+  academic_year: string
+  weekly_hours: number | null
+}
+
+export type WorkloadCapacityTrendItem = {
+  label: string
+  semester_no: number
+  academic_year: string
+  weekly_hours: number
+  capacity: number
+}
+
+export type WorkloadTrends = {
+  items: WorkloadTrendItem[]
+  by_subject: WorkloadTrendBySubjectItem[]
+  capacity_trend: WorkloadCapacityTrendItem[]
+}
+
+export type WorkloadCapacity = {
+  actual_weekly_hours: number
+  capacity_weekly_hours: number
+  utilization_pct: number
+  remaining_capacity: number
+  band: string
+  reason: string
+}
+
+export type WorkloadMatrixCell = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  semester_no: number
+  academic_year: string
+  metric: string
+  label: string
+  value: number
+  normalized: number
+  band?: string | null
+}
+
+export type WorkloadMatrices = {
+  heatmap: WorkloadMatrixCell[]
+  utilization: WorkloadMatrixCell[]
+  allocation: WorkloadMatrixCell[]
+}
+
+export type WorkloadScatterPoint = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  semester_no: number
+  academic_year: string
+  students: number
+  credits: number | null
+}
+
+export type WorkloadScatter = {
+  points: WorkloadScatterPoint[]
+}
+
+export type DepartmentResourceSummary = {
+  faculty_count: number
+  total_offerings: number
+  total_students: number
+  total_credits: number
+  total_classes: number | null
+  mean_weekly_hours: number | null
+  mean_capacity_utilization: number | null
+}
+
+export type WorkloadBenchmarkItem = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  semester_no: number
+  academic_year: string
+  weekly_hours: number | null
+}
+
+export type WorkloadBenchmark = {
+  items: WorkloadBenchmarkItem[]
+  department_mean_weekly_hours: number | null
+  department_summary: DepartmentResourceSummary
+}
+
+export type WorkloadForecastItem = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  expected_weekly_hours: number | null
+  prior_offerings: number
+  source_reason: string
+}
+
+export type WorkloadForecast = {
+  items: WorkloadForecastItem[]
+  expected_total_weekly_hours: number | null
+  remaining_capacity: number | null
+  source_reason: string
+}
+
+export type WorkloadGovernanceItem = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  semester_no: number
+  academic_year: string
+  status: string
+  credits: number
+  students: number
+  teaching_hours: number | null
+  reason: string
+  delta: number | null
+  previous_display: string | null
+  previous_reason: string | null
+}
+
+export type WorkloadGovernance = {
+  items: WorkloadGovernanceItem[]
+  overloaded_count: number
+  balanced_count: number
+  underutilized_count: number
+  credit_imbalance_count: number
+  student_imbalance_count: number
+  capacity_warning_count: number
+}
+
+export type WorkloadHealthScoreItem = {
+  subject_id: string | null
+  subject_code: string | null
+  subject_name: string | null
+  score: number | null
+  band: string
+  reason: string
+}
+
+export type WorkloadHealthScore = {
+  scope_score: number | null
+  scope_band: string
+  scope_reason: string
+  subjects: WorkloadHealthScoreItem[]
+}
+
+export type WorkloadTimelineItem = {
+  label: string
+  semester_no: number
+  academic_year: string
+  subjects: number
+  credits: number | null
+  students: number | null
+  classes: number | null
+  weekly_hours: number
+  delta_credits: number | null
+  delta_hours: number | null
+  delta_students: number | null
+  projected: boolean
+  source_reason: string | null
+}
+
+export type WorkloadTimeline = {
+  items: WorkloadTimelineItem[]
+}
+
+export type WorkloadStudentRow = {
+  enrollment_record_id: string
+  student_id: string
+  enrollment_no: number
+  semester_no: number
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  first_name: string
+  last_name: string
+  credits: number | null
+  weekly_hours: number | null
+  classes_conducted: number | null
+  workload_status: string
+}
+
+export type WorkloadStudentsResponse = {
+  faculty_id: string
+  applied: WorkloadAppliedFilters
+  rows: WorkloadStudentRow[]
+  pagination: FacultyPagination
+}
+
+export type WorkloadHighlight = {
+  id: string
+  severity: "info" | "warning"
+  message: string
+  subject_id: string | null
+  subject_code: string | null
+  term_label: string | null
+}
+
+export type WorkloadHighlightsResponse = {
+  items: WorkloadHighlight[]
+}
+
+export type WorkloadSummaryParams = {
+  semester?: number | null
+  academic_year?: string | null
+  subject_id?: string | null
+  compare?: boolean
+}
+
+export type WorkloadStudentsParams = WorkloadSummaryParams & {
+  subject_type?: string | null
+  credits_min?: number | null
+  credits_max?: number | null
+  hours_min?: number | null
+  hours_max?: number | null
+  students_min?: number | null
+  students_max?: number | null
+  search?: string | null
+  workload_status?: string | null
+  page?: number
+  page_size?: number
+  sort?: string
+  order?: "asc" | "desc"
+}
+
+export type WorkloadGovernanceParams = WorkloadSummaryParams & {
+  status?: string | null
+}
+
+export type WorkloadExportParams = WorkloadSummaryParams & {
+  report?: string
+  subject_type?: string | null
+  credits_min?: number | null
+  credits_max?: number | null
+  hours_min?: number | null
+  hours_max?: number | null
+  students_min?: number | null
+  students_max?: number | null
+  workload_status?: string | null
+  search?: string | null
+  student_ids?: string[]
+}
+
+function workloadScopeQuery(params: {
+  semester?: number | null
+  academic_year?: string | null
+  subject_id?: string | null
+  compare?: boolean
+  subject_type?: string | null
+  credits_min?: number | null
+  credits_max?: number | null
+  hours_min?: number | null
+  hours_max?: number | null
+  students_min?: number | null
+  students_max?: number | null
+  search?: string | null
+  workload_status?: string | null
+  page?: number
+  page_size?: number
+  sort?: string
+  order?: "asc" | "desc"
+}): string {
+  const searchParams = new URLSearchParams()
+  if (params.semester !== undefined && params.semester !== null) {
+    searchParams.set("semester", String(params.semester))
+  }
+  if (params.academic_year) {
+    searchParams.set("academic_year", params.academic_year)
+  }
+  if (params.subject_id) {
+    searchParams.set("subject_id", params.subject_id)
+  }
+  if (params.compare) {
+    searchParams.set("compare", "true")
+  }
+  if (params.subject_type) {
+    searchParams.set("subject_type", params.subject_type)
+  }
+  if (params.credits_min !== undefined && params.credits_min !== null) {
+    searchParams.set("credits_min", String(params.credits_min))
+  }
+  if (params.credits_max !== undefined && params.credits_max !== null) {
+    searchParams.set("credits_max", String(params.credits_max))
+  }
+  if (params.hours_min !== undefined && params.hours_min !== null) {
+    searchParams.set("hours_min", String(params.hours_min))
+  }
+  if (params.hours_max !== undefined && params.hours_max !== null) {
+    searchParams.set("hours_max", String(params.hours_max))
+  }
+  if (params.students_min !== undefined && params.students_min !== null) {
+    searchParams.set("students_min", String(params.students_min))
+  }
+  if (params.students_max !== undefined && params.students_max !== null) {
+    searchParams.set("students_max", String(params.students_max))
+  }
+  if (params.search) {
+    searchParams.set("search", params.search)
+  }
+  if (params.workload_status) {
+    searchParams.set("workload_status", params.workload_status)
+  }
+  if (params.page !== undefined && params.page !== null) {
+    searchParams.set("page", String(params.page))
+  }
+  if (params.page_size !== undefined && params.page_size !== null) {
+    searchParams.set("page_size", String(params.page_size))
+  }
+  if (params.sort) {
+    searchParams.set("sort", params.sort)
+  }
+  if (params.order) {
+    searchParams.set("order", params.order)
+  }
+  return searchParams.toString()
+}
+
+function workloadPath(segment: string, query: string): string {
+  return query ? `workload/${segment}?${query}` : `workload/${segment}`
+}
+
+export function getFacultyWorkloadSummary(
+  params?: WorkloadSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadSummary>> {
+  return callFastapi<WorkloadSummary>(
+    workloadPath("summary", workloadScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyWorkloadSubjectBreakdown(
+  params?: WorkloadSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadSubjectBreakdown>> {
+  return callFastapi<WorkloadSubjectBreakdown>(
+    workloadPath("subject-breakdown", workloadScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyWorkloadTrends(
+  params?: WorkloadSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadTrends>> {
+  return callFastapi<WorkloadTrends>(
+    workloadPath("trends", workloadScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyWorkloadCapacity(
+  params?: WorkloadSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadCapacity>> {
+  return callFastapi<WorkloadCapacity>(
+    workloadPath("capacity", workloadScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyWorkloadMatrices(
+  params?: WorkloadSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadMatrices>> {
+  return callFastapi<WorkloadMatrices>(
+    workloadPath("matrices", workloadScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyWorkloadScatter(
+  params?: WorkloadSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadScatter>> {
+  return callFastapi<WorkloadScatter>(
+    workloadPath("scatter", workloadScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyWorkloadBenchmark(
+  params?: WorkloadSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadBenchmark>> {
+  return callFastapi<WorkloadBenchmark>(
+    workloadPath("benchmark", workloadScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyWorkloadForecast(
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadForecast>> {
+  return callFastapi<WorkloadForecast>(
+    workloadPath("forecast", ""),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyWorkloadGovernance(
+  params?: WorkloadGovernanceParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadGovernance>> {
+  return callFastapi<WorkloadGovernance>(
+    workloadPath("governance", workloadScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyWorkloadHealthScore(
+  params?: WorkloadSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadHealthScore>> {
+  return callFastapi<WorkloadHealthScore>(
+    workloadPath("health-score", workloadScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyWorkloadTimeline(
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadTimeline>> {
+  return callFastapi<WorkloadTimeline>(
+    workloadPath("timeline", ""),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyWorkloadStudents(
+  params?: WorkloadStudentsParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadStudentsResponse>> {
+  return callFastapi<WorkloadStudentsResponse>(
+    workloadPath("students", workloadScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyWorkloadHighlights(
+  params?: WorkloadSummaryParams,
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<WorkloadHighlightsResponse>> {
+  return callFastapi<WorkloadHighlightsResponse>(
+    workloadPath("highlights", workloadScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export async function getFacultyWorkloadExport(
+  params?: WorkloadExportParams,
+): Promise<BffResult<string>> {
+  const user = await getSessionUser()
+  if (!user) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to export this data.",
+      },
+    }
+  }
+  if (user.role !== "Faculty" || !user.faculty_id) {
+    return {
+      ok: false,
+      error: {
+        status: 403,
+        code: "unauthorized",
+        message: "This account is not allowed to export faculty data.",
+      },
+    }
+  }
+
+  const searchParams = new URLSearchParams()
+  if (params?.report) {
+    searchParams.set("report", params.report)
+  }
+  if (params?.semester !== undefined && params?.semester !== null) {
+    searchParams.set("semester", String(params.semester))
+  }
+  if (params?.academic_year) {
+    searchParams.set("academic_year", params.academic_year)
+  }
+  if (params?.subject_id) {
+    searchParams.set("subject_id", params.subject_id)
+  }
+  if (params?.subject_type) {
+    searchParams.set("subject_type", params.subject_type)
+  }
+  if (params?.credits_min !== undefined && params?.credits_min !== null) {
+    searchParams.set("credits_min", String(params.credits_min))
+  }
+  if (params?.credits_max !== undefined && params?.credits_max !== null) {
+    searchParams.set("credits_max", String(params.credits_max))
+  }
+  if (params?.hours_min !== undefined && params?.hours_min !== null) {
+    searchParams.set("hours_min", String(params.hours_min))
+  }
+  if (params?.hours_max !== undefined && params?.hours_max !== null) {
+    searchParams.set("hours_max", String(params.hours_max))
+  }
+  if (params?.students_min !== undefined && params?.students_min !== null) {
+    searchParams.set("students_min", String(params.students_min))
+  }
+  if (params?.students_max !== undefined && params?.students_max !== null) {
+    searchParams.set("students_max", String(params.students_max))
+  }
+  if (params?.workload_status) {
+    searchParams.set("workload_status", params.workload_status)
+  }
+  if (params?.search) {
+    searchParams.set("search", params.search)
+  }
+  if (params?.student_ids?.length) {
+    searchParams.set("student_ids", params.student_ids.join(","))
+  }
+  const query = searchParams.toString()
+  const path = query
+    ? `/api/v1/faculty/workload/export?${query}`
+    : "/api/v1/faculty/workload/export"
 
   try {
     const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")

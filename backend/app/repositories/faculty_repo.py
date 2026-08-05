@@ -806,7 +806,7 @@ class FacultyRepository:
             rows = await conn.fetch(query, faculty_id)
             return [dict(row) for row in rows]
 
-    def _performance_where(
+    def _analytics_where(
         self,
         faculty_id: str,
         semester_no: Optional[int],
@@ -825,6 +825,15 @@ class FacultyRepository:
             params.append(subject_id)
             clauses.append(f"sse.subject_id = ${len(params)}")
         return f"WHERE {' AND '.join(clauses)}", params
+
+    def _performance_where(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> tuple:
+        return self._analytics_where(faculty_id, semester_no, academic_year, subject_id)
 
     async def get_performance_aggregates(
         self,
@@ -1210,18 +1219,7 @@ class FacultyRepository:
         academic_year: Optional[str],
         subject_id: Optional[str],
     ) -> tuple:
-        clauses = ["sse.faculty_id = $1", "sse.enrollment_status = 'Active'"]
-        params: List[Any] = [faculty_id]
-        if semester_no is not None:
-            params.append(semester_no)
-            clauses.append(f"sse.semester_no = ${len(params)}")
-        if academic_year is not None:
-            params.append(academic_year)
-            clauses.append(f"sse.academic_year = ${len(params)}")
-        if subject_id is not None:
-            params.append(subject_id)
-            clauses.append(f"sse.subject_id = ${len(params)}")
-        return f"WHERE {' AND '.join(clauses)}", params
+        return self._analytics_where(faculty_id, semester_no, academic_year, subject_id)
 
     async def get_attendance_filter_options(self, faculty_id: str) -> Dict[str, Any]:
         async with self.pool.acquire() as conn:
@@ -1766,6 +1764,568 @@ class FacultyRepository:
                 ON sp.enrollment_record_id = sse.enrollment_record_id
             {where}
             ORDER BY st.first_name ASC, st.last_name ASC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    async def get_workload_filter_options(self, faculty_id: str) -> Dict[str, Any]:
+        async with self.pool.acquire() as conn:
+            types = await conn.fetch(
+                """
+                SELECT DISTINCT subject_type
+                FROM student_subject_enrollment
+                WHERE faculty_id = $1 AND enrollment_status = 'Active'
+                    AND subject_type IS NOT NULL
+                ORDER BY subject_type ASC
+                """,
+                faculty_id,
+            )
+        return {"subject_types": [r["subject_type"] for r in types]}
+
+    async def get_workload_department_students(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+    ) -> int:
+        query = """
+            SELECT COUNT(DISTINCT sse.student_id)
+            FROM student_subject_enrollment sse
+            JOIN faculty f ON f.faculty_id = $1
+            WHERE sse.department_code = f.department_code
+                AND sse.enrollment_status = 'Active'
+                AND ($2::int IS NULL OR sse.semester_no = $2)
+                AND ($3::text IS NULL OR sse.academic_year = $3)
+        """
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(query, faculty_id, semester_no, academic_year)
+
+    async def get_workload_mentee_overlap(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> int:
+        where, params = self._analytics_where(faculty_id, semester_no, academic_year, subject_id)
+        query = f"""
+            SELECT COUNT(DISTINCT fsm.student_id)
+            FROM faculty_student_map fsm
+            JOIN student_subject_enrollment sse ON sse.student_id = fsm.student_id
+            {where}
+            AND fsm.faculty_id = $1
+        """
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(query, *params)
+
+    async def get_workload_subject_breakdown(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        weeks: float,
+        subject_type: Optional[str] = None,
+        credits_min: Optional[int] = None,
+        credits_max: Optional[int] = None,
+        hours_min: Optional[float] = None,
+        hours_max: Optional[float] = None,
+        students_min: Optional[int] = None,
+        students_max: Optional[int] = None,
+        search: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        where, params = self._analytics_where(faculty_id, semester_no, academic_year, subject_id)
+        if subject_type is not None:
+            params.append(subject_type)
+            where += f" AND sse.subject_type = ${len(params)}"
+        if search:
+            params.append(f"%{search}%")
+            where += f" AND (sse.subject_code ILIKE ${len(params)} OR sse.subject_name ILIKE ${len(params)})"
+        params.append(weeks)
+        weeks_idx = len(params)
+        outer = []
+        if credits_min is not None:
+            params.append(credits_min)
+            outer.append(f"credits >= ${len(params)}")
+        if credits_max is not None:
+            params.append(credits_max)
+            outer.append(f"credits <= ${len(params)}")
+        if hours_min is not None:
+            params.append(hours_min)
+            outer.append(f"weekly_hours >= ${len(params)}")
+        if hours_max is not None:
+            params.append(hours_max)
+            outer.append(f"weekly_hours <= ${len(params)}")
+        if students_min is not None:
+            params.append(students_min)
+            outer.append(f"students >= ${len(params)}")
+        if students_max is not None:
+            params.append(students_max)
+            outer.append(f"students <= ${len(params)}")
+        outer_sql = f" WHERE {' AND '.join(outer)}" if outer else ""
+        query = f"""
+            WITH offering AS (
+                SELECT
+                    sse.subject_id, sse.subject_code, sse.subject_name,
+                    sse.semester_no, sse.academic_year,
+                    MAX(sse.credits) AS credits,
+                    MAX(sse.subject_type) AS subject_type,
+                    COUNT(DISTINCT sse.student_id) AS students,
+                    MAX(a.total_classes) AS classes,
+                    CASE WHEN MAX(a.total_classes) > 0
+                        THEN ROUND(MAX(a.total_classes) * 1.0 / ${weeks_idx}, 2)
+                    END AS weekly_hours
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                {where}
+                GROUP BY sse.subject_id, sse.subject_code, sse.subject_name,
+                    sse.semester_no, sse.academic_year
+            )
+            SELECT *
+            FROM offering{outer_sql}
+            ORDER BY offering.subject_name ASC, offering.semester_no ASC, offering.academic_year ASC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    async def get_workload_aggregates(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        weeks: float,
+    ) -> Dict[str, Any]:
+        where, params = self._analytics_where(faculty_id, semester_no, academic_year, subject_id)
+        params.append(weeks)
+        weeks_idx = len(params)
+        query = f"""
+            WITH offering AS (
+                SELECT
+                    sse.subject_id, sse.semester_no, sse.academic_year,
+                    MAX(sse.credits) AS credits,
+                    COUNT(DISTINCT sse.student_id) AS students,
+                    MAX(a.total_classes) AS classes
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                {where}
+                GROUP BY sse.subject_id, sse.semester_no, sse.academic_year
+            ),
+            scope_students AS (
+                SELECT COUNT(DISTINCT sse.student_id) AS total
+                FROM student_subject_enrollment sse
+                {where}
+            )
+            SELECT
+                COUNT(*) AS offerings,
+                COALESCE(SUM(offering.credits), 0) AS credits,
+                COALESCE(SUM(offering.students), 0) AS student_slots,
+                COALESCE(SUM(offering.classes), 0) AS classes,
+                ROUND(COALESCE(SUM(offering.classes), 0) * 1.0 / ${weeks_idx}, 2) AS weekly_hours,
+                (SELECT total FROM scope_students) AS students
+            FROM offering
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, *params)
+            if row:
+                return dict(row)
+            return {
+                "offerings": 0, "credits": 0, "student_slots": 0,
+                "classes": 0, "weekly_hours": 0.0, "students": 0,
+            }
+
+    async def get_workload_trends(
+        self,
+        faculty_id: str,
+        subject_id: Optional[str],
+        weeks: float,
+    ) -> Dict[str, Any]:
+        where, params = self._analytics_where(faculty_id, None, None, subject_id)
+        params.append(weeks)
+        weeks_idx = len(params)
+        term_query = f"""
+            WITH offering AS (
+                SELECT
+                    sse.subject_id, sse.semester_no, sse.academic_year,
+                    MAX(sse.credits) AS credits,
+                    COUNT(DISTINCT sse.student_id) AS students,
+                    MAX(a.total_classes) AS classes
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                {where}
+                GROUP BY sse.subject_id, sse.semester_no, sse.academic_year
+            )
+            SELECT semester_no, academic_year,
+                   COUNT(*) AS offerings,
+                   SUM(credits) AS credits,
+                   SUM(students) AS student_slots,
+                   COALESCE(SUM(classes), 0) AS classes,
+                   ROUND(COALESCE(SUM(classes), 0) * 1.0 / ${weeks_idx}, 2) AS weekly_hours
+            FROM offering
+            GROUP BY semester_no, academic_year
+            ORDER BY semester_no ASC, academic_year ASC
+        """
+        subject_query = f"""
+            WITH offering AS (
+                SELECT
+                    sse.subject_id, sse.subject_code, sse.subject_name,
+                    sse.semester_no, sse.academic_year,
+                    MAX(a.total_classes) AS classes
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                {where}
+                GROUP BY sse.subject_id, sse.subject_code, sse.subject_name,
+                    sse.semester_no, sse.academic_year
+            )
+            SELECT subject_id, subject_code, subject_name, semester_no, academic_year,
+                   ROUND(COALESCE(classes, 0) * 1.0 / ${weeks_idx}, 2) AS weekly_hours
+            FROM offering
+            ORDER BY semester_no ASC, academic_year ASC, subject_name ASC
+        """
+        async with self.pool.acquire() as conn:
+            terms = await conn.fetch(term_query, *params)
+            by_subject = await conn.fetch(subject_query, *params)
+        return {
+            "terms": [dict(r) for r in terms],
+            "by_subject": [dict(r) for r in by_subject],
+        }
+
+    async def get_workload_timeline(
+        self,
+        faculty_id: str,
+        weeks: float,
+    ) -> List[Dict[str, Any]]:
+        params: List[Any] = [faculty_id, weeks]
+        query = f"""
+            WITH offering AS (
+                SELECT
+                    sse.subject_id, sse.semester_no, sse.academic_year,
+                    MAX(sse.credits) AS credits,
+                    COUNT(DISTINCT sse.student_id) AS students,
+                    MAX(a.total_classes) AS classes
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                WHERE sse.faculty_id = $1 AND sse.enrollment_status = 'Active'
+                GROUP BY sse.subject_id, sse.semester_no, sse.academic_year
+            ),
+            term_agg AS (
+                SELECT semester_no, academic_year,
+                       COUNT(*) AS subjects,
+                       SUM(credits) AS credits,
+                       SUM(students) AS student_slots,
+                       COALESCE(SUM(classes), 0) AS classes,
+                       ROUND(COALESCE(SUM(classes), 0) * 1.0 / $2, 2) AS weekly_hours
+                FROM offering
+                GROUP BY semester_no, academic_year
+            ),
+            term_students AS (
+                SELECT sse.semester_no, sse.academic_year,
+                       COUNT(DISTINCT sse.student_id) AS students
+                FROM student_subject_enrollment sse
+                WHERE sse.faculty_id = $1 AND sse.enrollment_status = 'Active'
+                GROUP BY sse.semester_no, sse.academic_year
+            )
+            SELECT ta.semester_no, ta.academic_year, ta.subjects, ta.credits, ta.classes,
+                   ta.weekly_hours, ts.students
+            FROM term_agg ta
+            JOIN term_students ts ON ts.semester_no = ta.semester_no
+                AND ts.academic_year = ta.academic_year
+            ORDER BY ta.semester_no ASC, ta.academic_year ASC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    async def get_workload_forecast_source(
+        self,
+        faculty_id: str,
+        weeks: float,
+    ) -> List[Dict[str, Any]]:
+        params: List[Any] = [faculty_id, weeks]
+        query = f"""
+            SELECT sse.subject_id, sse.subject_code, sse.subject_name,
+                   sse.semester_no, sse.academic_year,
+                   MAX(sse.credits) AS credits,
+                   COUNT(DISTINCT sse.student_id) AS students,
+                   MAX(a.total_classes) AS classes,
+                   CASE WHEN MAX(a.total_classes) > 0
+                       THEN ROUND(MAX(a.total_classes) * 1.0 / $2, 2)
+                   END AS weekly_hours
+            FROM student_subject_enrollment sse
+            LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+            WHERE sse.faculty_id = $1 AND sse.enrollment_status = 'Active'
+            GROUP BY sse.subject_id, sse.subject_code, sse.subject_name,
+                sse.semester_no, sse.academic_year
+            ORDER BY sse.semester_no ASC, sse.academic_year ASC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    async def get_department_resource_summary(
+        self,
+        faculty_id: str,
+        weeks: float,
+        capacity_weekly_hours: float,
+    ) -> Dict[str, Any]:
+        params: List[Any] = [faculty_id, weeks, capacity_weekly_hours]
+        query = f"""
+            WITH dept AS (
+                SELECT f.department_code, f.department_name
+                FROM faculty f
+                WHERE f.faculty_id = $1
+            ),
+            offering AS (
+                SELECT sse.subject_id, sse.semester_no, sse.academic_year,
+                       MAX(sse.credits) AS credits,
+                       COUNT(DISTINCT sse.student_id) AS students,
+                       MAX(a.total_classes) AS classes
+                FROM student_subject_enrollment sse
+                JOIN dept d ON d.department_code = sse.department_code
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                WHERE sse.enrollment_status = 'Active'
+                GROUP BY sse.subject_id, sse.semester_no, sse.academic_year
+            )
+            SELECT
+                (SELECT COUNT(*) FROM faculty f
+                    JOIN dept d ON d.department_code = f.department_code) AS faculty_count,
+                (SELECT COUNT(*) FROM offering) AS total_offerings,
+                (SELECT COALESCE(SUM(credits), 0) FROM offering) AS total_credits,
+                (SELECT COALESCE(SUM(students), 0) FROM offering) AS total_student_slots,
+                (SELECT COALESCE(SUM(classes), 0) FROM offering) AS total_classes,
+                (SELECT COUNT(DISTINCT sse.student_id) FROM student_subject_enrollment sse
+                    JOIN dept d ON d.department_code = sse.department_code
+                    WHERE sse.enrollment_status = 'Active') AS total_students,
+                ROUND((SELECT COALESCE(AVG(classes), 0) FROM offering) * 1.0 / $2, 2)
+                    AS mean_weekly_hours,
+                ROUND((SELECT COALESCE(AVG(classes), 0) FROM offering) * 1.0 / $2 / $3 * 100, 2)
+                    AS mean_capacity_utilization
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, *params)
+            if row:
+                return dict(row)
+            return {
+                "faculty_count": 0, "total_offerings": 0, "total_students": 0,
+                "total_credits": 0, "total_classes": 0,
+                "mean_weekly_hours": 0.0, "mean_capacity_utilization": 0.0,
+            }
+
+    def _workload_students_base(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        subject_type: Optional[str],
+        weeks: float,
+        capacity_weekly_hours: float,
+        overload_threshold: float,
+        underutilized_threshold: float,
+        credit_imbalance_ratio: float,
+        student_imbalance_ratio: float,
+    ) -> tuple:
+        where, params = self._analytics_where(faculty_id, semester_no, academic_year, subject_id)
+        if subject_type is not None:
+            params.append(subject_type)
+            where += f" AND sse.subject_type = ${len(params)}"
+        params.extend([
+            weeks,
+            capacity_weekly_hours * overload_threshold,
+            capacity_weekly_hours * underutilized_threshold,
+            credit_imbalance_ratio,
+            student_imbalance_ratio,
+        ])
+        weeks_i = len(params) - 4
+        overload_cap_i = len(params) - 3
+        underutil_cap_i = len(params) - 2
+        credit_ratio_i = len(params) - 1
+        student_ratio_i = len(params)
+        cte = f"""
+            WITH offering AS (
+                SELECT
+                    sse.subject_id, sse.subject_code, sse.subject_name,
+                    sse.semester_no, sse.academic_year,
+                    MAX(sse.credits) AS credits,
+                    COUNT(DISTINCT sse.student_id) AS students,
+                    MAX(a.total_classes) AS classes,
+                    CASE WHEN MAX(a.total_classes) > 0
+                        THEN ROUND(MAX(a.total_classes) * 1.0 / ${weeks_i}, 2)
+                    END AS weekly_hours
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                {where}
+                GROUP BY sse.subject_id, sse.subject_code, sse.subject_name,
+                    sse.semester_no, sse.academic_year
+            ),
+            means AS (
+                SELECT AVG(offering.credits) AS mean_credits,
+                       AVG(offering.students) AS mean_students
+                FROM offering
+            ),
+            offering_status AS (
+                SELECT o.subject_id, o.subject_code, o.subject_name, o.semester_no, o.academic_year,
+                       o.credits, o.students, o.classes, o.weekly_hours,
+                       CASE
+                           WHEN o.weekly_hours IS NOT NULL
+                                AND o.weekly_hours >= ${overload_cap_i} THEN 'Overloaded'
+                           WHEN o.weekly_hours IS NOT NULL
+                                AND o.weekly_hours < ${underutil_cap_i} THEN 'Underutilized'
+                           WHEN o.credits > ${credit_ratio_i} * m.mean_credits THEN 'Credit Imbalance'
+                           WHEN o.students > ${student_ratio_i} * m.mean_students THEN 'Student Imbalance'
+                           ELSE 'Balanced'
+                       END AS workload_status
+                FROM offering o, means m
+            )
+        """
+        return cte, params
+
+    async def count_workload_students(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        subject_type: Optional[str],
+        credits_min: Optional[int],
+        credits_max: Optional[int],
+        hours_min: Optional[float],
+        hours_max: Optional[float],
+        students_min: Optional[int],
+        students_max: Optional[int],
+        search: Optional[str],
+        workload_status: Optional[str],
+        weeks: float,
+        capacity_weekly_hours: float,
+        overload_threshold: float,
+        underutilized_threshold: float,
+        credit_imbalance_ratio: float,
+        student_imbalance_ratio: float,
+    ) -> int:
+        cte, params = self._workload_students_base(
+            faculty_id, semester_no, academic_year, subject_id, subject_type,
+            weeks, capacity_weekly_hours, overload_threshold, underutilized_threshold,
+            credit_imbalance_ratio, student_imbalance_ratio,
+        )
+        outer = []
+        if search:
+            params.append(f"%{search}%")
+            outer.append(
+                f"(st.enrollment_no::text ILIKE ${len(params)} "
+                f"OR st.first_name ILIKE ${len(params)} "
+                f"OR st.last_name ILIKE ${len(params)})"
+            )
+        if credits_min is not None:
+            params.append(credits_min)
+            outer.append(f"os.credits >= ${len(params)}")
+        if credits_max is not None:
+            params.append(credits_max)
+            outer.append(f"os.credits <= ${len(params)}")
+        if hours_min is not None:
+            params.append(hours_min)
+            outer.append(f"os.weekly_hours >= ${len(params)}")
+        if hours_max is not None:
+            params.append(hours_max)
+            outer.append(f"os.weekly_hours <= ${len(params)}")
+        if students_min is not None:
+            params.append(students_min)
+            outer.append(f"os.students >= ${len(params)}")
+        if students_max is not None:
+            params.append(students_max)
+            outer.append(f"os.students <= ${len(params)}")
+        if workload_status:
+            params.append(workload_status)
+            outer.append(f"os.workload_status = ${len(params)}")
+        outer_sql = f" AND {' AND '.join(outer)}" if outer else ""
+        query = f"""
+            {cte}
+            SELECT count(DISTINCT sse.enrollment_record_id)
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            JOIN offering_status os ON os.subject_id = sse.subject_id
+                AND os.semester_no = sse.semester_no AND os.academic_year = sse.academic_year
+            WHERE sse.faculty_id = $1 AND sse.enrollment_status = 'Active'{outer_sql}
+        """
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(query, *params)
+
+    async def get_workload_students(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        subject_type: Optional[str],
+        credits_min: Optional[int],
+        credits_max: Optional[int],
+        hours_min: Optional[float],
+        hours_max: Optional[float],
+        students_min: Optional[int],
+        students_max: Optional[int],
+        search: Optional[str],
+        workload_status: Optional[str],
+        weeks: float,
+        capacity_weekly_hours: float,
+        overload_threshold: float,
+        underutilized_threshold: float,
+        credit_imbalance_ratio: float,
+        student_imbalance_ratio: float,
+        order_by: str,
+        limit: int,
+        offset: int,
+    ) -> List[Dict[str, Any]]:
+        cte, params = self._workload_students_base(
+            faculty_id, semester_no, academic_year, subject_id, subject_type,
+            weeks, capacity_weekly_hours, overload_threshold, underutilized_threshold,
+            credit_imbalance_ratio, student_imbalance_ratio,
+        )
+        outer = []
+        if search:
+            params.append(f"%{search}%")
+            outer.append(
+                f"(st.enrollment_no::text ILIKE ${len(params)} "
+                f"OR st.first_name ILIKE ${len(params)} "
+                f"OR st.last_name ILIKE ${len(params)})"
+            )
+        if credits_min is not None:
+            params.append(credits_min)
+            outer.append(f"os.credits >= ${len(params)}")
+        if credits_max is not None:
+            params.append(credits_max)
+            outer.append(f"os.credits <= ${len(params)}")
+        if hours_min is not None:
+            params.append(hours_min)
+            outer.append(f"os.weekly_hours >= ${len(params)}")
+        if hours_max is not None:
+            params.append(hours_max)
+            outer.append(f"os.weekly_hours <= ${len(params)}")
+        if students_min is not None:
+            params.append(students_min)
+            outer.append(f"os.students >= ${len(params)}")
+        if students_max is not None:
+            params.append(students_max)
+            outer.append(f"os.students <= ${len(params)}")
+        if workload_status:
+            params.append(workload_status)
+            outer.append(f"os.workload_status = ${len(params)}")
+        outer_sql = f" AND {' AND '.join(outer)}" if outer else ""
+        params.extend([limit, offset])
+        query = f"""
+            {cte}
+            SELECT
+                sse.enrollment_record_id, sse.student_id, sse.enrollment_no, sse.semester_no,
+                os.academic_year, sse.subject_id, sse.subject_code, sse.subject_name,
+                st.first_name, st.last_name,
+                sse.credits, os.classes AS classes_conducted, os.weekly_hours, os.workload_status
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            JOIN offering_status os ON os.subject_id = sse.subject_id
+                AND os.semester_no = sse.semester_no AND os.academic_year = sse.academic_year
+            WHERE sse.faculty_id = $1 AND sse.enrollment_status = 'Active'{outer_sql}
+            ORDER BY {order_by}
+            LIMIT ${len(params) - 1} OFFSET ${len(params)}
         """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, *params)

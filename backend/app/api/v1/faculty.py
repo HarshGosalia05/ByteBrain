@@ -30,6 +30,19 @@ from app.schemas.faculty import (
     AttendanceStudentsResponse,
     AttendanceHighlightsResponse,
     AttendanceCorrelation,
+    WorkloadSummary,
+    WorkloadSubjectBreakdown,
+    WorkloadTrends,
+    WorkloadCapacity,
+    WorkloadMatrices,
+    WorkloadScatter,
+    WorkloadBenchmark,
+    WorkloadForecast,
+    WorkloadGovernance,
+    WorkloadHealthScore,
+    WorkloadTimeline,
+    WorkloadStudentsResponse,
+    WorkloadHighlightsResponse,
 )
 
 router = APIRouter()
@@ -464,4 +477,263 @@ async def export_attendance(
         content="\r\n".join(lines),
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="faculty_attendance.csv"'},
+    )
+
+@router.get("/workload/summary", response_model=WorkloadSummary)
+async def get_workload_summary(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    compare: bool = Query(False),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_summary(
+        _faculty_id_or_error(user), semester, academic_year, subject_id, compare,
+    )
+
+@router.get("/workload/subject-breakdown", response_model=WorkloadSubjectBreakdown)
+async def get_workload_subject_breakdown(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_subject_breakdown(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/workload/trends", response_model=WorkloadTrends)
+async def get_workload_trends(
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_trends(_faculty_id_or_error(user), subject_id)
+
+@router.get("/workload/capacity", response_model=WorkloadCapacity)
+async def get_workload_capacity(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_capacity(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/workload/matrices", response_model=WorkloadMatrices)
+async def get_workload_matrices(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_matrices(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/workload/scatter", response_model=WorkloadScatter)
+async def get_workload_scatter(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_scatter(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/workload/benchmark", response_model=WorkloadBenchmark)
+async def get_workload_benchmark(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_benchmark(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/workload/forecast", response_model=WorkloadForecast)
+async def get_workload_forecast(
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_forecast(_faculty_id_or_error(user))
+
+@router.get("/workload/governance", response_model=WorkloadGovernance)
+async def get_workload_governance(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_governance(
+        _faculty_id_or_error(user), semester, academic_year, subject_id, status,
+    )
+
+@router.get("/workload/health-score", response_model=WorkloadHealthScore)
+async def get_workload_health_score(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_health_score(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/workload/timeline", response_model=WorkloadTimeline)
+async def get_workload_timeline(
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_timeline(_faculty_id_or_error(user))
+
+@router.get("/workload/students", response_model=WorkloadStudentsResponse)
+async def get_workload_students(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    subject_type: Optional[str] = Query(None),
+    credits_min: Optional[int] = Query(None),
+    credits_max: Optional[int] = Query(None),
+    hours_min: Optional[float] = Query(None),
+    hours_max: Optional[float] = Query(None),
+    students_min: Optional[int] = Query(None),
+    students_max: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
+    workload_status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
+    sort: str = Query("name"),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_students(
+        _faculty_id_or_error(user),
+        semester, academic_year, subject_id, subject_type,
+        credits_min, credits_max, hours_min, hours_max, students_min, students_max,
+        search, workload_status, page, page_size, sort, order,
+    )
+
+@router.get("/workload/highlights", response_model=WorkloadHighlightsResponse)
+async def get_workload_highlights(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_workload_highlights(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/workload/export")
+async def export_workload(
+    report: str = Query("table", pattern="^(table|teaching|summary)$"),
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    subject_type: Optional[str] = Query(None),
+    credits_min: Optional[int] = Query(None),
+    credits_max: Optional[int] = Query(None),
+    hours_min: Optional[float] = Query(None),
+    hours_max: Optional[float] = Query(None),
+    students_min: Optional[int] = Query(None),
+    students_max: Optional[int] = Query(None),
+    workload_status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    student_ids: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    ids: List[str] = [s for s in (student_ids.split(",") if student_ids else []) if s]
+    rows = await service.get_workload_export_rows(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+        subject_type, credits_min, credits_max, hours_min, hours_max,
+        students_min, students_max, workload_status, search, ids, report,
+    )
+
+    def _cell(value: str) -> str:
+        if "," in value or '"' in value or "\n" in value:
+            return f'"{value.replace(chr(34), chr(34) * 2)}"'
+        return value
+
+    if report == "table":
+        header = [
+            "Enrollment No", "Student Name", "Semester", "Academic Year",
+            "Subject Code", "Subject Name", "Credits", "Weekly Hours",
+            "Classes Conducted", "Workload Status",
+        ]
+        lines = [",".join(header)]
+        for r in rows:
+            lines.append(",".join(
+                _cell(str(v)) for v in [
+                    r["enrollment_no"],
+                    f"{r['first_name']} {r['last_name']}",
+                    r["semester_no"],
+                    r["academic_year"],
+                    r["subject_code"],
+                    r["subject_name"],
+                    r.get("credits") if r.get("credits") is not None else "",
+                    r["weekly_hours"] if r.get("weekly_hours") is not None else "",
+                    r.get("classes_conducted") if r.get("classes_conducted") is not None else "",
+                    r.get("workload_status") or "",
+                ]
+            ))
+        filename = "faculty_workload_table.csv"
+    elif report == "teaching":
+        header = [
+            "Subject Code", "Subject Name", "Semester", "Academic Year",
+            "Subject Type", "Credits", "Students", "Weekly Hours",
+            "Classes", "Status", "Health Band", "Reason",
+        ]
+        lines = [",".join(header)]
+        for r in rows:
+            lines.append(",".join(
+                _cell(str(v)) for v in [
+                    r["subject_code"],
+                    r["subject_name"],
+                    r["semester_no"],
+                    r["academic_year"],
+                    r.get("subject_type") or "",
+                    r.get("credits") if r.get("credits") is not None else "",
+                    r.get("students") if r.get("students") is not None else "",
+                    r["weekly_hours"] if r.get("weekly_hours") is not None else "",
+                    r.get("classes") if r.get("classes") is not None else "",
+                    r.get("status") or "",
+                    r.get("health_band") or "",
+                    r.get("reason") or "",
+                ]
+            ))
+        filename = "faculty_workload_teaching.csv"
+    else:
+        header = ["Category", "Item", "Value", "Previous", "Delta"]
+        lines = [",".join(header)]
+        for r in rows:
+            lines.append(",".join(
+                _cell(str(v)) for v in [
+                    r["category"],
+                    r["item"],
+                    r["value"] if r["value"] is not None else "",
+                    r.get("previous") or "",
+                    r.get("delta") or "",
+                ]
+            ))
+        filename = "faculty_workload_summary.csv"
+    return Response(
+        content="\r\n".join(lines),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

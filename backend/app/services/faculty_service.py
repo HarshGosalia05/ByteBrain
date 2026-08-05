@@ -78,6 +78,39 @@ from app.schemas.faculty import (
     AttendanceHighlightsResponse,
     AttendanceCorrelationPoint,
     AttendanceCorrelation,
+    WorkloadFilters,
+    WorkloadAppliedFilters,
+    WorkloadThresholds,
+    WorkloadHealthItem,
+    WorkloadSummary,
+    WorkloadSubjectItem,
+    WorkloadTypeItem,
+    WorkloadBalanceMatrixCell,
+    WorkloadSubjectBreakdown,
+    WorkloadTrendItem,
+    WorkloadTrendBySubjectItem,
+    WorkloadCapacityTrendItem,
+    WorkloadTrends,
+    WorkloadCapacity,
+    WorkloadMatrixCell,
+    WorkloadMatrices,
+    WorkloadScatterPoint,
+    WorkloadScatter,
+    DepartmentResourceSummary,
+    WorkloadBenchmarkItem,
+    WorkloadBenchmark,
+    WorkloadForecastItem,
+    WorkloadForecast,
+    WorkloadGovernanceItem,
+    WorkloadGovernance,
+    WorkloadHealthScoreItem,
+    WorkloadHealthScore,
+    WorkloadTimelineItem,
+    WorkloadTimeline,
+    WorkloadStudentRow,
+    WorkloadStudentsResponse,
+    WorkloadHighlight,
+    WorkloadHighlightsResponse,
 )
 from fastapi import HTTPException, status
 
@@ -131,6 +164,17 @@ ATTENDANCE_SORT_EXPRESSIONS: Dict[str, str] = {
     "subject": "sse.subject_name",
     "attendance": "a.attendance_percentage",
     "compliance": "a.attendance_percentage",
+}
+
+WORKLOAD_STUDENT_SORT_EXPRESSIONS: Dict[str, str] = {
+    "name": "st.first_name",
+    "enrollment_no": "sse.enrollment_no",
+    "semester": "sse.semester_no",
+    "subject": "sse.subject_name",
+    "credits": "os.credits",
+    "weekly_hours": "os.weekly_hours",
+    "classes": "os.classes_conducted",
+    "status": "os.workload_status",
 }
 
 class FacultyService:
@@ -2309,3 +2353,1454 @@ class FacultyService:
                 "Defaulter" if pct is not None and pct < threshold else "Non-Defaulter"
             )
         return rows
+
+    def _term_label(self, semester_no: int, academic_year: str) -> str:
+        return f"Sem {semester_no} · {academic_year}"
+
+    def _workload_health_band(self, score: Optional[float]) -> str:
+        if score is None:
+            return "Watch"
+        if score >= settings.FACULTY_WORKLOAD_HEALTH_EXCELLENT:
+            return "Excellent"
+        if score >= settings.FACULTY_WORKLOAD_HEALTH_GOOD:
+            return "Good"
+        if score >= settings.FACULTY_WORKLOAD_HEALTH_WATCH:
+            return "Watch"
+        return "Critical"
+
+    def _workload_balance_score(self, hours: List[float]) -> Optional[float]:
+        if not hours:
+            return None
+        if len(hours) <= 1:
+            return 100.0
+        mean = sum(hours) / len(hours)
+        spread = max(hours) - min(hours)
+        return round(100 - min(100.0, 100.0 * spread / max(mean, 1.0)), 1)
+
+    def _workload_diversity_index(self, items: List[Dict[str, Any]]) -> Optional[float]:
+        shares: Dict[str, float] = {}
+        for item in items:
+            kind = item.get("subject_type") or "Unknown"
+            shares[kind] = shares.get(kind, 0.0) + float(item.get("credits") or 0)
+        total = sum(shares.values())
+        if total <= 0:
+            return None
+        n_types = len(shares)
+        if n_types <= 1:
+            return None
+        concentration = sum((share / total) ** 2 for share in shares.values())
+        return round((1 - concentration) / (1 - 1.0 / n_types) * 100, 1)
+
+    def _min_max(self, value: float, values: List[float]) -> float:
+        if not values:
+            return 0.0
+        lo = min(values)
+        hi = max(values)
+        if hi == lo:
+            return 1.0 if hi != 0 else 0.0
+        return (value - lo) / (hi - lo)
+
+    def _clamp(self, value: Optional[float]) -> Optional[float]:
+        if value is None:
+            return None
+        return max(0.0, min(100.0, value))
+
+    def _resource_score(
+        self,
+        utilization: Optional[float],
+        balance: Optional[float],
+        coverage: Optional[float],
+        efficiency: Optional[float],
+    ) -> float:
+        return round(
+            (utilization or 0) * settings.WORKLOAD_RESOURCE_UTIL_WEIGHT
+            + (balance or 0) * settings.WORKLOAD_RESOURCE_BALANCE_WEIGHT
+            + (coverage or 0) * settings.WORKLOAD_RESOURCE_COVERAGE_WEIGHT
+            + (efficiency or 0) * settings.WORKLOAD_RESOURCE_EFFICIENCY_WEIGHT,
+            1,
+        )
+
+    def _health_score(
+        self,
+        utilization: Optional[float],
+        balance: Optional[float],
+        coverage: Optional[float],
+        efficiency: Optional[float],
+    ) -> float:
+        capacity_score = 100 - abs((utilization or 0) - 100)
+        return round(
+            capacity_score * settings.WORKLOAD_RESOURCE_UTIL_WEIGHT
+            + (balance or 0) * settings.WORKLOAD_RESOURCE_BALANCE_WEIGHT
+            + (coverage or 0) * settings.WORKLOAD_RESOURCE_COVERAGE_WEIGHT
+            + (efficiency or 0) * settings.WORKLOAD_RESOURCE_EFFICIENCY_WEIGHT,
+            1,
+        )
+
+    def _normalize_offering(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "subject_id": row["subject_id"],
+            "subject_code": row["subject_code"],
+            "subject_name": row["subject_name"],
+            "semester_no": int(row["semester_no"]),
+            "academic_year": row["academic_year"],
+            "subject_type": row.get("subject_type"),
+            "credits": int(row["credits"]) if row.get("credits") is not None else None,
+            "students": int(row["students"]),
+            "classes": int(row["classes"]) if row.get("classes") is not None else None,
+            "weekly_hours": float(row["weekly_hours"]) if row.get("weekly_hours") is not None else None,
+        }
+
+    def _ratio_kpi(
+        self,
+        key: str,
+        label: str,
+        current: Dict[str, Any],
+        previous: Optional[Dict[str, Any]],
+    ) -> PerformanceKpi:
+        cur = current.get(key)
+        prev = previous.get(key) if previous is not None else None
+        return PerformanceKpi(
+            key=key,
+            label=label,
+            value=None,
+            display=cur if cur else "—",
+            delta=None,
+            previous_display=prev if prev else "—",
+            has_previous=prev is not None,
+        )
+
+    def _format_kpi_delta(self, delta: Optional[float]) -> str:
+        if delta is None:
+            return ""
+        if delta > 0:
+            return f"+{delta:g}"
+        return f"{delta:g}"
+
+    def _build_workload_kpis(
+        self,
+        current: Dict[str, Any],
+        previous: Optional[Dict[str, Any]],
+        hours_label: str,
+    ) -> List[PerformanceKpi]:
+        return [
+            self._attendance_kpi("subjects", "Total Subjects", "int", current, previous),
+            self._attendance_kpi("students", "Total Students", "int", current, previous),
+            self._attendance_kpi("credits", "Total Credits", "int", current, previous),
+            self._attendance_kpi("offerings", "Total Classes", "int", current, previous),
+            self._attendance_kpi("weekly_hours", "Weekly Teaching Hours", "float", current, previous),
+            self._attendance_kpi("weekly_hours", hours_label, "float", current, previous),
+            self._attendance_kpi("utilization_pct", "Faculty Capacity Utilization", "percent", current, previous),
+            self._attendance_kpi("remaining_capacity", "Remaining Teaching Capacity", "float", current, previous),
+            self._attendance_kpi("balance_score", "Workload Balance Score", "float", current, previous),
+            self._attendance_kpi("coverage_pct", "Student Coverage", "percent", current, previous),
+            self._attendance_kpi("diversity_index", "Subject Diversity Index", "float", current, previous),
+            self._attendance_kpi("credit_load", "Credit Load", "int", current, previous),
+            self._ratio_kpi("theory_practical", "Theory vs Practical Ratio", current, previous),
+            self._attendance_kpi("avg_students_per_subject", "Avg Students per Subject", "float", current, previous),
+            self._attendance_kpi("efficiency_score", "Teaching Efficiency Score", "percent", current, previous),
+            self._attendance_kpi("resource_score", "Faculty Resource Utilization Score", "float", current, previous),
+            self._attendance_kpi("mentee_overlap", "Mentee Overlap", "int", current, previous),
+        ]
+
+    def _workload_status(
+        self,
+        item: Dict[str, Any],
+        mean_credits: float,
+        mean_students: float,
+    ) -> tuple:
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        hours = float(item.get("weekly_hours") or 0)
+        utilization = hours / capacity * 100 if capacity else 0.0
+        if utilization >= settings.FACULTY_WORKLOAD_OVERLOAD_THRESHOLD * 100:
+            return "Overloaded", utilization
+        if utilization < settings.FACULTY_WORKLOAD_UNDERUTILIZED_THRESHOLD * 100:
+            return "Underutilized", utilization
+        credits = int(item.get("credits") or 0)
+        students = int(item["students"])
+        if mean_credits > 0 and credits > settings.FACULTY_WORKLOAD_CREDIT_IMBALANCE_RATIO * mean_credits:
+            return "Credit Imbalance", utilization
+        if mean_students > 0 and students > settings.FACULTY_WORKLOAD_STUDENT_IMBALANCE_RATIO * mean_students:
+            return "Student Imbalance", utilization
+        return "Balanced", utilization
+
+    def _governance_reason(
+        self,
+        item: Dict[str, Any],
+        status: str,
+        utilization: float,
+        mean_credits: float,
+        mean_students: float,
+    ) -> str:
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        code = item["subject_code"]
+        if status == "Overloaded":
+            return f"{code} is at {utilization:.0f}% of the {capacity:.0f}-hour weekly capacity baseline."
+        if status == "Underutilized":
+            return f"{code} is at {utilization:.0f}% of the {capacity:.0f}-hour weekly capacity baseline."
+        if status == "Credit Imbalance":
+            credits = int(item.get("credits") or 0)
+            return (
+                f"{code} credits ({credits}) are {credits / mean_credits:.1f}× "
+                f"the scope mean ({mean_credits:.1f})."
+            )
+        if status == "Student Imbalance":
+            students = int(item["students"])
+            return (
+                f"{code} carries {students} students, {students / mean_students:.1f}× "
+                f"the scope mean ({mean_students:.0f})."
+            )
+        return f"{code} is balanced within the configured capacity baselines."
+
+    def _previous_offering(
+        self,
+        offers: List[Dict[str, Any]],
+        semester_no: int,
+        academic_year: str,
+    ) -> Optional[Dict[str, Any]]:
+        candidates = [o for o in offers if int(o["semester_no"]) < semester_no]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda o: (int(o["semester_no"]), o["academic_year"]))
+
+    def _subject_health(
+        self,
+        item: Dict[str, Any],
+        derived: Dict[str, Any],
+    ) -> float:
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        hours = float(item.get("weekly_hours") or 0)
+        utilization = hours / capacity * 100 if capacity else 0.0
+        capacity_score = 100 - abs(utilization - 100)
+        return round(
+            capacity_score * settings.WORKLOAD_RESOURCE_UTIL_WEIGHT
+            + (derived["balance_score"] or 0) * settings.WORKLOAD_RESOURCE_BALANCE_WEIGHT
+            + (derived["coverage_pct"] or 0) * settings.WORKLOAD_RESOURCE_COVERAGE_WEIGHT
+            + (derived["efficiency_score"] or 0) * settings.WORKLOAD_RESOURCE_EFFICIENCY_WEIGHT,
+            1,
+        )
+
+    async def _workload_derived(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> Dict[str, Any]:
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        agg = await self.repo.get_workload_aggregates(faculty_id, semester_no, academic_year, subject_id, weeks)
+        items = await self.repo.get_workload_subject_breakdown(
+            faculty_id, semester_no, academic_year, subject_id, weeks
+        )
+        dept_students = await self.repo.get_workload_department_students(
+            faculty_id, semester_no, academic_year
+        )
+        dept_summary = await self.repo.get_department_resource_summary(faculty_id, weeks, capacity)
+        mentee_overlap = await self.repo.get_workload_mentee_overlap(
+            faculty_id, semester_no, academic_year, subject_id
+        )
+
+        hours = float(agg["weekly_hours"] or 0)
+        utilization = round(hours / capacity * 100, 1) if capacity else 0.0
+        remaining = round(max(0.0, capacity - hours), 1)
+
+        offering_hours = [float(i["weekly_hours"]) for i in items if i.get("weekly_hours") is not None]
+        balance = self._workload_balance_score(offering_hours)
+        diversity = self._workload_diversity_index(items)
+
+        offerings = int(agg["offerings"] or 0)
+        students = int(agg["students"] or 0)
+        avg_students = round(students / offerings, 1) if offerings else 0.0
+
+        theory = sum(
+            float(i.get("credits") or 0)
+            for i in items if (i.get("subject_type") or "") == "Theory"
+        )
+        practical = sum(
+            float(i.get("credits") or 0)
+            for i in items if (i.get("subject_type") or "") in ("Laboratory", "Project", "Internship")
+        )
+        theory_practical = f"{theory:.0f} : {practical:.0f}" if practical > 0 else None
+
+        coverage = None
+        if dept_students and students:
+            coverage = round(students / dept_students * 100, 1)
+
+        efficiency = None
+        dept_hours = float(dept_summary["mean_weekly_hours"] or 0) * float(dept_summary["total_offerings"] or 0)
+        if dept_hours > 0 and hours > 0 and dept_summary.get("total_students"):
+            own_ratio = students / hours
+            dept_ratio = float(dept_summary["total_students"]) / dept_hours
+            efficiency = self._clamp(round(own_ratio / dept_ratio * 100, 1)) if dept_ratio > 0 else None
+
+        return {
+            "subjects": offerings,
+            "students": students,
+            "credits": int(agg["credits"] or 0),
+            "offerings": offerings,
+            "weekly_hours": hours,
+            "utilization_pct": utilization,
+            "remaining_capacity": remaining,
+            "balance_score": balance,
+            "coverage_pct": coverage,
+            "diversity_index": diversity,
+            "credit_load": int(agg["credits"] or 0),
+            "theory_practical": theory_practical,
+            "avg_students_per_subject": avg_students,
+            "efficiency_score": efficiency,
+            "resource_score": self._resource_score(utilization, balance, coverage, efficiency),
+            "mentee_overlap": mentee_overlap,
+        }
+
+    async def get_workload_summary(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        compare: bool,
+    ) -> WorkloadSummary:
+        await self._ensure_profile(faculty_id)
+        filter_data = await self.repo.get_performance_filters(faculty_id)
+        option_data = await self.repo.get_workload_filter_options(faculty_id)
+        terms = await self.repo.get_taught_terms(faculty_id)
+
+        current_term = None
+        previous_term = None
+        if semester_no is not None:
+            matched = next((t for t in terms if t["semester_no"] == semester_no), None)
+            if matched:
+                current_term = {
+                    "semester_no": semester_no,
+                    "academic_year": academic_year or matched["academic_year"],
+                }
+            elif academic_year:
+                current_term = {"semester_no": semester_no, "academic_year": academic_year}
+            offering_sets = await self._offering_sets(faculty_id)
+            prev = self._find_previous_term(terms, semester_no, offering_sets, subject_id)
+            if prev is not None:
+                previous_term = prev
+
+        current = await self._workload_derived(faculty_id, semester_no, academic_year, subject_id)
+        previous = None
+        if compare and previous_term:
+            previous = await self._workload_derived(
+                faculty_id, previous_term["semester_no"], previous_term["academic_year"], subject_id
+            )
+
+        hours_label = (
+            "Current Semester Teaching Hours" if semester_no is not None else "Total Teaching Hours"
+        )
+        health_score = self._health_score(
+            current["utilization_pct"], current["balance_score"],
+            current["coverage_pct"], current["efficiency_score"],
+        )
+        health_band = self._workload_health_band(health_score)
+        health_reason = (
+            "Your teaching load is well balanced within the configured capacity baselines."
+            if health_band in ("Excellent", "Good")
+            else "One or more workload dimensions are near or above the configured baselines."
+        )
+
+        return WorkloadSummary(
+            faculty_id=faculty_id,
+            kpis=self._build_workload_kpis(current, previous, hours_label),
+            filters=WorkloadFilters(
+                semesters=filter_data["semesters"],
+                academic_years=filter_data["academic_years"],
+                subjects=[FacultySubjectOption(**s) for s in filter_data["subjects"]],
+                term_options=[FacultyTermOption(**t) for t in filter_data["term_options"]],
+                subject_types=option_data["subject_types"],
+                workload_statuses=[
+                    "Overloaded", "Balanced", "Underutilized",
+                    "Credit Imbalance", "Student Imbalance",
+                ],
+            ),
+            applied=WorkloadAppliedFilters(
+                semester=semester_no,
+                academic_year=academic_year,
+                subject_id=subject_id,
+                compare=compare,
+            ),
+            current_term=FacultyTermOption(**current_term) if current_term else None,
+            previous_term=FacultyTermOption(**previous_term) if previous_term else None,
+            thresholds=WorkloadThresholds(
+                capacity_weekly_hours=settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS,
+                weeks_per_semester=settings.WORKLOAD_WEEKS_PER_SEMESTER,
+                overload_threshold=settings.FACULTY_WORKLOAD_OVERLOAD_THRESHOLD,
+                underutilized_threshold=settings.FACULTY_WORKLOAD_UNDERUTILIZED_THRESHOLD,
+                balance_watch=settings.FACULTY_WORKLOAD_BALANCE_WATCH,
+                coverage_watch=settings.FACULTY_WORKLOAD_COVERAGE_WATCH,
+                credit_imbalance_ratio=settings.FACULTY_WORKLOAD_CREDIT_IMBALANCE_RATIO,
+                student_imbalance_ratio=settings.FACULTY_WORKLOAD_STUDENT_IMBALANCE_RATIO,
+                health_excellent=settings.FACULTY_WORKLOAD_HEALTH_EXCELLENT,
+                health_good=settings.FACULTY_WORKLOAD_HEALTH_GOOD,
+                health_watch=settings.FACULTY_WORKLOAD_HEALTH_WATCH,
+                health_critical=settings.FACULTY_WORKLOAD_HEALTH_CRITICAL,
+            ),
+            health=WorkloadHealthItem(
+                score=health_score,
+                band=health_band,
+                reason=health_reason,
+            ),
+        )
+
+    async def get_workload_subject_breakdown(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> WorkloadSubjectBreakdown:
+        await self._ensure_profile(faculty_id)
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        items = await self.repo.get_workload_subject_breakdown(
+            faculty_id, semester_no, academic_year, subject_id, weeks
+        )
+
+        type_counts: Dict[str, int] = {}
+        type_credits: Dict[str, int] = {}
+        for item in items:
+            kind = item.get("subject_type") or "Unknown"
+            type_counts[kind] = type_counts.get(kind, 0) + 1
+            type_credits[kind] = type_credits.get(kind, 0) + int(item.get("credits") or 0)
+        type_distribution = [
+            WorkloadTypeItem(
+                label=kind,
+                count=type_counts[kind],
+                credits=type_credits[kind],
+            )
+            for kind in sorted(type_counts)
+        ]
+        practical_types = ("Laboratory", "Project", "Internship")
+        theory_practical = [
+            WorkloadTypeItem(
+                label="Theory",
+                count=type_counts.get("Theory", 0),
+                credits=type_credits.get("Theory", 0),
+            ),
+            WorkloadTypeItem(
+                label="Practical",
+                count=sum(type_counts.get(t, 0) for t in practical_types),
+                credits=sum(type_credits.get(t, 0) for t in practical_types),
+            ),
+        ]
+
+        metrics = {
+            "weekly_hours": [float(i["weekly_hours"]) for i in items if i.get("weekly_hours") is not None],
+            "credits": [float(i.get("credits") or 0) for i in items],
+            "students": [float(i["students"]) for i in items],
+            "classes": [float(i.get("classes") or 0) for i in items],
+        }
+        balance_matrix = []
+        for item in items:
+            for metric, values in metrics.items():
+                if not values:
+                    continue
+                raw = {
+                    "weekly_hours": item.get("weekly_hours"),
+                    "credits": item.get("credits") or 0,
+                    "students": item["students"],
+                    "classes": item.get("classes") or 0,
+                }[metric]
+                if raw is None:
+                    continue
+                norm = round(self._min_max(float(raw), values), 3)
+                balance_matrix.append(
+                    WorkloadBalanceMatrixCell(
+                        subject_id=item["subject_id"],
+                        subject_code=item["subject_code"],
+                        metric=metric,
+                        value=round(float(raw), 2),
+                        normalized=norm,
+                        band=(
+                            "Good"
+                            if norm * 100 >= settings.FACULTY_WORKLOAD_BALANCE_WATCH
+                            else "Watch"
+                        ),
+                    )
+                )
+
+        return WorkloadSubjectBreakdown(
+            items=[WorkloadSubjectItem(**self._normalize_offering(i)) for i in items],
+            type_distribution=type_distribution,
+            theory_practical=theory_practical,
+            balance_matrix=balance_matrix,
+        )
+
+    async def get_workload_trends(
+        self,
+        faculty_id: str,
+        subject_id: Optional[str],
+    ) -> WorkloadTrends:
+        await self._ensure_profile(faculty_id)
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        data = await self.repo.get_workload_trends(faculty_id, subject_id, weeks)
+        items = [
+            WorkloadTrendItem(
+                label=self._term_label(r["semester_no"], r["academic_year"]),
+                semester_no=int(r["semester_no"]),
+                academic_year=r["academic_year"],
+                subjects=int(r["offerings"] or 0),
+                credits=int(r["credits"] or 0),
+                students=int(r["student_slots"] or 0),
+                classes=int(r["classes"] or 0),
+                weekly_hours=round(float(r["weekly_hours"] or 0), 1),
+            )
+            for r in data["terms"]
+        ]
+        by_subject = [
+            WorkloadTrendBySubjectItem(
+                subject_id=r["subject_id"],
+                subject_code=r["subject_code"],
+                subject_name=r["subject_name"],
+                semester_no=int(r["semester_no"]),
+                academic_year=r["academic_year"],
+                weekly_hours=float(r["weekly_hours"]) if r.get("weekly_hours") is not None else None,
+            )
+            for r in data["by_subject"]
+        ]
+        capacity_trend = [
+            WorkloadCapacityTrendItem(
+                label=self._term_label(r["semester_no"], r["academic_year"]),
+                semester_no=int(r["semester_no"]),
+                academic_year=r["academic_year"],
+                weekly_hours=round(float(r["weekly_hours"] or 0), 1),
+                capacity=capacity,
+            )
+            for r in data["terms"]
+        ]
+        return WorkloadTrends(items=items, by_subject=by_subject, capacity_trend=capacity_trend)
+
+    async def get_workload_capacity(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> WorkloadCapacity:
+        await self._ensure_profile(faculty_id)
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        agg = await self.repo.get_workload_aggregates(
+            faculty_id, semester_no, academic_year, subject_id, weeks
+        )
+        hours = float(agg["weekly_hours"] or 0)
+        utilization = round(hours / capacity * 100, 1) if capacity else 0.0
+        remaining = round(max(0.0, capacity - hours), 1)
+        band, reason = self._capacity_band_reason(hours, utilization)
+        return WorkloadCapacity(
+            actual_weekly_hours=hours,
+            capacity_weekly_hours=capacity,
+            utilization_pct=utilization,
+            remaining_capacity=remaining,
+            band=band,
+            reason=reason,
+        )
+
+    def _capacity_band_reason(self, hours: float, utilization: float) -> tuple:
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        overload = settings.FACULTY_WORKLOAD_OVERLOAD_THRESHOLD * 100
+        underutilized = settings.FACULTY_WORKLOAD_UNDERUTILIZED_THRESHOLD * 100
+        if utilization >= overload:
+            return "Overloaded", (
+                f"You are at {utilization:.0f}% of the {capacity:.0f}-hour weekly capacity baseline."
+            )
+        if utilization < underutilized:
+            return "Underutilized", (
+                f"You are at {utilization:.0f}% of the {capacity:.0f}-hour weekly capacity baseline."
+            )
+        return "Balanced", (
+            f"Teaching hours ({hours:.1f}) are within the configured capacity baselines."
+        )
+
+    async def get_workload_matrices(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> WorkloadMatrices:
+        await self._ensure_profile(faculty_id)
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        items = await self.repo.get_workload_subject_breakdown(
+            faculty_id, semester_no, academic_year, subject_id, weeks
+        )
+        heat_values = [float(i.get("classes") or 0) for i in items]
+        cap_values = []
+        for i in items:
+            hours = float(i.get("weekly_hours") or 0)
+            cap_values.append(hours / capacity * 100 if capacity else 0.0)
+        hours_values = [float(i.get("weekly_hours") or 0) for i in items]
+        mean_hours = sum(hours_values) / len(hours_values) if hours_values else 0.0
+        scope_students = sum(int(i["students"]) for i in items) or 1
+        scope_credits = sum(int(i.get("credits") or 0) for i in items) or 1
+        scope_hours = sum(float(i.get("weekly_hours") or 0) for i in items) or 1
+
+        heatmap = []
+        utilization = []
+        allocation = []
+        for i in items:
+            classes = float(i.get("classes") or 0)
+            heatmap.append(
+                WorkloadMatrixCell(
+                    subject_id=i["subject_id"], subject_code=i["subject_code"],
+                    subject_name=i["subject_name"], semester_no=int(i["semester_no"]),
+                    academic_year=i["academic_year"], metric="classes",
+                    label="Classes Conducted", value=classes,
+                    normalized=round(self._min_max(classes, heat_values), 3),
+                )
+            )
+            hours = float(i.get("weekly_hours") or 0)
+            cap = hours / capacity * 100 if capacity else 0.0
+            balance_contribution = (
+                100 - min(100.0, 100.0 * abs(hours - mean_hours) / max(mean_hours, 1.0))
+                if len(hours_values) > 1 else 100.0
+            )
+            coverage = int(i["students"]) / scope_students * 100
+            for metric, value, label in (
+                ("capacity", cap, "Capacity Utilization"),
+                ("balance", balance_contribution, "Balance Contribution"),
+                ("coverage", coverage, "Student Coverage"),
+            ):
+                if metric == "capacity":
+                    if value >= settings.FACULTY_WORKLOAD_OVERLOAD_THRESHOLD * 100:
+                        band = "Overloaded"
+                    elif value < settings.FACULTY_WORKLOAD_UNDERUTILIZED_THRESHOLD * 100:
+                        band = "Underutilized"
+                    else:
+                        band = "Balanced"
+                else:
+                    band = self._workload_health_band(value)
+                utilization.append(
+                    WorkloadMatrixCell(
+                        subject_id=i["subject_id"], subject_code=i["subject_code"],
+                        subject_name=i["subject_name"], semester_no=int(i["semester_no"]),
+                        academic_year=i["academic_year"], metric=metric,
+                        label=label, value=round(value, 1),
+                        normalized=round(self._min_max(value, cap_values), 3)
+                        if metric == "capacity"
+                        else round(self._min_max(value, [balance_contribution]), 3),
+                        band=band,
+                    )
+                )
+            credits_share = int(i.get("credits") or 0) / scope_credits * 100
+            students_share = int(i["students"]) / scope_students * 100
+            hours_share = hours / scope_hours * 100 if scope_hours else 0.0
+            for metric, value, label in (
+                ("credits", credits_share, "Credit Share"),
+                ("students", students_share, "Student Share"),
+                ("hours", hours_share, "Hours Share"),
+            ):
+                allocation.append(
+                    WorkloadMatrixCell(
+                        subject_id=i["subject_id"], subject_code=i["subject_code"],
+                        subject_name=i["subject_name"], semester_no=int(i["semester_no"]),
+                        academic_year=i["academic_year"], metric=metric,
+                        label=label, value=round(value, 1),
+                        normalized=round(value / 100, 3),
+                    )
+                )
+
+        return WorkloadMatrices(heatmap=heatmap, utilization=utilization, allocation=allocation)
+
+    async def get_workload_scatter(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> WorkloadScatter:
+        await self._ensure_profile(faculty_id)
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        items = await self.repo.get_workload_subject_breakdown(
+            faculty_id, semester_no, academic_year, subject_id, weeks
+        )
+        return WorkloadScatter(points=[
+            WorkloadScatterPoint(
+                subject_id=i["subject_id"], subject_code=i["subject_code"],
+                subject_name=i["subject_name"], semester_no=int(i["semester_no"]),
+                academic_year=i["academic_year"], students=int(i["students"]),
+                credits=int(i.get("credits") or 0) if i.get("credits") is not None else None,
+            )
+            for i in items
+        ])
+
+    async def get_workload_benchmark(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> WorkloadBenchmark:
+        await self._ensure_profile(faculty_id)
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        items = await self.repo.get_workload_subject_breakdown(
+            faculty_id, semester_no, academic_year, subject_id, weeks
+        )
+        dept = await self.repo.get_department_resource_summary(faculty_id, weeks, capacity)
+        return WorkloadBenchmark(
+            items=[
+                WorkloadBenchmarkItem(
+                    subject_id=i["subject_id"], subject_code=i["subject_code"],
+                    subject_name=i["subject_name"], semester_no=int(i["semester_no"]),
+                    academic_year=i["academic_year"],
+                    weekly_hours=float(i["weekly_hours"]) if i.get("weekly_hours") is not None else None,
+                )
+                for i in items
+            ],
+            department_mean_weekly_hours=(
+                float(dept["mean_weekly_hours"])
+                if dept.get("mean_weekly_hours") is not None else None
+            ),
+            department_summary=DepartmentResourceSummary(
+                faculty_count=int(dept.get("faculty_count") or 0),
+                total_offerings=int(dept.get("total_offerings") or 0),
+                total_students=int(dept.get("total_students") or 0),
+                total_credits=int(dept.get("total_credits") or 0),
+                total_classes=int(dept.get("total_classes") or 0),
+                mean_weekly_hours=(
+                    float(dept["mean_weekly_hours"])
+                    if dept.get("mean_weekly_hours") is not None else None
+                ),
+                mean_capacity_utilization=(
+                    float(dept["mean_capacity_utilization"])
+                    if dept.get("mean_capacity_utilization") is not None else None
+                ),
+            ),
+        )
+
+    async def get_workload_forecast(
+        self,
+        faculty_id: str,
+    ) -> WorkloadForecast:
+        await self._ensure_profile(faculty_id)
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        history = await self.repo.get_workload_forecast_source(faculty_id, weeks)
+        if not history:
+            return WorkloadForecast(
+                items=[],
+                expected_total_weekly_hours=None,
+                remaining_capacity=None,
+                source_reason="No prior offering history to project from.",
+            )
+
+        by_subject: Dict[str, List[Dict[str, Any]]] = {}
+        per_term: Dict[int, set] = {}
+        for h in history:
+            by_subject.setdefault(h["subject_id"], []).append(h)
+            per_term.setdefault(int(h["semester_no"]), set()).add(h["subject_id"])
+        max_semester = max(per_term)
+        sorted_terms = sorted(per_term)
+        stable = False
+        if len(sorted_terms) >= 2:
+            counts = [len(per_term[t]) for t in sorted_terms[-2:]]
+            stable = max(counts) - min(counts) <= 1
+
+        items = []
+        for subject_id, offers in by_subject.items():
+            hours = [float(o["weekly_hours"]) for o in offers if o.get("weekly_hours") is not None]
+            expected = round(sum(hours) / len(hours), 1) if hours else None
+            last_semester = max(int(o["semester_no"]) for o in offers)
+            appears_recent = sum(1 for o in offers if int(o["semester_no"]) >= max_semester - 1)
+            reoffer = appears_recent >= 2 or (stable and last_semester == max_semester)
+            if not reoffer:
+                continue
+            items.append(
+                WorkloadForecastItem(
+                    subject_id=subject_id,
+                    subject_code=offers[0]["subject_code"],
+                    subject_name=offers[0]["subject_name"],
+                    expected_weekly_hours=expected,
+                    prior_offerings=len(offers),
+                    source_reason=(
+                        f"Mean weekly hours across {len(offers)} prior offering(s) of "
+                        f"{offers[0]['subject_code']}."
+                        if expected is not None
+                        else f"Taught in recent terms; no conducted-class hours recorded yet."
+                    ),
+                )
+            )
+
+        if not items:
+            source_reason = "No subject meets the re-offer expectation rules from prior offering history."
+            return WorkloadForecast(
+                items=[], expected_total_weekly_hours=None,
+                remaining_capacity=None, source_reason=source_reason,
+            )
+        expected_total = round(sum(i.expected_weekly_hours or 0 for i in items), 1)
+        remaining = round(max(0.0, capacity - expected_total), 1)
+        return WorkloadForecast(
+            items=items,
+            expected_total_weekly_hours=expected_total,
+            remaining_capacity=remaining,
+            source_reason=(
+                "Expected teaching load is the deterministic mean of prior weekly teaching hours "
+                "for subjects expected to re-offer."
+            ),
+        )
+
+    async def get_workload_governance(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        status: Optional[str],
+    ) -> WorkloadGovernance:
+        await self._ensure_profile(faculty_id)
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        items = await self.repo.get_workload_subject_breakdown(
+            faculty_id, semester_no, academic_year, subject_id, weeks
+        )
+        agg = await self.repo.get_workload_aggregates(
+            faculty_id, semester_no, academic_year, subject_id, weeks
+        )
+        dept_students = await self.repo.get_workload_department_students(
+            faculty_id, semester_no, academic_year
+        )
+        history = await self.repo.get_workload_forecast_source(faculty_id, weeks)
+        history_by_subject: Dict[str, List[Dict[str, Any]]] = {}
+        for h in history:
+            history_by_subject.setdefault(h["subject_id"], []).append(h)
+
+        mean_credits = sum(int(i.get("credits") or 0) for i in items) / len(items) if items else 0.0
+        mean_students = sum(int(i["students"]) for i in items) / len(items) if items else 0.0
+        balance_scope = self._workload_balance_score(
+            [float(i["weekly_hours"]) for i in items if i.get("weekly_hours") is not None]
+        )
+        students = int(agg["students"] or 0)
+        coverage = round(students / dept_students * 100, 1) if dept_students and students else None
+        balance_warning = (
+            balance_scope is not None and balance_scope < settings.FACULTY_WORKLOAD_BALANCE_WATCH
+        )
+        coverage_warning = (
+            coverage is not None and coverage < settings.FACULTY_WORKLOAD_COVERAGE_WATCH
+        )
+
+        governance_items = []
+        for i in items:
+            st, utilization = self._workload_status(i, mean_credits, mean_students)
+            hours = float(i.get("weekly_hours") or 0)
+            reason = self._governance_reason(i, st, utilization, mean_credits, mean_students)
+            delta = None
+            previous_display = None
+            previous_reason = None
+            prev = self._previous_offering(
+                history_by_subject.get(i["subject_id"], []), int(i["semester_no"]), i["academic_year"]
+            )
+            if prev is not None and hours:
+                prev_hours = float(prev.get("weekly_hours") or 0)
+                if prev_hours:
+                    delta = round(hours - prev_hours, 1)
+                    previous_display = f"{prev_hours:.1f} hrs"
+                    previous_reason = (
+                        f"Previous offering: Sem {prev['semester_no']} · {prev['academic_year']}."
+                    )
+            governance_items.append(
+                WorkloadGovernanceItem(
+                    subject_id=i["subject_id"],
+                    subject_code=i["subject_code"],
+                    subject_name=i["subject_name"],
+                    semester_no=int(i["semester_no"]),
+                    academic_year=i["academic_year"],
+                    status=st,
+                    credits=int(i.get("credits") or 0),
+                    students=int(i["students"]),
+                    teaching_hours=round(hours, 1) if hours else None,
+                    reason=reason,
+                    delta=delta,
+                    previous_display=previous_display,
+                    previous_reason=previous_reason,
+                )
+            )
+
+        def _warning(item: WorkloadGovernanceItem) -> bool:
+            if item.status in ("Overloaded", "Underutilized"):
+                return True
+            return balance_warning or coverage_warning
+
+        overloaded_count = sum(1 for g in governance_items if g.status == "Overloaded")
+        balanced_count = sum(1 for g in governance_items if g.status == "Balanced")
+        underutilized_count = sum(1 for g in governance_items if g.status == "Underutilized")
+        credit_imbalance_count = sum(1 for g in governance_items if g.status == "Credit Imbalance")
+        student_imbalance_count = sum(1 for g in governance_items if g.status == "Student Imbalance")
+        capacity_warning_count = sum(1 for g in governance_items if _warning(g))
+
+        if status == "Capacity Warning":
+            filtered = [g for g in governance_items if _warning(g)]
+        elif status:
+            filtered = [g for g in governance_items if g.status == status]
+        else:
+            filtered = governance_items
+
+        return WorkloadGovernance(
+            items=filtered,
+            overloaded_count=overloaded_count,
+            balanced_count=balanced_count,
+            underutilized_count=underutilized_count,
+            credit_imbalance_count=credit_imbalance_count,
+            student_imbalance_count=student_imbalance_count,
+            capacity_warning_count=capacity_warning_count,
+        )
+
+    async def get_workload_health_score(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> WorkloadHealthScore:
+        await self._ensure_profile(faculty_id)
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        derived = await self._workload_derived(faculty_id, semester_no, academic_year, subject_id)
+        items = await self.repo.get_workload_subject_breakdown(
+            faculty_id, semester_no, academic_year, subject_id, weeks
+        )
+        scope_score = self._health_score(
+            derived["utilization_pct"], derived["balance_score"],
+            derived["coverage_pct"], derived["efficiency_score"],
+        )
+        scope_band = self._workload_health_band(scope_score)
+        subjects = [
+            WorkloadHealthScoreItem(
+                subject_id=i["subject_id"],
+                subject_code=i["subject_code"],
+                subject_name=i["subject_name"],
+                score=self._subject_health(i, derived),
+                band=self._workload_health_band(self._subject_health(i, derived)),
+                reason=(
+                    f"{i['subject_code']} is at "
+                    f"{float(i.get('weekly_hours') or 0) / capacity * 100:.0f}% of the "
+                    f"{capacity:.0f}-hour weekly capacity baseline."
+                ),
+            )
+            for i in items
+        ]
+        return WorkloadHealthScore(
+            scope_score=scope_score,
+            scope_band=scope_band,
+            scope_reason=(
+                "Composite workload health from capacity utilization, balance, coverage, "
+                "and efficiency for the selected scope."
+            ),
+            subjects=subjects,
+        )
+
+    async def get_workload_timeline(
+        self,
+        faculty_id: str,
+    ) -> WorkloadTimeline:
+        await self._ensure_profile(faculty_id)
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        rows = await self.repo.get_workload_timeline(faculty_id, weeks)
+        items = []
+        for idx, r in enumerate(rows):
+            prev = rows[idx - 1] if idx > 0 else None
+            items.append(
+                WorkloadTimelineItem(
+                    label=self._term_label(r["semester_no"], r["academic_year"]),
+                    semester_no=int(r["semester_no"]),
+                    academic_year=r["academic_year"],
+                    subjects=int(r["subjects"] or 0),
+                    credits=int(r["credits"] or 0),
+                    students=int(r["students"] or 0),
+                    classes=int(r["classes"] or 0),
+                    weekly_hours=round(float(r["weekly_hours"] or 0), 1),
+                    delta_credits=(
+                        round(float(r["credits"] or 0) - float(prev["credits"] or 0), 1)
+                        if prev else None
+                    ),
+                    delta_hours=(
+                        round(float(r["weekly_hours"] or 0) - float(prev["weekly_hours"] or 0), 1)
+                        if prev else None
+                    ),
+                    delta_students=(
+                        round(float(r["students"] or 0) - float(prev["students"] or 0), 1)
+                        if prev else None
+                    ),
+                )
+            )
+        forecast = await self.get_workload_forecast(faculty_id)
+        if forecast.items:
+            last = rows[-1] if rows else {}
+            items.append(
+                WorkloadTimelineItem(
+                    label="Expected (next term)",
+                    semester_no=int(last.get("semester_no") or 0) + 1,
+                    academic_year=last.get("academic_year") or "",
+                    subjects=len(forecast.items),
+                    credits=None,
+                    students=None,
+                    classes=None,
+                    weekly_hours=round(forecast.expected_total_weekly_hours or 0, 1),
+                    projected=True,
+                    source_reason=forecast.source_reason,
+                )
+            )
+        return WorkloadTimeline(items=items)
+
+    async def get_workload_students(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        subject_type: Optional[str],
+        credits_min: Optional[int],
+        credits_max: Optional[int],
+        hours_min: Optional[float],
+        hours_max: Optional[float],
+        students_min: Optional[int],
+        students_max: Optional[int],
+        search: Optional[str],
+        workload_status: Optional[str],
+        page: int,
+        page_size: int,
+        sort: str,
+        order: str,
+    ) -> WorkloadStudentsResponse:
+        await self._ensure_profile(faculty_id)
+        clean_search = search.strip()[:100] if search else None
+        sort_key = sort if sort in WORKLOAD_STUDENT_SORT_EXPRESSIONS or sort == "name" else "name"
+        direction = "DESC" if order == "desc" else "ASC"
+        order_by = (
+            f"st.first_name {direction}, st.last_name {direction}"
+            if sort_key == "name"
+            else f"{WORKLOAD_STUDENT_SORT_EXPRESSIONS[sort_key]} {direction} NULLS LAST"
+        )
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        overload = settings.FACULTY_WORKLOAD_OVERLOAD_THRESHOLD
+        underutilized = settings.FACULTY_WORKLOAD_UNDERUTILIZED_THRESHOLD
+        credit_ratio = settings.FACULTY_WORKLOAD_CREDIT_IMBALANCE_RATIO
+        student_ratio = settings.FACULTY_WORKLOAD_STUDENT_IMBALANCE_RATIO
+
+        total = await self.repo.count_workload_students(
+            faculty_id, semester_no, academic_year, subject_id, subject_type,
+            credits_min, credits_max, hours_min, hours_max, students_min, students_max,
+            clean_search, workload_status, weeks, capacity, overload, underutilized,
+            credit_ratio, student_ratio,
+        )
+        total_pages = max(1, -(-total // page_size)) if total else 0
+        row_start = (page - 1) * page_size
+        row_data = []
+        if total > 0:
+            row_data = await self.repo.get_workload_students(
+                faculty_id, semester_no, academic_year, subject_id, subject_type,
+                credits_min, credits_max, hours_min, hours_max, students_min, students_max,
+                clean_search, workload_status, weeks, capacity, overload, underutilized,
+                credit_ratio, student_ratio, order_by, page_size, row_start,
+            )
+        rows = [
+            WorkloadStudentRow(
+                enrollment_record_id=r["enrollment_record_id"],
+                student_id=r["student_id"],
+                enrollment_no=int(r["enrollment_no"]),
+                semester_no=int(r["semester_no"]),
+                subject_id=r["subject_id"],
+                subject_code=r["subject_code"],
+                subject_name=r["subject_name"],
+                first_name=r["first_name"],
+                last_name=r["last_name"],
+                credits=int(r["credits"]) if r.get("credits") is not None else None,
+                weekly_hours=float(r["weekly_hours"]) if r.get("weekly_hours") is not None else None,
+                classes_conducted=(
+                    int(r["classes_conducted"]) if r.get("classes_conducted") is not None else None
+                ),
+                workload_status=r["workload_status"],
+            )
+            for r in row_data
+        ]
+        return WorkloadStudentsResponse(
+            faculty_id=faculty_id,
+            applied=WorkloadAppliedFilters(
+                semester=semester_no,
+                academic_year=academic_year,
+                subject_id=subject_id,
+                compare=False,
+            ),
+            rows=rows,
+            pagination=FacultyPagination(
+                page=page,
+                page_size=page_size,
+                total=int(total),
+                total_pages=total_pages,
+            ),
+        )
+
+    async def get_workload_highlights(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+    ) -> WorkloadHighlightsResponse:
+        await self._ensure_profile(faculty_id)
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        current = await self._workload_derived(faculty_id, semester_no, academic_year, subject_id)
+        breakdown = await self.repo.get_workload_subject_breakdown(
+            faculty_id, semester_no, academic_year, subject_id, weeks
+        )
+        terms = await self.repo.get_taught_terms(faculty_id)
+
+        items: List[WorkloadHighlight] = []
+        term_label = f"Sem {semester_no}" if semester_no is not None else "current scope"
+
+        previous = None
+        if semester_no is not None:
+            offering_sets = await self._offering_sets(faculty_id)
+            prev_term = self._find_previous_term(terms, semester_no, offering_sets, subject_id)
+            if prev_term is not None:
+                previous = await self._workload_derived(
+                    faculty_id, prev_term["semester_no"], prev_term["academic_year"], subject_id
+                )
+
+        if (
+            previous is not None
+            and current.get("weekly_hours") is not None
+            and previous.get("weekly_hours") is not None
+            and previous["weekly_hours"] > 0
+        ):
+            prev_hours = previous["weekly_hours"]
+            pct_change = round((current["weekly_hours"] - prev_hours) / prev_hours * 100, 1)
+            if pct_change >= 5:
+                items.append(
+                    WorkloadHighlight(
+                        id="hours-gain",
+                        severity="warning",
+                        message=(
+                            f"Teaching workload increased by {pct_change:.0f}% compared with "
+                            f"the previous term ({prev_hours:.1f} → {current['weekly_hours']:.1f} "
+                            "weekly hours)."
+                        ),
+                        term_label=term_label,
+                    )
+                )
+            elif pct_change <= -5:
+                items.append(
+                    WorkloadHighlight(
+                        id="hours-drop",
+                        severity="info",
+                        message=(
+                            f"Teaching workload decreased by {abs(pct_change):.0f}% compared with "
+                            f"the previous term ({prev_hours:.1f} → {current['weekly_hours']:.1f} "
+                            "weekly hours)."
+                        ),
+                        term_label=term_label,
+                    )
+                )
+
+        if previous is not None:
+            prev_util = previous.get("utilization_pct")
+            cur_util = current.get("utilization_pct")
+            if prev_util is not None and cur_util is not None and cur_util < prev_util:
+                items.append(
+                    WorkloadHighlight(
+                        id="util-improved",
+                        severity="info",
+                        message=(
+                            f"Capacity utilization improved from {prev_util:.0f}% to {cur_util:.0f}% "
+                            "compared with the previous semester."
+                        ),
+                        term_label=term_label,
+                    )
+                )
+
+        with_hours = [b for b in breakdown if b.get("weekly_hours") is not None]
+        if with_hours:
+            top = max(with_hours, key=lambda b: float(b["weekly_hours"]))
+            low = min(with_hours, key=lambda b: float(b["weekly_hours"]))
+            top_hours = float(top["weekly_hours"])
+            near_capacity = top_hours >= capacity * settings.FACULTY_WORKLOAD_OVERLOAD_THRESHOLD
+            items.append(
+                WorkloadHighlight(
+                    id="highest-load",
+                    severity="warning" if near_capacity else "info",
+                    message=(
+                        f"{top['subject_name']} carries the highest teaching load "
+                        f"({top_hours:.1f} weekly hours)."
+                    ),
+                    subject_id=top["subject_id"],
+                    subject_code=top["subject_code"],
+                    term_label=f"Sem {top['semester_no']} · {top['academic_year']}",
+                )
+            )
+            if low["subject_id"] != top["subject_id"]:
+                items.append(
+                    WorkloadHighlight(
+                        id="lowest-load",
+                        severity="info",
+                        message=(
+                            f"{low['subject_name']} carries the lowest teaching load "
+                            f"({float(low['weekly_hours']):.1f} weekly hours)."
+                        ),
+                        subject_id=low["subject_id"],
+                        subject_code=low["subject_code"],
+                        term_label=f"Sem {low['semester_no']} · {low['academic_year']}",
+                    )
+                )
+
+        if breakdown:
+            top_students = max(breakdown, key=lambda b: int(b["students"]))
+            mean_students = sum(int(b["students"]) for b in breakdown) / len(breakdown)
+            students_over = int(top_students["students"]) > (
+                settings.FACULTY_WORKLOAD_STUDENT_IMBALANCE_RATIO * mean_students
+            )
+            items.append(
+                WorkloadHighlight(
+                    id="highest-students",
+                    severity="warning" if students_over else "info",
+                    message=(
+                        f"{top_students['subject_name']} carries the highest student load "
+                        f"({int(top_students['students'])} students, "
+                        f"{int(top_students['students']) / mean_students:.1f}× the scope mean)."
+                    ),
+                    subject_id=top_students["subject_id"],
+                    subject_code=top_students["subject_code"],
+                    term_label=f"Sem {top_students['semester_no']} · {top_students['academic_year']}",
+                )
+            )
+            theory_hours = sum(
+                float(b.get("weekly_hours") or 0)
+                for b in breakdown if (b.get("subject_type") or "") == "Theory"
+            )
+            practical_hours = sum(
+                float(b.get("weekly_hours") or 0)
+                for b in breakdown
+                if (b.get("subject_type") or "") in ("Laboratory", "Project", "Internship")
+            )
+            if theory_hours > 0 or practical_hours > 0:
+                if theory_hours > 0 and practical_hours == 0:
+                    items.append(
+                        WorkloadHighlight(
+                            id="theory-practical",
+                            severity="info",
+                            message=(
+                                f"All teaching workload is Theory ({theory_hours:.1f} hours); "
+                                "no practical subjects in this scope."
+                            ),
+                            term_label=term_label,
+                        )
+                    )
+                elif theory_hours > 0:
+                    diff = round(theory_hours - practical_hours, 1)
+                    message = (
+                        f"Theory workload ({theory_hours:.1f} hours) exceeds practical workload "
+                        f"({practical_hours:.1f} hours) by {diff:.1f} hours."
+                        if diff > 0
+                        else (
+                            f"Theory and practical workloads are balanced "
+                            f"({theory_hours:.1f} vs {practical_hours:.1f} hours)."
+                        )
+                    )
+                    items.append(
+                        WorkloadHighlight(
+                            id="theory-practical",
+                            severity="info",
+                            message=message,
+                            term_label=term_label,
+                        )
+                    )
+
+        for b in breakdown:
+            hours = float(b.get("weekly_hours") or 0)
+            if hours and hours / capacity >= settings.FACULTY_WORKLOAD_OVERLOAD_THRESHOLD:
+                items.append(
+                    WorkloadHighlight(
+                        id=f"near-capacity-{b['subject_code']}",
+                        severity="warning",
+                        message=(
+                            f"{b['subject_code']} is at {hours / capacity * 100:.0f}% of the "
+                            f"{capacity:.0f}-hour weekly capacity baseline."
+                        ),
+                        subject_id=b["subject_id"],
+                        subject_code=b["subject_code"],
+                        term_label=f"Sem {b['semester_no']} · {b['academic_year']}",
+                    )
+                )
+
+        if not items:
+            items.append(
+                WorkloadHighlight(
+                    id="quiet",
+                    severity="info",
+                    message="Your workload is balanced within the configured capacity baselines.",
+                    term_label=term_label,
+                )
+            )
+
+        return WorkloadHighlightsResponse(items=items)
+
+    async def get_workload_export_rows(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        subject_type: Optional[str],
+        credits_min: Optional[int],
+        credits_max: Optional[int],
+        hours_min: Optional[float],
+        hours_max: Optional[float],
+        students_min: Optional[int],
+        students_max: Optional[int],
+        workload_status: Optional[str],
+        search: Optional[str],
+        student_ids: Optional[List[str]],
+        report: str,
+    ) -> List[Dict[str, Any]]:
+        await self._ensure_profile(faculty_id)
+        weeks = settings.WORKLOAD_WEEKS_PER_SEMESTER
+        capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
+        clean_search = search.strip()[:100] if search else None
+        if report == "table":
+            overload = settings.FACULTY_WORKLOAD_OVERLOAD_THRESHOLD
+            underutilized = settings.FACULTY_WORKLOAD_UNDERUTILIZED_THRESHOLD
+            credit_ratio = settings.FACULTY_WORKLOAD_CREDIT_IMBALANCE_RATIO
+            student_ratio = settings.FACULTY_WORKLOAD_STUDENT_IMBALANCE_RATIO
+            rows = await self.repo.get_workload_students(
+                faculty_id, semester_no, academic_year, subject_id, subject_type,
+                credits_min, credits_max, hours_min, hours_max, students_min, students_max,
+                clean_search, workload_status,
+                weeks, capacity, overload, underutilized, credit_ratio, student_ratio,
+                "st.first_name ASC, st.last_name ASC", 1000, 0,
+            )
+            if student_ids:
+                rows = [r for r in rows if r["enrollment_record_id"] in student_ids]
+            return rows
+        if report == "summary":
+            summary = await self.get_workload_summary(
+                faculty_id, semester_no, academic_year, subject_id, compare=True
+            )
+            rows: List[Dict[str, Any]] = [
+                {
+                    "category": "Scope",
+                    "item": "Academic Year",
+                    "value": summary.applied.academic_year or "All Years",
+                    "previous": "",
+                    "delta": "",
+                },
+                {
+                    "category": "Scope",
+                    "item": "Semester",
+                    "value": (
+                        f"Sem {summary.applied.semester}"
+                        if summary.applied.semester is not None
+                        else "All Semesters"
+                    ),
+                    "previous": "",
+                    "delta": "",
+                },
+                {
+                    "category": "Scope",
+                    "item": "Subject",
+                    "value": summary.applied.subject_id or "All Subjects",
+                    "previous": "",
+                    "delta": "",
+                },
+                {
+                    "category": "Term",
+                    "item": "Current",
+                    "value": (
+                        self._term_label(
+                            summary.current_term.semester_no,
+                            summary.current_term.academic_year,
+                        )
+                        if summary.current_term
+                        else "All terms"
+                    ),
+                    "previous": "",
+                    "delta": "",
+                },
+                {
+                    "category": "Term",
+                    "item": "Previous",
+                    "value": (
+                        self._term_label(
+                            summary.previous_term.semester_no,
+                            summary.previous_term.academic_year,
+                        )
+                        if summary.previous_term
+                        else "None"
+                    ),
+                    "previous": "",
+                    "delta": "",
+                },
+            ]
+            for kpi in summary.kpis:
+                row = {
+                    "category": "KPI",
+                    "item": kpi.label,
+                    "value": kpi.display,
+                    "previous": kpi.previous_display if kpi.has_previous else "",
+                    "delta": self._format_kpi_delta(kpi.delta) if kpi.has_previous else "",
+                }
+                rows.append(row)
+            rows.extend(
+                [
+                    {
+                        "category": "Health Score",
+                        "item": "Teaching Workload Health Score",
+                        "value": str(summary.health.score) if summary.health.score is not None else "—",
+                        "previous": "",
+                        "delta": "",
+                    },
+                    {
+                        "category": "Health Score",
+                        "item": "Band",
+                        "value": summary.health.band,
+                        "previous": "",
+                        "delta": "",
+                    },
+                ]
+            )
+            for key, label in (
+                ("capacity_weekly_hours", "Weekly Capacity (hours)"),
+                ("weeks_per_semester", "Weeks per Semester"),
+                ("overload_threshold", "Overload Threshold (% of capacity)"),
+                ("underutilized_threshold", "Underutilized Threshold (% of capacity)"),
+                ("balance_watch", "Balance Watch Score"),
+                ("coverage_watch", "Coverage Watch (%)"),
+                ("credit_imbalance_ratio", "Credit Imbalance Ratio"),
+                ("student_imbalance_ratio", "Student Imbalance Ratio"),
+                ("health_excellent", "Health Excellent Band"),
+                ("health_good", "Health Good Band"),
+                ("health_watch", "Health Watch Band"),
+                ("health_critical", "Health Critical Band"),
+            ):
+                value = getattr(summary.thresholds, key)
+                if key in ("overload_threshold", "underutilized_threshold"):
+                    display_value = f"{value * 100:.0f}%"
+                elif key in ("balance_watch", "coverage_watch", "health_excellent", "health_good", "health_watch", "health_critical"):
+                    display_value = f"{value:.1f}"
+                else:
+                    display_value = f"{value:.2f}"
+                rows.append(
+                    {
+                        "category": "Threshold",
+                        "item": label,
+                        "value": display_value,
+                        "previous": "",
+                        "delta": "",
+                    }
+                )
+            return rows
+        items = await self.repo.get_workload_subject_breakdown(
+            faculty_id, semester_no, academic_year, subject_id, weeks, search=clean_search
+        )
+        mean_credits = sum(int(i.get("credits") or 0) for i in items) / len(items) if items else 0.0
+        mean_students = sum(int(i["students"]) for i in items) / len(items) if items else 0.0
+        derived = await self._workload_derived(faculty_id, semester_no, academic_year, subject_id)
+        for item in items:
+            st, utilization = self._workload_status(item, mean_credits, mean_students)
+            item["status"] = st
+            item["reason"] = self._governance_reason(item, st, utilization, mean_credits, mean_students)
+            item["health_band"] = self._workload_health_band(self._subject_health(item, derived))
+        return items

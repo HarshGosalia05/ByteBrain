@@ -27,19 +27,30 @@ export type ScatterReferenceLine = {
 type ScatterTooltipProps = {
   active?: boolean
   payload?: Array<{ payload?: ScatterPoint }>
+  title?: string
+  xLabel?: string
+  yLabel?: string
+  suffix?: string
 }
 
-function ScatterTooltip({ active, payload }: ScatterTooltipProps) {
+function ScatterTooltip({ active, payload, title, xLabel, yLabel, suffix }: ScatterTooltipProps) {
   if (!active || !payload?.length) return null
   const point = payload[0]?.payload
   if (!point) return null
   return (
     <div className="rounded-lg border border-border bg-popover/95 px-3 py-2 text-xs shadow-lg backdrop-blur-sm">
-      <p className="font-medium text-foreground">Attendance vs performance</p>
+      <p className="font-medium text-foreground">{title ?? "Attendance vs performance"}</p>
       <p className="mt-1 text-muted-foreground">
-        Attendance{" "}
-        <span className="font-medium tabular-nums text-foreground">{point.x}%</span> · Performance{" "}
-        <span className="font-medium tabular-nums text-foreground">{point.y}%</span>
+        {xLabel ?? "Attendance"}{" "}
+        <span className="font-medium tabular-nums text-foreground">
+          {point.x}
+          {suffix ?? "%"}
+        </span>{" "}
+        · {yLabel ?? "Performance"}{" "}
+        <span className="font-medium tabular-nums text-foreground">
+          {point.y}
+          {suffix ?? "%"}
+        </span>
       </p>
     </div>
   )
@@ -49,10 +60,26 @@ export function ScatterChart({
   data,
   height = 260,
   referenceLines = [],
+  xLabel = "Attendance %",
+  yLabel = "Performance %",
+  xDomain = [0, 100],
+  yDomain = [0, 100],
+  tooltipTitle,
+  tooltipXLabel,
+  tooltipYLabel,
+  valueSuffix = "%",
 }: {
   data: ScatterPoint[]
   height?: number
   referenceLines?: ScatterReferenceLine[]
+  xLabel?: string
+  yLabel?: string
+  xDomain?: [number | "auto", number | "auto"]
+  yDomain?: [number | "auto", number | "auto"]
+  tooltipTitle?: string
+  tooltipXLabel?: string
+  tooltipYLabel?: string
+  valueSuffix?: string
 }) {
   return (
     <ChartContainer height={height}>
@@ -61,14 +88,14 @@ export function ScatterChart({
         <XAxis
           dataKey="x"
           type="number"
-          domain={[0, 100]}
+          domain={xDomain}
           tick={{ fontSize: 12 }}
           tickLine={false}
           axisLine={false}
           stroke="var(--muted-foreground)"
           tickMargin={6}
           label={{
-            value: "Attendance %",
+            value: xLabel,
             position: "insideBottom",
             offset: -6,
             fontSize: 11,
@@ -78,7 +105,7 @@ export function ScatterChart({
         <YAxis
           dataKey="y"
           type="number"
-          domain={[0, 100]}
+          domain={yDomain}
           tick={{ fontSize: 12 }}
           tickLine={false}
           axisLine={false}
@@ -86,7 +113,7 @@ export function ScatterChart({
           width={44}
           tickMargin={6}
           label={{
-            value: "Performance %",
+            value: yLabel,
             angle: -90,
             position: "insideLeft",
             offset: 4,
@@ -95,7 +122,14 @@ export function ScatterChart({
           }}
         />
         <Tooltip
-          content={<ScatterTooltip />}
+          content={
+            <ScatterTooltip
+              title={tooltipTitle}
+              xLabel={tooltipXLabel}
+              yLabel={tooltipYLabel}
+              suffix={valueSuffix}
+            />
+          }
           cursor={{ strokeDasharray: "3 3" }}
           wrapperStyle={{ outline: "none" }}
         />

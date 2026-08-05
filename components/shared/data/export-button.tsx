@@ -18,7 +18,8 @@ export function ExportButton({ fileName, columns, rows, label = "CSV" }: ExportB
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = fileName
+    const base = fileName.endsWith(".csv") ? fileName.slice(0, -4) : fileName
+    link.download = `${base}_${Date.now()}.csv`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

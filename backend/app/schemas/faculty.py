@@ -616,3 +616,268 @@ class AttendanceCorrelation(BaseModel):
     pearson: Optional[float] = None
     descriptor: Optional[str] = None
     sample_size: int
+
+class WorkloadFilters(BaseModel):
+    semesters: List[int]
+    academic_years: List[str]
+    subjects: List[FacultySubjectOption]
+    term_options: List[FacultyTermOption]
+    subject_types: List[str]
+    workload_statuses: List[str]
+
+class WorkloadAppliedFilters(BaseModel):
+    semester: Optional[int] = None
+    academic_year: Optional[str] = None
+    subject_id: Optional[str] = None
+    compare: bool
+
+class WorkloadThresholds(BaseModel):
+    capacity_weekly_hours: float
+    weeks_per_semester: float
+    overload_threshold: float
+    underutilized_threshold: float
+    balance_watch: float
+    coverage_watch: float
+    credit_imbalance_ratio: float
+    student_imbalance_ratio: float
+    health_excellent: float
+    health_good: float
+    health_watch: float
+    health_critical: float
+
+class WorkloadHealthItem(BaseModel):
+    score: Optional[float] = None
+    band: str
+    reason: str
+
+class WorkloadSummary(BaseModel):
+    faculty_id: str
+    kpis: List[PerformanceKpi]
+    filters: WorkloadFilters
+    applied: WorkloadAppliedFilters
+    current_term: Optional[FacultyTermOption] = None
+    previous_term: Optional[FacultyTermOption] = None
+    thresholds: WorkloadThresholds
+    health: WorkloadHealthItem
+
+class WorkloadSubjectItem(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    academic_year: str
+    subject_type: Optional[str] = None
+    credits: Optional[int] = None
+    students: int
+    classes: Optional[int] = None
+    weekly_hours: Optional[float] = None
+
+class WorkloadTypeItem(BaseModel):
+    label: str
+    count: int = 0
+    credits: Optional[int] = None
+
+class WorkloadBalanceMatrixCell(BaseModel):
+    subject_id: str
+    subject_code: str
+    metric: str
+    value: float
+    normalized: float
+    band: Optional[str] = None
+
+class WorkloadSubjectBreakdown(BaseModel):
+    items: List[WorkloadSubjectItem]
+    type_distribution: List[WorkloadTypeItem]
+    theory_practical: List[WorkloadTypeItem]
+    balance_matrix: List[WorkloadBalanceMatrixCell]
+
+class WorkloadTrendItem(BaseModel):
+    label: str
+    semester_no: int
+    academic_year: str
+    subjects: int
+    credits: int
+    students: int
+    classes: Optional[int] = None
+    weekly_hours: float
+
+class WorkloadTrendBySubjectItem(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    academic_year: str
+    weekly_hours: Optional[float] = None
+
+class WorkloadCapacityTrendItem(BaseModel):
+    label: str
+    semester_no: int
+    academic_year: str
+    weekly_hours: float
+    capacity: float
+
+class WorkloadTrends(BaseModel):
+    items: List[WorkloadTrendItem]
+    by_subject: List[WorkloadTrendBySubjectItem]
+    capacity_trend: List[WorkloadCapacityTrendItem]
+
+class WorkloadCapacity(BaseModel):
+    actual_weekly_hours: float
+    capacity_weekly_hours: float
+    utilization_pct: float
+    remaining_capacity: float
+    band: str
+    reason: str
+
+class WorkloadMatrixCell(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    academic_year: str
+    metric: str
+    label: str
+    value: float
+    normalized: float
+    band: Optional[str] = None
+
+class WorkloadMatrices(BaseModel):
+    heatmap: List[WorkloadMatrixCell]
+    utilization: List[WorkloadMatrixCell]
+    allocation: List[WorkloadMatrixCell]
+
+class WorkloadScatterPoint(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    academic_year: str
+    students: int
+    credits: Optional[int] = None
+
+class WorkloadScatter(BaseModel):
+    points: List[WorkloadScatterPoint]
+
+class DepartmentResourceSummary(BaseModel):
+    faculty_count: int
+    total_offerings: int
+    total_students: int
+    total_credits: int
+    total_classes: Optional[int] = None
+    mean_weekly_hours: Optional[float] = None
+    mean_capacity_utilization: Optional[float] = None
+
+class WorkloadBenchmarkItem(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    academic_year: str
+    weekly_hours: Optional[float] = None
+
+class WorkloadBenchmark(BaseModel):
+    items: List[WorkloadBenchmarkItem]
+    department_mean_weekly_hours: Optional[float] = None
+    department_summary: DepartmentResourceSummary
+
+class WorkloadForecastItem(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    expected_weekly_hours: Optional[float] = None
+    prior_offerings: int
+    source_reason: str
+
+class WorkloadForecast(BaseModel):
+    items: List[WorkloadForecastItem]
+    expected_total_weekly_hours: Optional[float] = None
+    remaining_capacity: Optional[float] = None
+    source_reason: str
+
+class WorkloadGovernanceItem(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    academic_year: str
+    status: str
+    credits: int
+    students: int
+    teaching_hours: Optional[float] = None
+    reason: str
+    delta: Optional[float] = None
+    previous_display: Optional[str] = None
+    previous_reason: Optional[str] = None
+
+class WorkloadGovernance(BaseModel):
+    items: List[WorkloadGovernanceItem]
+    overloaded_count: int
+    balanced_count: int
+    underutilized_count: int
+    credit_imbalance_count: int
+    student_imbalance_count: int
+    capacity_warning_count: int
+
+class WorkloadHealthScoreItem(BaseModel):
+    subject_id: Optional[str] = None
+    subject_code: Optional[str] = None
+    subject_name: Optional[str] = None
+    score: Optional[float] = None
+    band: str
+    reason: str
+
+class WorkloadHealthScore(BaseModel):
+    scope_score: Optional[float] = None
+    scope_band: str
+    scope_reason: str
+    subjects: List[WorkloadHealthScoreItem]
+
+class WorkloadTimelineItem(BaseModel):
+    label: str
+    semester_no: int
+    academic_year: str
+    subjects: int
+    credits: Optional[int] = None
+    students: Optional[int] = None
+    classes: Optional[int] = None
+    weekly_hours: float
+    delta_credits: Optional[float] = None
+    delta_hours: Optional[float] = None
+    delta_students: Optional[float] = None
+    projected: bool = False
+    source_reason: Optional[str] = None
+
+class WorkloadTimeline(BaseModel):
+    items: List[WorkloadTimelineItem]
+
+class WorkloadStudentRow(BaseModel):
+    enrollment_record_id: str
+    student_id: str
+    enrollment_no: int
+    semester_no: int
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    first_name: str
+    last_name: str
+    credits: Optional[int] = None
+    weekly_hours: Optional[float] = None
+    classes_conducted: Optional[int] = None
+    workload_status: str
+
+class WorkloadStudentsResponse(BaseModel):
+    faculty_id: str
+    applied: WorkloadAppliedFilters
+    rows: List[WorkloadStudentRow]
+    pagination: FacultyPagination
+
+class WorkloadHighlight(BaseModel):
+    id: str
+    severity: str
+    message: str
+    subject_id: Optional[str] = None
+    subject_code: Optional[str] = None
+    term_label: Optional[str] = None
+
+class WorkloadHighlightsResponse(BaseModel):
+    items: List[WorkloadHighlight]
