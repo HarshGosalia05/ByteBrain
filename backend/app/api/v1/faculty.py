@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 import asyncpg
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from app.api.dependencies import get_db_pool, require_faculty_role
 from app.services.faculty_service import FacultyService
+from app.services.settings_service import SettingsService, PreferenceValidationError
 from app.schemas.faculty import (
     FacultyProfile,
     FacultyProfileUpdate,
@@ -44,6 +45,13 @@ from app.schemas.faculty import (
     WorkloadStudentsResponse,
     WorkloadHighlightsResponse,
 )
+from app.schemas.settings import (
+    SettingsResponse,
+    SettingsUpdateResponse,
+    SettingsResetRequest,
+    SettingsBackupResponse,
+    SettingsImportRequest,
+)
 
 router = APIRouter()
 
@@ -55,6 +63,23 @@ def _faculty_id_or_error(user: dict) -> str:
     if not faculty_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No faculty_id found in user token")
     return faculty_id
+
+async def _settings_user_id_or_error(user: dict, service: SettingsService) -> str:
+    """Resolve the `users.user_id` owning this session's preferences.
+
+    The token normally carries `user_id` (session JSON). A fallback resolves it
+    from `faculty_id` so the row scope is always the current user's own row.
+    """
+    user_id = user.get("user_id")
+    if user_id:
+        return user_id
+    faculty_id = user.get("faculty_id")
+    if not faculty_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No user identity found in token")
+    user_id = await service.repo.resolve_user_id(faculty_id)
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No linked user account found")
+    return user_id
 
 @router.get("/profile", response_model=FacultyProfile)
 async def get_my_profile(
@@ -70,6 +95,107 @@ async def update_my_profile(
     service: FacultyService = Depends(get_faculty_service)
 ):
     return await service.update_profile(_faculty_id_or_error(user), update)
+
+@router.get("/settings", response_model=SettingsResponse)
+async def get_my_settings(
+    user: dict = Depends(require_faculty_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    service = SettingsService(pool)
+    user_id = await _settings_user_id_or_error(user, service)
+    document = await service.get_document(user_id)
+    return {
+        "namespaces": document["namespaces"],
+        "metadata": document["versions"],
+        "activity": document["activity"],
+    }
+
+@router.patch("/settings/{namespace}", response_model=SettingsUpdateResponse)
+async def update_my_settings(
+    namespace: str,
+    patch: Dict[str, Any] = Body(...),
+    user: dict = Depends(require_faculty_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    service = SettingsService(pool)
+    user_id = await _settings_user_id_or_error(user, service)
+    try:
+        document, highlights = await service.update_namespace(user_id, namespace, patch)
+    except PreferenceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return {
+        "namespaces": document["namespaces"],
+        "metadata": document["versions"],
+        "activity": document["activity"],
+        "highlights": highlights,
+    }
+
+@router.post("/settings/reset", response_model=SettingsUpdateResponse)
+async def reset_my_settings(
+    request: SettingsResetRequest,
+    user: dict = Depends(require_faculty_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    service = SettingsService(pool)
+    user_id = await _settings_user_id_or_error(user, service)
+    try:
+        document, highlights = await service.reset_namespace(
+            user_id, request.level, request.include_profile_extra
+        )
+    except PreferenceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return {
+        "namespaces": document["namespaces"],
+        "metadata": document["versions"],
+        "activity": document["activity"],
+        "highlights": highlights,
+    }
+
+@router.get("/settings/workspace/backup", response_model=SettingsBackupResponse)
+async def backup_my_settings(
+    user: dict = Depends(require_faculty_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    service = SettingsService(pool)
+    user_id = await _settings_user_id_or_error(user, service)
+    return await service.backup_workspace(user_id)
+
+@router.post("/settings/workspace/import", response_model=SettingsUpdateResponse)
+async def import_my_settings(
+    request: SettingsImportRequest,
+    user: dict = Depends(require_faculty_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    service = SettingsService(pool)
+    user_id = await _settings_user_id_or_error(user, service)
+    try:
+        document, highlights = await service.import_workspace(user_id, request.payload)
+    except PreferenceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return {
+        "namespaces": document["namespaces"],
+        "metadata": document["versions"],
+        "activity": document["activity"],
+        "highlights": highlights,
+    }
+
+@router.post("/settings/workspace/restore", response_model=SettingsUpdateResponse)
+async def restore_my_settings(
+    user: dict = Depends(require_faculty_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    service = SettingsService(pool)
+    user_id = await _settings_user_id_or_error(user, service)
+    try:
+        document, highlights = await service.restore_workspace(user_id)
+    except PreferenceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return {
+        "namespaces": document["namespaces"],
+        "metadata": document["versions"],
+        "activity": document["activity"],
+        "highlights": highlights,
+    }
 
 @router.get("/dashboard/summary", response_model=FacultyDashboardSummary)
 async def get_my_dashboard_summary(

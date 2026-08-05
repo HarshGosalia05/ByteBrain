@@ -352,6 +352,7 @@ export type BffErrorCode =
   | "not_found"
   | "empty"
   | "server_error"
+  | "invalid"
 
 export type BffError = {
   status: number
@@ -365,7 +366,10 @@ export type BffResult<T> =
 
 type CacheEntry = { value: unknown; expiresAt: number }
 
-const bffCache = new Map<string, CacheEntry>()
+const globalBffCache = globalThis as typeof globalThis & {
+  bffCache?: Map<string, CacheEntry>
+}
+const bffCache = globalBffCache.bffCache ?? (globalBffCache.bffCache = new Map<string, CacheEntry>())
 
 function cached<T>(
   key: string,
@@ -2113,4 +2117,204 @@ export async function updateFacultyContact(
       },
     }
   }
+}
+
+export type SettingsActivityEntry = {
+  event: string
+  at: string
+  namespace?: string | null
+  detail?: string | null
+}
+
+export type PreferenceMetadata = {
+  schema_version: number
+  preference_version: number
+  configuration_version: number
+  last_modified?: string | null
+  last_synced?: string | null
+  restore_point?: Record<string, unknown> | null
+}
+
+export type FacultySettingsNamespaces = {
+  workspace: Record<string, unknown>
+  dashboard: Record<string, unknown>
+  analytics: Record<string, unknown>
+  notifications: Record<string, unknown>
+  export: Record<string, unknown>
+  accessibility: Record<string, unknown>
+  personalization: Record<string, unknown>
+  security: Record<string, unknown>
+  profile_extra: Record<string, unknown>
+}
+
+export type FacultySettingsResponse = {
+  namespaces: FacultySettingsNamespaces
+  metadata: PreferenceMetadata
+  activity: SettingsActivityEntry[]
+}
+
+export type FacultySettingsUpdateResponse = FacultySettingsResponse & {
+  highlights: string[]
+}
+
+export function getFacultySettings(): Promise<BffResult<FacultySettingsResponse>> {
+  return callFastapi<FacultySettingsResponse>("settings", BFF_TTL_MS)
+}
+
+export async function updateFacultySettings(
+  namespace: string,
+  patch: Record<string, unknown>,
+): Promise<BffResult<FacultySettingsUpdateResponse>> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "Faculty" || !user.faculty_id) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to update your settings.",
+      },
+    }
+  }
+
+  try {
+    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const res = await fetch(`${FASTAPI_URL}/api/v1/faculty/settings/${namespace}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(patch),
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      if (res.status === 400) {
+        const body = await res.json().catch(() => null)
+        return {
+          ok: false,
+          error: {
+            status: 400,
+            code: "invalid",
+            message:
+              typeof body?.detail === "string" ? body.detail : "That preference is not valid.",
+          },
+        }
+      }
+      return { ok: false, error: toBffError(res.status) }
+    }
+    const data = (await res.json()) as FacultySettingsUpdateResponse
+    bffCache.delete(`${user.faculty_id}:settings`)
+    return { ok: true, data, fetchedAt: new Date().toISOString() }
+  } catch {
+    return {
+      ok: false,
+      error: {
+        status: 503,
+        code: "unavailable",
+        message: "The academic service is temporarily unavailable. Please try again later.",
+      },
+    }
+  }
+}
+
+export type SettingsResetLevel =
+  | "dashboard"
+  | "analytics"
+  | "notifications"
+  | "accessibility"
+  | "workspace"
+  | "factory"
+
+export type FacultySettingsBackup = {
+  schema_version: number
+  preference_version: number
+  configuration_version: number
+  exported_at: string
+  namespaces: Record<string, unknown>
+}
+
+async function postFacultySettingsAction<T>(
+  path: string,
+  body: Record<string, unknown> | null,
+): Promise<BffResult<T>> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "Faculty" || !user.faculty_id) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to update your settings.",
+      },
+    }
+  }
+
+  try {
+    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const res = await fetch(`${FASTAPI_URL}/api/v1/faculty/${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      if (res.status === 400) {
+        const errorBody = await res.json().catch(() => null)
+        return {
+          ok: false,
+          error: {
+            status: 400,
+            code: "invalid",
+            message:
+              typeof errorBody?.detail === "string"
+                ? errorBody.detail
+                : "That action could not be completed.",
+          },
+        }
+      }
+      return { ok: false, error: toBffError(res.status) }
+    }
+    const data = (await res.json()) as T
+    bffCache.delete(`${user.faculty_id}:settings`)
+    return { ok: true, data, fetchedAt: new Date().toISOString() }
+  } catch {
+    return {
+      ok: false,
+      error: {
+        status: 503,
+        code: "unavailable",
+        message: "The academic service is temporarily unavailable. Please try again later.",
+      },
+    }
+  }
+}
+
+export function getFacultySettingsBackup(): Promise<BffResult<FacultySettingsBackup>> {
+  return callFastapi<FacultySettingsBackup>("settings/workspace/backup", BFF_TTL_MS)
+}
+
+export function resetFacultySettings(
+  level: SettingsResetLevel,
+  includeProfileExtra = false,
+): Promise<BffResult<FacultySettingsUpdateResponse>> {
+  return postFacultySettingsAction<FacultySettingsUpdateResponse>("settings/reset", {
+    level,
+    include_profile_extra: includeProfileExtra,
+  })
+}
+
+export function importFacultySettings(
+  payload: Record<string, unknown>,
+): Promise<BffResult<FacultySettingsUpdateResponse>> {
+  return postFacultySettingsAction<FacultySettingsUpdateResponse>("settings/workspace/import", {
+    payload,
+  })
+}
+
+export function restoreFacultySettings(): Promise<BffResult<FacultySettingsUpdateResponse>> {
+  return postFacultySettingsAction<FacultySettingsUpdateResponse>("settings/workspace/restore", null)
 }

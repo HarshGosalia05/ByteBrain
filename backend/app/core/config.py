@@ -51,6 +51,30 @@ class Settings(BaseSettings):
     FACULTY_MENTEE_BACKLOG_THRESHOLD: int = 2
     FACULTY_MENTEE_SGPA_THRESHOLD: float = 6.0
 
+    # Shared Preference Engine (Faculty Settings module, plan 13)
+    PREFERENCES_SCHEMA_VERSION: int = 1
+    PREFERENCES_ACTIVITY_LIMIT: int = 50
+    PREFERENCES_AUDIT_LIMIT: int = 100
+    PREFERENCES_RECENT_ANALYTICS_LIMIT: int = 10
+    PREFERENCES_RECENT_PAGES_LIMIT: int = 10
+    PREFERENCES_RECENT_SEARCHES_LIMIT: int = 10
+
+    # Admin-defined bounds for analytics threshold overrides (enforced on write by the engine)
+    SETTINGS_ATTENDANCE_THRESHOLD_BOUNDS: List[float] = [50.0, 95.0]
+    SETTINGS_PERFORMANCE_THRESHOLD_BOUNDS: List[float] = [40.0, 90.0]
+    SETTINGS_WORKLOAD_CAPACITY_BOUNDS: List[float] = [12.0, 40.0]
+    SETTINGS_WORKLOAD_OVERLOAD_BOUNDS: List[float] = [0.80, 0.95]
+    SETTINGS_WORKLOAD_UNDERUTILIZED_BOUNDS: List[float] = [0.25, 0.50]
+
+    # Readiness score weights (plan 13 §19.1, deterministic)
+    SETTINGS_READINESS_PROFILE_WEIGHT: float = 0.25
+    SETTINGS_READINESS_DASHBOARD_WEIGHT: float = 0.20
+    SETTINGS_READINESS_NOTIFICATIONS_WEIGHT: float = 0.15
+    SETTINGS_READINESS_ACCESSIBILITY_WEIGHT: float = 0.10
+    SETTINGS_READINESS_SECURITY_WEIGHT: float = 0.10
+    SETTINGS_READINESS_EXPORT_WEIGHT: float = 0.10
+    SETTINGS_READINESS_PERSONALIZATION_WEIGHT: float = 0.10
+
     model_config = SettingsConfigDict(env_file="../.env.local", env_file_encoding="utf-8", extra="ignore")
 
     @property
