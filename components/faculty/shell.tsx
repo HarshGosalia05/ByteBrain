@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import * as React from "react"
 import Link from "next/link"
@@ -52,7 +52,7 @@ export function FacultyShell({
     <div className="flex min-h-svh">
       <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-svh lg:w-64 lg:shrink-0 lg:flex-col lg:gap-6 lg:border-r lg:border-sidebar-border lg:bg-sidebar lg:px-4 lg:py-6 print:hidden">
         <Brand />
-        <SideNav profile={profile} />
+        <SideNav />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -86,7 +86,7 @@ export function FacultyShell({
                 <X className="size-4" />
               </Button>
             </div>
-            <SideNav profile={profile} />
+            <SideNav />
           </div>
         </div>
       )}

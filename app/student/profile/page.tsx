@@ -68,7 +68,7 @@ export default async function ProfilePage() {
   const fullName = `${profile.first_name} ${profile.last_name}`.trim()
 
   return (
-    <div className="flex max-w-5xl flex-col gap-6">
+    <div className="mx-auto flex max-w-full flex-col gap-6 lg:max-w-[95%]">
       <PageHeader
         title="Profile"
         description="Your student profile, academic statistics and summary."

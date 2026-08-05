@@ -42,7 +42,7 @@ export default async function ProfilePage() {
     .pop()
 
   return (
-    <div className="flex max-w-5xl flex-col gap-6">
+    <div className="flex max-w-full flex-col gap-6 lg:max-w-[95%]">
       <PageHeader
         title="Profile"
         description="Your faculty identity, contact details and teaching overview."

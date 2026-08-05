@@ -8,16 +8,11 @@ import {
   CalendarCheck,
   GraduationCap,
   LayoutDashboard,
-  LogOut,
   Settings,
   User,
   type LucideIcon,
 } from "lucide-react"
 
-import { AvatarInitials } from "@/components/shared/data/avatar-initials"
-import { Button } from "@/components/ui/button"
-import { signOut } from "@/lib/auth-actions"
-import type { StudentProfile } from "@/lib/student-api"
 import { cn } from "@/lib/utils"
 
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
@@ -30,13 +25,8 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/student/settings", label: "Settings", icon: Settings },
 ]
 
-export function SideNav({ profile }: { profile: StudentProfile | null }) {
+export function SideNav() {
   const pathname = usePathname()
-
-  const firstName = profile?.first_name ?? ""
-  const lastName = profile?.last_name ?? ""
-  const fullName = `${firstName} ${lastName}`.trim() || "Student"
-  const department = profile?.department_name ?? "Student"
 
   return (
     <nav aria-label="Student navigation" className="flex min-h-0 flex-1 flex-col gap-6">
@@ -68,30 +58,6 @@ export function SideNav({ profile }: { profile: StudentProfile | null }) {
             </Link>
           )
         })}
-      </div>
-
-      <div className="mt-auto flex flex-col gap-2 border-t border-sidebar-border pt-4">
-        <Link
-          href="/student/profile"
-          className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors outline-none hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          <AvatarInitials firstName={firstName} lastName={lastName} />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium">{fullName}</span>
-            <span className="block truncate text-xs text-muted-foreground">{department}</span>
-          </span>
-        </Link>
-        <form action={signOut}>
-          <Button
-            variant="ghost"
-            size="sm"
-            type="submit"
-            className="w-full justify-start gap-2.5 text-muted-foreground hover:text-foreground"
-          >
-            <LogOut className="size-4" />
-            Log out
-          </Button>
-        </form>
       </div>
     </nav>
   )
