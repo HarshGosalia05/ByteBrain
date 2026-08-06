@@ -1,0 +1,93 @@
+{
+    "total_teaching_days": 41,
+    "day_counts": {
+        "Monday": 9,
+        "Tuesday": 8,
+        "Wednesday": 8,
+        "Thursday": 8,
+        "Friday": 8
+    },
+    "day_dates": {
+        "Monday": [
+            "2026-06-22",
+            "2026-06-29",
+            "2026-07-06",
+            "2026-07-13",
+            "2026-07-20",
+            "2026-07-27",
+            "2026-08-03",
+            "2026-08-10",
+            "2026-08-24"
+        ],
+        "Tuesday": [
+            "2026-06-23",
+            "2026-06-30",
+            "2026-07-07",
+            "2026-07-14",
+            "2026-07-21",
+            "2026-07-28",
+            "2026-08-04",
+            "2026-08-11"
+        ],
+        "Wednesday": [
+            "2026-06-24",
+            "2026-07-01",
+            "2026-07-08",
+            "2026-07-15",
+            "2026-07-22",
+            "2026-07-29",
+            "2026-08-05",
+            "2026-08-12"
+        ],
+        "Thursday": [
+            "2026-06-25",
+            "2026-07-02",
+            "2026-07-09",
+            "2026-07-16",
+            "2026-07-23",
+            "2026-07-30",
+            "2026-08-06",
+            "2026-08-13"
+        ],
+        "Friday": [
+            "2026-06-26",
+            "2026-07-03",
+            "2026-07-10",
+            "2026-07-17",
+            "2026-07-24",
+            "2026-07-31",
+            "2026-08-07",
+            "2026-08-14"
+        ]
+    },
+    "lectures_per_day": {
+        "Monday": 3,
+        "Tuesday": 3,
+        "Wednesday": 3,
+        "Thursday": 2,
+        "Friday": 2
+    },
+    "subject_lecture_counts": {
+        "SUB0050 (Software Engineering)": 25,
+        "SUB0051 (Human Computer Interaction)": 17,
+        "SUB0052 (Innovation, Start-up & Entrepreneurship)": 8,
+        "SUB0053 (Deep Learning)": 25,
+        "SUB0054 (Natural Language Processing)": 16,
+        "SUB0055 (Deep Learning Laboratory)": 8,
+        "SUB0056 (Natural Language Processing Laboratory)": 8
+    },
+    "total_lectures": 107,
+    "attendance_rows_per_subject": {
+        "SUB0050 (Software Engineering)": 1250,
+        "SUB0051 (Human Computer Interaction)": 850,
+        "SUB0052 (Innovation, Start-up & Entrepreneurship)": 400,
+        "SUB0053 (Deep Learning)": 1250,
+        "SUB0054 (Natural Language Processing)": 800,
+        "SUB0055 (Deep Learning Laboratory)": 400,
+        "SUB0056 (Natural Language Processing Laboratory)": 400
+    },
+    "total_attendance_rows": 5350,
+    "method1_total": 5350,
+    "method2_total": 5350,
+    "methods_match": true
+}
