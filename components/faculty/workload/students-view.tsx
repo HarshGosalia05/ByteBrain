@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 
 import { exportWorkloadCsvAction } from "@/app/faculty/workload/actions"
-import { StudentDrawer } from "@/components/faculty/students/student-drawer"
+import { StudentProfileModal } from "@/components/faculty/students/student-profile-modal"
 import { EmptyState } from "@/components/shared/state/empty-state"
 import { ErrorState } from "@/components/shared/state/error-state"
 import { Button } from "@/components/ui/button"
@@ -486,7 +486,7 @@ export function StudentsView({
         </div>
       )}
 
-      <StudentDrawer studentId={selectedStudentId} onClose={() => setSelectedStudentId(null)} />
+      <StudentProfileModal studentId={selectedStudentId} onClose={() => setSelectedStudentId(null)} />
     </section>
   )
 }

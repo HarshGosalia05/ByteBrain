@@ -1,9 +1,9 @@
 "use server"
 
-import { getFacultyStudentOverview, type FacultyStudentOverview, type BffResult } from "@/lib/faculty-api"
+import { getFacultyStudentProfile, type FacultyStudentProfileView, type BffResult } from "@/lib/faculty-api"
 
-export async function fetchStudentOverviewAction(
+export async function fetchStudentProfileAction(
   studentId: string
-): Promise<BffResult<FacultyStudentOverview>> {
-  return getFacultyStudentOverview(studentId)
+): Promise<BffResult<FacultyStudentProfileView>> {
+  return getFacultyStudentProfile(studentId)
 }

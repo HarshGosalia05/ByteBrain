@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 
 import { exportPerformanceCsvAction } from "@/app/faculty/performance/actions"
-import { StudentDrawer } from "@/components/faculty/students/student-drawer"
+import { StudentProfileModal } from "@/components/faculty/students/student-profile-modal"
 import { GradeBadge } from "@/components/shared/data/grade-badge"
 import { EmptyState } from "@/components/shared/state/empty-state"
 import { ErrorState } from "@/components/shared/state/error-state"
@@ -418,7 +418,7 @@ export function StudentsView({
         </div>
       )}
 
-      <StudentDrawer
+      <StudentProfileModal
         studentId={selectedStudentId}
         onClose={() => setSelectedStudentId(null)}
       />

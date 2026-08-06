@@ -220,6 +220,107 @@ class FacultyStudentOverview(BaseModel):
     semester_summaries: List[FacultySemesterSummaryItem]
     subject_performance: List[FacultyStudentSubjectItem]
 
+class FacultyStudentProfileStudent(BaseModel):
+    student_id: str
+    enrollment_no: int
+    university_roll_no: Optional[str]
+    first_name: str
+    last_name: str
+    full_name: str
+    gender: Optional[str]
+    date_of_birth: Optional[date]
+    category: Optional[str]
+    admission_year: Optional[int]
+    admission_date: Optional[date]
+    admission_type: Optional[str]
+    admission_quota: Optional[str]
+    department_name: Optional[str]
+    current_semester: Optional[int]
+    current_academic_year: Optional[str]
+    city: Optional[str]
+    email: Optional[str]
+    student_phone_number: Optional[int]
+    guardian_name: Optional[str]
+    guardian_phone: Optional[int]
+    student_status: Optional[str]
+    latest_sgpa: Optional[float]
+    overall_cgpa: Optional[float]
+    overall_percentage: Optional[float]
+    overall_attendance_percentage: Optional[float]
+    total_credits_registered: Optional[int]
+    total_credits_earned: Optional[int]
+    total_backlogs: Optional[int]
+    academic_standing: Optional[str]
+
+class FacultyStudentProfileMentor(BaseModel):
+    faculty_name: Optional[str]
+    designation: Optional[str]
+    mentor_role: Optional[str]
+    mentor_since: Optional[date]
+
+class FacultyStudentProfileSemester(BaseModel):
+    semester_no: int
+    academic_year: Optional[str]
+    subjects_registered: Optional[int]
+    credits_registered: Optional[int]
+    credits_earned: Optional[int]
+    semester_percentage: Optional[float]
+    semester_sgpa: Optional[float]
+    semester_grade: Optional[str]
+    semester_attendance_percentage: Optional[float]
+    backlog_count: Optional[int]
+    semester_result: Optional[str]
+    academic_standing: Optional[str]
+
+class FacultyStudentProfileSubject(BaseModel):
+    semester_no: int
+    academic_year: Optional[str]
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    credits: Optional[int]
+    subject_type: Optional[str]
+    faculty_id: Optional[str]
+    faculty_name: Optional[str]
+    internal_marks: Optional[float]
+    mid_sem_marks: Optional[float]
+    external_marks: Optional[float]
+    total_marks: Optional[float]
+    percentage: Optional[float]
+    grade: Optional[str]
+    grade_point: Optional[int]
+    result_status: Optional[str]
+    attempt_number: Optional[int]
+    total_classes: Optional[int]
+    attended_classes: Optional[int]
+    attendance_percentage: Optional[float]
+    attendance_status: Optional[str]
+    eligibility_status: Optional[str]
+    shortage_flag: Optional[str]
+
+class FacultyStudentProfileCareer(BaseModel):
+    preferred_domain: Optional[str]
+    dream_job_role: Optional[str]
+    preferred_industry: Optional[str]
+    preferred_work_mode: Optional[str]
+    target_package_lpa: Optional[float]
+    higher_studies_interest: Optional[str]
+    entrepreneurship_interest: Optional[str]
+    certification_interest: Optional[str]
+    internship_completed: Optional[str]
+    placement_readiness_level: Optional[str]
+
+class FacultyStudentProfileView(BaseModel):
+    student: FacultyStudentProfileStudent
+    relationship: str
+    mentor: Optional[FacultyStudentProfileMentor]
+    rank: Optional[int]
+    rank_total: Optional[int]
+    message_count: int
+    semester_summaries: List[FacultyStudentProfileSemester]
+    subject_performance: List[FacultyStudentProfileSubject]
+    career: Optional[FacultyStudentProfileCareer]
+
 class FacultySubjectsSummary(BaseModel):
     total_subjects: int
     total_students: int

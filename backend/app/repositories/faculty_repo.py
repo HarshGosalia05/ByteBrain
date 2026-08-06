@@ -464,6 +464,112 @@ class FacultyRepository:
             "subject_performance": [dict(r) for r in subjects],
         }
 
+    async def get_student_profile_view(self, student_id: str) -> Optional[Dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            profile = await conn.fetchrow(
+                """
+                SELECT student_id, enrollment_no, university_roll_no, first_name, last_name,
+                    COALESCE(NULLIF(full_name, ''), first_name || ' ' || last_name) AS full_name,
+                    gender, date_of_birth, category, admission_year, admission_date,
+                    admission_type, admission_quota, department_name, current_semester,
+                    current_academic_year, city, email, student_phone_number,
+                    guardian_name, guardian_phone, student_status,
+                    latest_sgpa, overall_cgpa, overall_percentage, overall_attendance_percentage,
+                    total_credits_registered, total_credits_earned, total_backlogs, academic_standing
+                FROM students
+                WHERE student_id = $1
+                """,
+                student_id,
+            )
+            if not profile:
+                return None
+
+            mentor = await conn.fetchrow(
+                """
+                SELECT fsm.mentor_role, fsm.mentor_since,
+                    f.full_name AS faculty_name, f.designation
+                FROM faculty_student_map fsm
+                LEFT JOIN faculty f ON f.faculty_id = fsm.faculty_id
+                WHERE fsm.student_id = $1
+                ORDER BY fsm.mentor_since DESC NULLS LAST
+                LIMIT 1
+                """,
+                student_id,
+            )
+            rank_row = await conn.fetchrow(
+                """
+                SELECT rk, total FROM (
+                    SELECT student_id,
+                        RANK() OVER (
+                            PARTITION BY department_name
+                            ORDER BY overall_percentage DESC NULLS LAST
+                        ) AS rk,
+                        COUNT(*) OVER (PARTITION BY department_name) AS total
+                    FROM students
+                ) ranked
+                WHERE ranked.student_id = $1
+                """,
+                student_id,
+            )
+            career = await conn.fetchrow(
+                """
+                SELECT preferred_domain, dream_job_role, preferred_industry,
+                    preferred_work_mode, target_package_lpa, higher_studies_interest,
+                    entrepreneurship_interest, certification_interest,
+                    internship_completed, placement_readiness_level
+                FROM career_preferences
+                WHERE student_id = $1
+                ORDER BY survey_date DESC NULLS LAST
+                LIMIT 1
+                """,
+                student_id,
+            )
+            message_count = await conn.fetchval(
+                "SELECT count(*) FROM student_messages WHERE student_id = $1", student_id
+            )
+            summaries = await conn.fetch(
+                """
+                SELECT semester_no, academic_year, subjects_registered, credits_registered,
+                    credits_earned, semester_percentage, semester_sgpa, semester_grade,
+                    semester_attendance_percentage, backlog_count, semester_result,
+                    academic_standing
+                FROM student_semester_summary
+                WHERE student_id = $1
+                ORDER BY semester_no ASC
+                """,
+                student_id,
+            )
+            subjects = await conn.fetch(
+                """
+                SELECT sse.semester_no, sse.academic_year, sse.subject_id, subj.subject_code,
+                    subj.subject_name, sse.credits, sse.subject_type, sse.faculty_id,
+                    f.full_name AS faculty_name,
+                    sp.internal_marks, sp.mid_sem_marks, sp.end_sem_marks AS external_marks,
+                    sp.total_marks, sp.percentage, sp.grade, sp.grade_point, sp.result_status,
+                    sp.attempt_number,
+                    a.total_classes, a.attended_classes, a.attendance_percentage,
+                    a.attendance_status, a.eligibility_status, a.shortage_flag
+                FROM student_subject_enrollment sse
+                JOIN subjects subj ON subj.subject_id = sse.subject_id
+                LEFT JOIN faculty f ON f.faculty_id = sse.faculty_id
+                LEFT JOIN student_subject_performance sp ON sp.enrollment_record_id = sse.enrollment_record_id
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                WHERE sse.student_id = $1
+                ORDER BY sse.semester_no ASC, subj.subject_name ASC
+                """,
+                student_id,
+            )
+        return {
+            "student": dict(profile),
+            "mentor": dict(mentor) if mentor else None,
+            "rank": int(rank_row["rk"]) if rank_row else None,
+            "rank_total": int(rank_row["total"]) if rank_row else None,
+            "message_count": int(message_count or 0),
+            "semester_summaries": [dict(r) for r in summaries],
+            "subject_performance": [dict(r) for r in subjects],
+            "career": dict(career) if career else None,
+        }
+
     async def get_subjects_summary(
         self,
         faculty_id: str,

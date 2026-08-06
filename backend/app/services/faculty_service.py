@@ -27,6 +27,12 @@ from app.schemas.faculty import (
     FacultySemesterSummaryItem,
     FacultyStudentSubjectItem,
     FacultyStudentOverview,
+    FacultyStudentProfileView,
+    FacultyStudentProfileStudent,
+    FacultyStudentProfileMentor,
+    FacultyStudentProfileSemester,
+    FacultyStudentProfileSubject,
+    FacultyStudentProfileCareer,
     FacultySubjectsSummary,
     FacultySubjectsFilters,
     FacultySubjectsAppliedFilters,
@@ -597,6 +603,144 @@ class FacultyService:
                 )
                 for item in data["subject_performance"]
             ],
+        )
+
+    async def get_student_profile_view(
+        self,
+        faculty_id: str,
+        student_id: str,
+    ) -> FacultyStudentProfileView:
+        await self._ensure_profile(faculty_id)
+        relationship = await self.repo.student_is_reachable(faculty_id, student_id)
+        if not relationship:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Student not found in your classes or mentees",
+            )
+        data = await self.repo.get_student_profile_view(student_id)
+        if not data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
+
+        student = data["student"]
+
+        def _opt_float(value: Any) -> Optional[float]:
+            return float(value) if value is not None else None
+
+        def _opt_int(value: Any) -> Optional[int]:
+            return int(value) if value is not None else None
+
+        mentor = data.get("mentor")
+        career = data.get("career")
+
+        return FacultyStudentProfileView(
+            student=FacultyStudentProfileStudent(
+                student_id=student["student_id"],
+                enrollment_no=int(student["enrollment_no"]),
+                university_roll_no=student.get("university_roll_no"),
+                first_name=student["first_name"],
+                last_name=student["last_name"],
+                full_name=student.get("full_name") or f"{student['first_name']} {student['last_name']}",
+                gender=student.get("gender"),
+                date_of_birth=student.get("date_of_birth"),
+                category=student.get("category"),
+                admission_year=_opt_int(student.get("admission_year")),
+                admission_date=student.get("admission_date"),
+                admission_type=student.get("admission_type"),
+                admission_quota=student.get("admission_quota"),
+                department_name=student.get("department_name"),
+                current_semester=_opt_int(student.get("current_semester")),
+                current_academic_year=student.get("current_academic_year"),
+                city=student.get("city"),
+                email=student.get("email"),
+                student_phone_number=_opt_int(student.get("student_phone_number")),
+                guardian_name=student.get("guardian_name"),
+                guardian_phone=_opt_int(student.get("guardian_phone")),
+                student_status=student.get("student_status"),
+                latest_sgpa=_opt_float(student.get("latest_sgpa")),
+                overall_cgpa=_opt_float(student.get("overall_cgpa")),
+                overall_percentage=_opt_float(student.get("overall_percentage")),
+                overall_attendance_percentage=_opt_float(student.get("overall_attendance_percentage")),
+                total_credits_registered=_opt_int(student.get("total_credits_registered")),
+                total_credits_earned=_opt_int(student.get("total_credits_earned")),
+                total_backlogs=_opt_int(student.get("total_backlogs")),
+                academic_standing=student.get("academic_standing"),
+            ),
+            relationship=relationship,
+            mentor=(
+                FacultyStudentProfileMentor(
+                    faculty_name=mentor.get("faculty_name"),
+                    designation=mentor.get("designation"),
+                    mentor_role=mentor.get("mentor_role"),
+                    mentor_since=mentor.get("mentor_since"),
+                )
+                if mentor
+                else None
+            ),
+            rank=data.get("rank"),
+            rank_total=data.get("rank_total"),
+            message_count=data.get("message_count") or 0,
+            semester_summaries=[
+                FacultyStudentProfileSemester(
+                    semester_no=int(item["semester_no"]),
+                    academic_year=item.get("academic_year"),
+                    subjects_registered=_opt_int(item.get("subjects_registered")),
+                    credits_registered=_opt_int(item.get("credits_registered")),
+                    credits_earned=_opt_int(item.get("credits_earned")),
+                    semester_percentage=_opt_float(item.get("semester_percentage")),
+                    semester_sgpa=_opt_float(item.get("semester_sgpa")),
+                    semester_grade=item.get("semester_grade"),
+                    semester_attendance_percentage=_opt_float(item.get("semester_attendance_percentage")),
+                    backlog_count=_opt_int(item.get("backlog_count")),
+                    semester_result=item.get("semester_result"),
+                    academic_standing=item.get("academic_standing"),
+                )
+                for item in data["semester_summaries"]
+            ],
+            subject_performance=[
+                FacultyStudentProfileSubject(
+                    semester_no=int(item["semester_no"]),
+                    academic_year=item.get("academic_year"),
+                    subject_id=item["subject_id"],
+                    subject_code=item["subject_code"],
+                    subject_name=item["subject_name"],
+                    credits=_opt_int(item.get("credits")),
+                    subject_type=item.get("subject_type"),
+                    faculty_id=item.get("faculty_id"),
+                    faculty_name=item.get("faculty_name"),
+                    internal_marks=_opt_float(item.get("internal_marks")),
+                    mid_sem_marks=_opt_float(item.get("mid_sem_marks")),
+                    external_marks=_opt_float(item.get("external_marks")),
+                    total_marks=_opt_float(item.get("total_marks")),
+                    percentage=_opt_float(item.get("percentage")),
+                    grade=item.get("grade"),
+                    grade_point=_opt_int(item.get("grade_point")),
+                    result_status=item.get("result_status"),
+                    attempt_number=_opt_int(item.get("attempt_number")),
+                    total_classes=_opt_int(item.get("total_classes")),
+                    attended_classes=_opt_int(item.get("attended_classes")),
+                    attendance_percentage=_opt_float(item.get("attendance_percentage")),
+                    attendance_status=item.get("attendance_status"),
+                    eligibility_status=item.get("eligibility_status"),
+                    shortage_flag=item.get("shortage_flag"),
+                )
+                for item in data["subject_performance"]
+            ],
+            career=(
+                FacultyStudentProfileCareer(
+                    preferred_domain=career.get("preferred_domain"),
+                    dream_job_role=career.get("dream_job_role"),
+                    preferred_industry=career.get("preferred_industry"),
+                    preferred_work_mode=career.get("preferred_work_mode"),
+                    target_package_lpa=_opt_float(career.get("target_package_lpa")),
+                    higher_studies_interest=career.get("higher_studies_interest"),
+                    entrepreneurship_interest=career.get("entrepreneurship_interest"),
+                    certification_interest=career.get("certification_interest"),
+                    internship_completed=career.get("internship_completed"),
+                    placement_readiness_level=career.get("placement_readiness_level"),
+                )
+                if career
+                else None
+            ),
         )
 
     async def get_subjects(

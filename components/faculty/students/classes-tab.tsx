@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { StatCard } from "@/components/shared/data/stat-card"
 import { BookOpen, Users, Calendar, Hash, FilterX, Filter, Search } from "lucide-react"
 import type { FacultyClassesResponse } from "@/lib/faculty-api"
-import { StudentDrawer } from "./student-drawer"
+import { StudentProfileModal } from "./student-profile-modal"
 import {
   Table,
   TableBody,
@@ -312,7 +312,7 @@ export function ClassesTab({ data }: { data: FacultyClassesResponse }) {
         </div>
       )}
 
-      <StudentDrawer 
+      <StudentProfileModal 
         studentId={selectedStudentId} 
         onClose={() => setSelectedStudentId(null)} 
       />

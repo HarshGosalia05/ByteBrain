@@ -211,39 +211,111 @@ export type FacultyMenteesResponse = {
   pagination: FacultyPagination
 }
 
-export type FacultySemesterSummaryItem = {
-  semester_no: number
-  semester_sgpa: number | null
-  semester_attendance_percentage: number | null
-  backlog_count: number | null
-  academic_standing: string | null
-}
-
-export type FacultyStudentSubjectItem = {
-  semester_no: number
-  subject_code: string
-  subject_name: string
-  internal_marks: number | null
-  external_marks: number | null
-  total_marks: number | null
-  grade: string | null
-  attendance_percentage: number | null
-}
-
-export type FacultyStudentOverview = {
+export type FacultyStudentProfileStudent = {
   student_id: string
   enrollment_no: number
+  university_roll_no: string | null
   first_name: string
   last_name: string
-  email: string | null
+  full_name: string
+  gender: string | null
+  date_of_birth: string | null
+  category: string | null
+  admission_year: number | null
+  admission_date: string | null
+  admission_type: string | null
+  admission_quota: string | null
+  department_name: string | null
   current_semester: number | null
+  current_academic_year: string | null
+  city: string | null
+  email: string | null
+  student_phone_number: number | null
+  guardian_name: string | null
+  guardian_phone: number | null
+  student_status: string | null
   latest_sgpa: number | null
+  overall_cgpa: number | null
+  overall_percentage: number | null
   overall_attendance_percentage: number | null
+  total_credits_registered: number | null
+  total_credits_earned: number | null
   total_backlogs: number | null
   academic_standing: string | null
+}
+
+export type FacultyStudentProfileMentor = {
+  faculty_name: string | null
+  designation: string | null
+  mentor_role: string | null
+  mentor_since: string | null
+}
+
+export type FacultyStudentProfileSemester = {
+  semester_no: number
+  academic_year: string | null
+  subjects_registered: number | null
+  credits_registered: number | null
+  credits_earned: number | null
+  semester_percentage: number | null
+  semester_sgpa: number | null
+  semester_grade: string | null
+  semester_attendance_percentage: number | null
+  backlog_count: number | null
+  semester_result: string | null
+  academic_standing: string | null
+}
+
+export type FacultyStudentProfileSubject = {
+  semester_no: number
+  academic_year: string | null
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  credits: number | null
+  subject_type: string | null
+  faculty_id: string | null
+  faculty_name: string | null
+  internal_marks: number | null
+  mid_sem_marks: number | null
+  external_marks: number | null
+  total_marks: number | null
+  percentage: number | null
+  grade: string | null
+  grade_point: number | null
+  result_status: string | null
+  attempt_number: number | null
+  total_classes: number | null
+  attended_classes: number | null
+  attendance_percentage: number | null
+  attendance_status: string | null
+  eligibility_status: string | null
+  shortage_flag: string | null
+}
+
+export type FacultyStudentProfileCareer = {
+  preferred_domain: string | null
+  dream_job_role: string | null
+  preferred_industry: string | null
+  preferred_work_mode: string | null
+  target_package_lpa: number | null
+  higher_studies_interest: string | null
+  entrepreneurship_interest: string | null
+  certification_interest: string | null
+  internship_completed: string | null
+  placement_readiness_level: string | null
+}
+
+export type FacultyStudentProfileView = {
+  student: FacultyStudentProfileStudent
   relationship: string
-  semester_summaries: FacultySemesterSummaryItem[]
-  subject_performance: FacultyStudentSubjectItem[]
+  mentor: FacultyStudentProfileMentor | null
+  rank: number | null
+  rank_total: number | null
+  message_count: number
+  semester_summaries: FacultyStudentProfileSemester[]
+  subject_performance: FacultyStudentProfileSubject[]
+  career: FacultyStudentProfileCareer | null
 }
 
 export type FacultySubjectsSummary = {
@@ -581,10 +653,10 @@ export function getFacultyMentees(params?: {
   return callFastapi<FacultyMenteesResponse>(path, BFF_TTL_MS)
 }
 
-export function getFacultyStudentOverview(
+export function getFacultyStudentProfile(
   studentId: string
-): Promise<BffResult<FacultyStudentOverview>> {
-  return callFastapi<FacultyStudentOverview>(`students/${studentId}/overview`, BFF_TTL_MS)
+): Promise<BffResult<FacultyStudentProfileView>> {
+  return callFastapi<FacultyStudentProfileView>(`students/${studentId}/profile`, BFF_TTL_MS)
 }
 
 export function getFacultySubjects(params?: {

@@ -12,6 +12,7 @@ from app.schemas.faculty import (
     FacultyClassesResponse,
     FacultyMenteesResponse,
     FacultyStudentOverview,
+    FacultyStudentProfileView,
     FacultySubjectsResponse,
     FacultySubjectDetail,
     FacultySubjectHistory,
@@ -255,6 +256,14 @@ async def get_student_overview(
     service: FacultyService = Depends(get_faculty_service)
 ):
     return await service.get_student_overview(_faculty_id_or_error(user), student_id)
+
+@router.get("/students/{student_id}/profile", response_model=FacultyStudentProfileView)
+async def get_student_profile(
+    student_id: str,
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_student_profile_view(_faculty_id_or_error(user), student_id)
 
 @router.get("/subjects", response_model=FacultySubjectsResponse)
 async def get_my_subjects(

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { StatCard } from "@/components/shared/data/stat-card"
 import { Users, AlertCircle, CheckCircle, Percent, GraduationCap, Filter, FilterX, Search } from "lucide-react"
 import type { FacultyMenteesResponse } from "@/lib/faculty-api"
-import { StudentDrawer } from "./student-drawer"
+import { StudentProfileModal } from "./student-profile-modal"
 import {
   Table,
   TableBody,
@@ -265,7 +265,7 @@ export function MenteesTab({ data }: { data: FacultyMenteesResponse }) {
         </div>
       )}
 
-      <StudentDrawer
+      <StudentProfileModal
         studentId={selectedStudentId}
         onClose={() => setSelectedStudentId(null)}
       />
