@@ -1,0 +1,64 @@
+{
+    "column_count": 14,
+    "primary_key": {
+        "attname": "timetable_id",
+        "data_type": "bigint"
+    },
+    "foreign_keys": [
+        {
+            "column_name": "department_code",
+            "foreign_table_name": "departments",
+            "foreign_column_name": "dept_code"
+        },
+        {
+            "column_name": "faculty_id",
+            "foreign_table_name": "faculty",
+            "foreign_column_name": "faculty_id"
+        },
+        {
+            "column_name": "subject_id",
+            "foreign_table_name": "subjects",
+            "foreign_column_name": "subject_id"
+        }
+    ],
+    "unique_constraints": [
+        {
+            "constraint_name": "unique_timetable_slot",
+            "column_name": "department_code"
+        },
+        {
+            "constraint_name": "unique_timetable_slot",
+            "column_name": "semester_no"
+        },
+        {
+            "constraint_name": "unique_timetable_slot",
+            "column_name": "academic_year"
+        },
+        {
+            "constraint_name": "unique_timetable_slot",
+            "column_name": "day_name"
+        },
+        {
+            "constraint_name": "unique_timetable_slot",
+            "column_name": "slot_no"
+        }
+    ],
+    "row_count": 15,
+    "null_checks": {
+        "d_null": 0,
+        "c_null": 0,
+        "u_null": 0,
+        "s_null": 0,
+        "f_null": 0
+    },
+    "orphans": {
+        "subject": 0,
+        "faculty": 0,
+        "department": 0
+    },
+    "duplicate_slots": 0,
+    "sequence": {
+        "max_id": 15,
+        "next_val": 17
+    }
+}
