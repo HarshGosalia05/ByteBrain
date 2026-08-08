@@ -1,5 +1,13 @@
 import asyncpg
-from typing import List, Optional, Dict, Any
+import json
+from typing import List, Optional, Dict, Any, Callable
+
+class FacultyScopeError(Exception):
+    """Scope gate failure (subject/term/faculty mismatch or invalid lecture)."""
+
+class DuplicateLectureError(Exception):
+    """A daily_attendance set already exists for the requested lecture."""
+
 
 class FacultyRepository:
     def __init__(self, pool: asyncpg.Pool):
@@ -2436,3 +2444,970 @@ class FacultyRepository:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, *params)
             return [dict(row) for row in rows]
+
+    # =========================================================================
+    # Marks Entry (plan 14)
+    # =========================================================================
+
+    def _jsonb(self, value: Any) -> Optional[str]:
+        """Encode a scalar as a jsonb-typed parameter (None -> SQL NULL)."""
+        if value is None:
+            return None
+        return json.dumps(value)
+
+    async def get_subject_marks_grid(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        semester_no: int,
+        academic_year: str,
+        order_by: str,
+        limit: int,
+        offset: int,
+    ) -> Optional[Dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            scope = await conn.fetchval(
+                """
+                SELECT 1 FROM student_subject_enrollment
+                WHERE faculty_id = $1 AND subject_id = $2 AND semester_no = $3
+                    AND academic_year = $4 AND enrollment_status = 'Active'
+                LIMIT 1
+                """,
+                faculty_id, subject_id, semester_no, academic_year,
+            )
+            if not scope:
+                return None
+
+            meta = await conn.fetchrow(
+                """
+                SELECT subject_id, subject_code, subject_name, credits, semester_no,
+                    assessment_type, department_name
+                FROM subjects
+                WHERE subject_id = $1
+                """,
+                subject_id,
+            )
+
+            total = await conn.fetchval(
+                """
+                SELECT count(*) FROM student_subject_enrollment
+                WHERE faculty_id = $1 AND subject_id = $2 AND semester_no = $3
+                    AND academic_year = $4 AND enrollment_status = 'Active'
+                """,
+                faculty_id, subject_id, semester_no, academic_year,
+            )
+
+            rows = await conn.fetch(
+                f"""
+                SELECT sse.enrollment_record_id, sse.student_id, sse.enrollment_no,
+                    st.first_name, st.last_name,
+                    sp.internal_marks, sp.mid_sem_marks, sp.end_sem_marks,
+                    sp.total_marks, sp.percentage, sp.grade, sp.grade_point,
+                    sp.result_status, sp.performance_category, sp.remarks
+                FROM student_subject_enrollment sse
+                JOIN students st ON st.student_id = sse.student_id
+                LEFT JOIN student_subject_performance sp
+                    ON sp.enrollment_record_id = sse.enrollment_record_id
+                WHERE sse.faculty_id = $1 AND sse.subject_id = $2
+                    AND sse.semester_no = $3 AND sse.academic_year = $4
+                    AND sse.enrollment_status = 'Active'
+                ORDER BY {order_by}
+                LIMIT ${5} OFFSET ${6}
+                """,
+                faculty_id, subject_id, semester_no, academic_year, limit, offset,
+            )
+
+        return {
+            "meta": dict(meta) if meta else None,
+            "total": int(total) if total else 0,
+            "rows": [dict(r) for r in rows],
+        }
+
+    async def upsert_subject_marks(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        semester_no: int,
+        academic_year: str,
+        entries: List[Dict[str, Any]],
+        changed_by: str,
+        derive_marks: Callable[[Optional[int], Optional[int], Optional[int]], Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        editable = ["internal_marks", "mid_sem_marks", "end_sem_marks", "remarks"]
+        results: List[Dict[str, Any]] = []
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                enrolled = await conn.fetch(
+                    """
+                    SELECT enrollment_record_id, student_id, enrollment_no
+                    FROM student_subject_enrollment
+                    WHERE faculty_id = $1 AND subject_id = $2 AND semester_no = $3
+                        AND academic_year = $4 AND enrollment_status = 'Active'
+                    """,
+                    faculty_id, subject_id, semester_no, academic_year,
+                )
+                enrolled_by_enr = {r["enrollment_record_id"]: r for r in enrolled}
+                enrolled_ids = [r["enrollment_record_id"] for r in enrolled]
+                if not enrolled_ids:
+                    raise FacultyScopeError("No authorized enrollment for this subject/term")
+
+                existing_rows = await conn.fetch(
+                    """
+                    SELECT * FROM student_subject_performance
+                    WHERE enrollment_record_id = ANY($1::text[])
+                    FOR UPDATE
+                    """,
+                    enrolled_ids,
+                )
+                existing_by_enr = {r["enrollment_record_id"]: r for r in existing_rows}
+
+                next_perf_id = await conn.fetchval(
+                    """
+                    SELECT max(substring(performance_id from 4)::bigint)
+                    FROM student_subject_performance
+                    """
+                )
+
+                for entry in entries:
+                    enr = entry["enrollment_record_id"]
+                    scope_row = enrolled_by_enr.get(enr)
+                    if scope_row is None:
+                        raise FacultyScopeError(
+                            f"enrollment {enr} is not in the authorized Active scope"
+                        )
+                    existing = existing_by_enr.get(enr)
+                    operation = "insert" if existing is None else "update"
+
+                    merged: Dict[str, Any] = {}
+                    changed: List[str] = []
+                    for field in editable:
+                        new_val = entry.get(field)
+                        old_val = existing[field] if existing is not None else None
+                        if new_val is None:
+                            merged[field] = old_val
+                        elif new_val == old_val:
+                            merged[field] = old_val
+                        else:
+                            merged[field] = new_val
+                            changed.append(field)
+
+                    if existing is not None and not changed:
+                        results.append({
+                            "enrollment_record_id": enr,
+                            "student_id": scope_row["student_id"],
+                            "operation": "unchanged",
+                            "fields_changed": [],
+                        })
+                        continue
+
+                    derived = derive_marks(
+                        merged["internal_marks"], merged["mid_sem_marks"], merged["end_sem_marks"]
+                    )
+
+                    if existing is None:
+                        next_perf_id = (next_perf_id or 0) + 1
+                        performance_id = f"PER{next_perf_id:06d}"
+                        await conn.execute(
+                            """
+                            INSERT INTO student_subject_performance (
+                                performance_id, enrollment_record_id, enrollment_no,
+                                student_id, subject_id, semester_no,
+                                internal_marks, mid_sem_marks, end_sem_marks,
+                                total_marks, percentage, grade, grade_point,
+                                result_status, attempt_number, performance_category,
+                                remarks, updated_at, updated_by
+                            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,1,$15,$16,now(),$17)
+                            """,
+                            performance_id, enr, scope_row["enrollment_no"],
+                            scope_row["student_id"], subject_id, semester_no,
+                            merged["internal_marks"], merged["mid_sem_marks"], merged["end_sem_marks"],
+                            derived["total_marks"], derived["percentage"], derived["grade"],
+                            derived["grade_point"], derived["result_status"],
+                            derived["performance_category"], merged["remarks"], changed_by,
+                        )
+                        for field in editable:
+                            new_val = merged[field]
+                            if new_val is None:
+                                continue
+                            await conn.execute(
+                                """
+                                INSERT INTO performance_change_log (
+                                    performance_id, enrollment_record_id, student_id, subject_id,
+                                    field_name, old_value, new_value, operation_type,
+                                    changed_by, changed_at
+                                ) VALUES ($1,$2,$3,$4,$5,NULL,$6,$7,$8,now())
+                                """,
+                                performance_id, enr, scope_row["student_id"], subject_id,
+                                field, self._jsonb(new_val), operation, changed_by,
+                            )
+                        results.append({
+                            "enrollment_record_id": enr,
+                            "student_id": scope_row["student_id"],
+                            "operation": "insert",
+                            "fields_changed": [f for f in editable if merged[f] is not None],
+                        })
+                        continue
+
+                    await conn.execute(
+                        """
+                        UPDATE student_subject_performance
+                        SET internal_marks = $1, mid_sem_marks = $2, end_sem_marks = $3,
+                            total_marks = $4, percentage = $5, grade = $6, grade_point = $7,
+                            result_status = $8, performance_category = $9, remarks = $10,
+                            updated_at = now(), updated_by = $11
+                        WHERE enrollment_record_id = $12
+                        """,
+                        merged["internal_marks"], merged["mid_sem_marks"], merged["end_sem_marks"],
+                        derived["total_marks"], derived["percentage"], derived["grade"],
+                        derived["grade_point"], derived["result_status"],
+                        derived["performance_category"], merged["remarks"], changed_by, enr,
+                    )
+                    for field in changed:
+                        await conn.execute(
+                            """
+                            INSERT INTO performance_change_log (
+                                performance_id, enrollment_record_id, student_id, subject_id,
+                                field_name, old_value, new_value, operation_type,
+                                changed_by, changed_at
+                            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
+                            """,
+                            existing["performance_id"], enr, scope_row["student_id"], subject_id,
+                            field, self._jsonb(existing[field]), self._jsonb(merged[field]),
+                            "update", changed_by,
+                        )
+                    results.append({
+                        "enrollment_record_id": enr,
+                        "student_id": scope_row["student_id"],
+                        "operation": "updated",
+                        "fields_changed": changed,
+                    })
+
+        summary = {
+            "saved": sum(1 for r in results if r["operation"] in ("insert", "updated")),
+            "inserted": sum(1 for r in results if r["operation"] == "insert"),
+            "updated": sum(1 for r in results if r["operation"] == "updated"),
+            "unchanged": sum(1 for r in results if r["operation"] == "unchanged"),
+            "rejected": 0,
+        }
+        return {"results": results, "summary": summary}
+
+    async def get_marks_change_log(
+        self,
+        subject_id: str,
+        page: int,
+        page_size: int,
+    ) -> Dict[str, Any]:
+        async with self.pool.acquire() as conn:
+            total = await conn.fetchval(
+                "SELECT count(*) FROM performance_change_log WHERE subject_id = $1",
+                subject_id,
+            )
+            rows = await conn.fetch(
+                """
+                SELECT cl.change_id, cl.performance_id, cl.enrollment_record_id,
+                    cl.student_id, cl.subject_id, cl.field_name, cl.old_value,
+                    cl.new_value, cl.operation_type, cl.changed_by, cl.changed_at,
+                    st.first_name, st.last_name
+                FROM performance_change_log cl
+                LEFT JOIN students st ON st.student_id = cl.student_id
+                WHERE cl.subject_id = $1
+                ORDER BY cl.changed_at DESC, cl.change_id DESC
+                LIMIT $2 OFFSET $3
+                """,
+                subject_id, page_size, (page - 1) * page_size,
+            )
+        return {
+            "total": int(total) if total else 0,
+            "items": [dict(r) for r in rows],
+        }
+
+    # =========================================================================
+    # Attendance Entry (plan 15)
+    # =========================================================================
+
+    async def get_attendance_meta(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        semester_no: int,
+        academic_year: str,
+    ) -> Optional[Dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            scope = await conn.fetchval(
+                """
+                SELECT 1 FROM student_subject_enrollment
+                WHERE faculty_id = $1 AND subject_id = $2 AND semester_no = $3
+                    AND academic_year = $4 AND enrollment_status = 'Active'
+                LIMIT 1
+                """,
+                faculty_id, subject_id, semester_no, academic_year,
+            )
+            if not scope:
+                return None
+
+            meta = await conn.fetchrow(
+                """
+                SELECT subject_id, subject_code, subject_name, semester_no,
+                    department_code, department_name
+                FROM subjects
+                WHERE subject_id = $1
+                """,
+                subject_id,
+            )
+
+            sessions = await conn.fetch(
+                """
+                SELECT day_name, slot_no, start_time, end_time, subject_id,
+                    subject_name, faculty_id, lecture_type
+                FROM weekly_timetable_07
+                WHERE semester_no = $1 AND subject_id = $2 AND faculty_id = $3
+                ORDER BY day_name, start_time
+                """,
+                semester_no, subject_id, faculty_id,
+            )
+            recorded_lectures = await conn.fetchval(
+                """
+                SELECT COALESCE(max(lecture_number), 0)
+                FROM daily_attendance_07 WHERE subject_id = $1
+                """,
+                subject_id,
+            )
+
+            students = await conn.fetch(
+                """
+                SELECT sse.enrollment_record_id, sse.student_id, sse.enrollment_no,
+                    st.first_name, st.last_name,
+                    a.attendance_percentage, a.attendance_status,
+                    a.eligibility_status, a.shortage_flag
+                FROM student_subject_enrollment sse
+                JOIN students st ON st.student_id = sse.student_id
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                WHERE sse.faculty_id = $1 AND sse.subject_id = $2
+                    AND sse.semester_no = $3 AND sse.academic_year = $4
+                    AND sse.enrollment_status = 'Active'
+                ORDER BY sse.enrollment_no ASC
+                """,
+                faculty_id, subject_id, semester_no, academic_year,
+            )
+
+        return {
+            "meta": dict(meta) if meta else None,
+            "sessions": [dict(r) for r in sessions],
+            "recorded_lectures": int(recorded_lectures or 0),
+            "students": [dict(r) for r in students],
+        }
+
+    async def get_lecture_attendance(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        semester_no: int,
+        academic_year: str,
+        lecture_date: Any,
+        slot_no: int,
+    ) -> Optional[Dict[str, Any]]:
+        day_name = lecture_date.strftime("%A")
+        async with self.pool.acquire() as conn:
+            scope = await conn.fetchval(
+                """
+                SELECT 1 FROM student_subject_enrollment
+                WHERE faculty_id = $1 AND subject_id = $2 AND semester_no = $3
+                    AND academic_year = $4 AND enrollment_status = 'Active'
+                LIMIT 1
+                """,
+                faculty_id, subject_id, semester_no, academic_year,
+            )
+            if not scope:
+                return None
+
+            timetable = await conn.fetchrow(
+                """
+                SELECT wt.day_name, wt.slot_no, wt.start_time, wt.end_time,
+                    wt.subject_id, wt.subject_name, wt.faculty_id, wt.lecture_type,
+                    wt.department_code, wt.semester_no, wt.academic_year, s.subject_code
+                FROM weekly_timetable_07 wt
+                JOIN subjects s ON s.subject_id = wt.subject_id
+                WHERE wt.semester_no = $1 AND wt.subject_id = $2 AND wt.faculty_id = $3
+                    AND wt.day_name = $4 AND wt.slot_no = $5
+                ORDER BY wt.academic_year DESC
+                LIMIT 1
+                """,
+                semester_no, subject_id, faculty_id, day_name, slot_no,
+            )
+            if not timetable:
+                raise FacultyScopeError("No timetable session matches the requested lecture")
+
+            lecture_number = await self._resolve_lecture_number(
+                conn, subject_id, lecture_date, day_name, slot_no, semester_no
+            )
+            recorded = lecture_number is not None
+            if not recorded:
+                lecture_number = await conn.fetchval(
+                    """
+                    SELECT COALESCE(max(lecture_number), 0) + 1
+                    FROM daily_attendance_07 WHERE subject_id = $1
+                    """,
+                    subject_id,
+                )
+
+            lecture_number = int(lecture_number or 1)
+            daily = {}
+            if recorded:
+                rows = await conn.fetch(
+                    """
+                    SELECT student_id, attendance_id, attendance_status
+                    FROM daily_attendance_07
+                    WHERE subject_id = $1 AND lecture_date = $2 AND lecture_number = $3
+                    """,
+                    subject_id, lecture_date, lecture_number,
+                )
+                daily = {r["student_id"]: r for r in rows}
+
+            students = await conn.fetch(
+                """
+                SELECT sse.enrollment_record_id, sse.student_id, sse.enrollment_no,
+                    st.first_name, st.last_name,
+                    a.attendance_percentage, a.attendance_status AS band,
+                    a.eligibility_status, a.shortage_flag
+                FROM student_subject_enrollment sse
+                JOIN students st ON st.student_id = sse.student_id
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                WHERE sse.faculty_id = $1 AND sse.subject_id = $2
+                    AND sse.semester_no = $3 AND sse.academic_year = $4
+                    AND sse.enrollment_status = 'Active'
+                ORDER BY sse.enrollment_no ASC
+                """,
+                faculty_id, subject_id, semester_no, academic_year,
+            )
+
+        return {
+            "timetable": dict(timetable),
+            "lecture_number": lecture_number,
+            "recorded": recorded,
+            "daily": daily,
+            "students": [dict(r) for r in students],
+        }
+
+    async def _resolve_lecture_number(
+        self,
+        conn: asyncpg.Connection,
+        subject_id: str,
+        lecture_date: Any,
+        day_name: str,
+        slot_no: int,
+        semester_no: int,
+    ) -> Optional[int]:
+        rows = await conn.fetch(
+            """
+            SELECT DISTINCT lecture_number
+            FROM daily_attendance_07
+            WHERE subject_id = $1 AND lecture_date = $2
+            ORDER BY lecture_number
+            """,
+            subject_id, lecture_date,
+        )
+        if not rows:
+            return None
+        numbers = [int(r["lecture_number"]) for r in rows]
+        if len(numbers) == 1:
+            return numbers[0]
+        slot_order = await conn.fetch(
+            """
+            SELECT slot_no FROM weekly_timetable_07
+            WHERE subject_id = $1 AND day_name = $2 AND semester_no = $3
+            ORDER BY start_time
+            """,
+            subject_id, day_name, semester_no,
+        )
+        slots = [int(s["slot_no"]) for s in slot_order]
+        idx = slots.index(slot_no) if slot_no in slots else 0
+        return numbers[idx] if idx < len(numbers) else numbers[0]
+
+    async def upsert_lecture_attendance(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        semester_no: int,
+        academic_year: str,
+        lecture_date: Any,
+        slot_no: int,
+        student_statuses: Dict[str, str],
+        allow_correction: bool,
+        changed_by: str,
+        aggregate_fields: Callable[[Optional[float]], Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        day_name = lecture_date.strftime("%A")
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                timetable = await conn.fetchrow(
+                    """
+                    SELECT wt.day_name, wt.slot_no, wt.start_time, wt.end_time,
+                        wt.subject_id, wt.subject_name, wt.faculty_id, wt.lecture_type,
+                        wt.department_code, wt.semester_no, wt.academic_year, s.subject_code
+                    FROM weekly_timetable_07 wt
+                    JOIN subjects s ON s.subject_id = wt.subject_id
+                    WHERE wt.semester_no = $1 AND wt.subject_id = $2 AND wt.faculty_id = $3
+                        AND wt.day_name = $4 AND wt.slot_no = $5
+                    ORDER BY wt.academic_year DESC
+                    LIMIT 1
+                    """,
+                    semester_no, subject_id, faculty_id, day_name, slot_no,
+                )
+                if not timetable:
+                    raise FacultyScopeError("No timetable session matches the requested lecture")
+
+                enrolled = await conn.fetch(
+                    """
+                    SELECT enrollment_record_id, student_id, enrollment_no
+                    FROM student_subject_enrollment
+                    WHERE faculty_id = $1 AND subject_id = $2 AND semester_no = $3
+                        AND academic_year = $4 AND enrollment_status = 'Active'
+                    """,
+                    faculty_id, subject_id, semester_no, academic_year,
+                )
+                enrolled_by_sid = {r["student_id"]: r for r in enrolled}
+
+                lecture_number = await self._resolve_lecture_number(
+                    conn, subject_id, lecture_date, day_name, slot_no, semester_no
+                )
+                recorded = lecture_number is not None
+                if not recorded:
+                    lecture_number = await conn.fetchval(
+                        """
+                        SELECT COALESCE(max(lecture_number), 0) + 1
+                        FROM daily_attendance_07 WHERE subject_id = $1
+                        """,
+                        subject_id,
+                    )
+                lecture_number = int(lecture_number or 1)
+
+                existing_rows = await conn.fetch(
+                    """
+                    SELECT attendance_id, student_id, attendance_status
+                    FROM daily_attendance_07
+                    WHERE subject_id = $1 AND lecture_date = $2 AND lecture_number = $3
+                    FOR UPDATE
+                    """,
+                    subject_id, lecture_date, lecture_number,
+                )
+                existing_by_sid = {r["student_id"]: r for r in existing_rows}
+                already_recorded = bool(existing_rows)
+
+                if already_recorded and not allow_correction:
+                    raise DuplicateLectureError(
+                        f"Lecture {lecture_number} on {lecture_date} is already recorded"
+                    )
+
+                if already_recorded:
+                    unknown = [sid for sid in student_statuses if sid not in enrolled_by_sid]
+                    if unknown:
+                        raise FacultyScopeError(
+                            f"Student(s) {', '.join(unknown)} are not in the authorized Active scope"
+                        )
+                    process_ids = [sid for sid in student_statuses if sid in enrolled_by_sid]
+                else:
+                    process_ids = list(enrolled_by_sid.keys())
+
+                next_id = await conn.fetchval(
+                    "SELECT COALESCE(max(attendance_id), 0) FROM daily_attendance_07"
+                )
+
+                results: List[Dict[str, Any]] = []
+                summary = {"inserted": 0, "updated": 0, "unchanged": 0}
+                for sid in process_ids:
+                    status = student_statuses.get(sid, "A")
+                    existing = existing_by_sid.get(sid)
+                    if existing is not None:
+                        if existing["attendance_status"] == status:
+                            operation = "unchanged"
+                            summary["unchanged"] += 1
+                        else:
+                            await conn.execute(
+                                """
+                                UPDATE daily_attendance_07
+                                SET attendance_status = $1, updated_at = now()
+                                WHERE attendance_id = $2
+                                """,
+                                status, existing["attendance_id"],
+                            )
+                            operation = "updated"
+                            summary["updated"] += 1
+                        results.append({
+                            "student_id": sid,
+                            "enrollment_no": enrolled_by_sid[sid]["enrollment_no"],
+                            "operation": operation,
+                            "attendance_status": status,
+                            "audit": (operation == "updated", existing["attendance_status"], status),
+                        })
+                    else:
+                        next_id = int(next_id or 0) + 1
+                        await conn.execute(
+                            """
+                            INSERT INTO daily_attendance_07 (
+                                attendance_id, student_id, enrollment_no, subject_id,
+                                subject_name, faculty_id, lecture_date, lecture_number,
+                                day_name, department_code, semester_no, academic_year,
+                                attendance_status, created_at, updated_at
+                            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now(),now())
+                            """,
+                            next_id, sid, enrolled_by_sid[sid]["enrollment_no"],
+                            subject_id, timetable["subject_name"], faculty_id,
+                            lecture_date, lecture_number, day_name,
+                            timetable["department_code"], semester_no,
+                            timetable["academic_year"], status,
+                        )
+                        summary["inserted"] += 1
+                        results.append({
+                            "student_id": sid,
+                            "enrollment_no": enrolled_by_sid[sid]["enrollment_no"],
+                            "operation": "insert",
+                            "attendance_status": status,
+                            "audit": (True, None, status),
+                        })
+
+                affected_ids = process_ids
+                agg_by_sid, sem_by_sid, overall_by_sid = await self._recompute_attendance(
+                    conn, subject_id, semester_no, academic_year,
+                    affected_ids, enrolled_by_sid, aggregate_fields,
+                )
+
+                # Audit appends (inside the same transaction).
+                for res in results:
+                    audit = res.pop("audit", None)
+                    if audit is None or not audit[0]:
+                        continue
+                    _, old_status, new_status = audit
+                    await conn.execute(
+                        """
+                        INSERT INTO attendance_change_log (
+                            lecture_date, slot_no, student_id, subject_id,
+                            field_name, old_value, new_value, operation_type,
+                            changed_by, changed_at
+                        ) VALUES ($1,$2,$3,$4,'attendance_status',$5,$6,$7,$8,now())
+                        """,
+                        lecture_date, slot_no, res["student_id"], subject_id,
+                        self._jsonb(old_status), self._jsonb(new_status),
+                        res["operation"], changed_by,
+                    )
+
+        for res in results:
+            sid = res["student_id"]
+            agg = agg_by_sid.get(sid, {})
+            res["attendance_percentage"] = agg.get("attendance_percentage")
+            res["attendance_status_band"] = agg.get("attendance_status")
+            res["eligibility_status"] = agg.get("eligibility_status")
+            res["shortage_flag"] = agg.get("shortage_flag")
+            res["semester_attendance_percentage"] = sem_by_sid.get(sid)
+            res["overall_attendance_percentage"] = overall_by_sid.get(sid)
+
+        sem_means = [float(v) for v in sem_by_sid.values() if v is not None]
+        overall_means = [float(v) for v in overall_by_sid.values() if v is not None]
+        return {
+            "lecture_number": lecture_number,
+            "recorded": already_recorded or summary["inserted"] > 0,
+            "results": results,
+            "summary": summary,
+            "semester_attendance_percentage": round(sum(sem_means) / len(sem_means), 2) if sem_means else None,
+            "overall_attendance_percentage": round(sum(overall_means) / len(overall_means), 2) if overall_means else None,
+        }
+
+    async def _recompute_attendance(
+        self,
+        conn: asyncpg.Connection,
+        subject_id: str,
+        semester_no: int,
+        academic_year: str,
+        student_ids: List[str],
+        enrolled_by_sid: Dict[str, Dict[str, Any]],
+        aggregate_fields: Callable[[Optional[float]], Dict[str, Any]],
+    ) -> tuple:
+        """Recompute aggregate attendance + semester/overall summaries (plan 15 §6.2-6.4)."""
+        if not student_ids:
+            return {}, {}, {}
+
+        agg_rows = await conn.fetch(
+            """
+            SELECT student_id,
+                count(DISTINCT (lecture_date, lecture_number)) AS total_classes,
+                count(*) FILTER (WHERE attendance_status = 'P') AS attended_classes
+            FROM daily_attendance_07
+            WHERE subject_id = $1 AND semester_no = $2
+                AND student_id = ANY($3::text[])
+            GROUP BY student_id
+            """,
+            subject_id, semester_no, student_ids,
+        )
+        agg_by_sid = {}
+        for ar in agg_rows:
+            total = int(ar["total_classes"])
+            attended = int(ar["attended_classes"])
+            pct = round(attended / total * 100, 2) if total else None
+            bands = aggregate_fields(pct)
+            agg_by_sid[ar["student_id"]] = {
+                "total_classes": total,
+                "attended_classes": attended,
+                "attendance_percentage": pct,
+                "attendance_status": bands["attendance_status"],
+                "eligibility_status": bands["eligibility_status"],
+                "shortage_flag": bands["shortage_flag"],
+            }
+
+        for sid in student_ids:
+            er = enrolled_by_sid[sid]
+            agg = agg_by_sid.get(sid)
+            if agg is None:
+                continue
+            existing_agg = await conn.fetchrow(
+                "SELECT 1 FROM attendance WHERE enrollment_record_id = $1",
+                er["enrollment_record_id"],
+            )
+            if existing_agg:
+                await conn.execute(
+                    """
+                    UPDATE attendance
+                    SET total_classes = $1, attended_classes = $2,
+                        attendance_percentage = $3, attendance_status = $4,
+                        eligibility_status = $5, shortage_flag = $6
+                    WHERE enrollment_record_id = $7
+                    """,
+                    agg["total_classes"], agg["attended_classes"],
+                    agg["attendance_percentage"], agg["attendance_status"],
+                    agg["eligibility_status"], agg["shortage_flag"],
+                    er["enrollment_record_id"],
+                )
+            else:
+                await conn.execute(
+                    """
+                    INSERT INTO attendance (
+                        attendance_id, enrollment_record_id, enrollment_no,
+                        student_id, subject_id, semester_no, total_classes,
+                        attended_classes, attendance_percentage,
+                        attendance_status, eligibility_status, shortage_flag
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                    """,
+                    "ATT" + er["enrollment_record_id"][3:],
+                    er["enrollment_record_id"], er["enrollment_no"],
+                    sid, subject_id, semester_no,
+                    agg["total_classes"], agg["attended_classes"],
+                    agg["attendance_percentage"], agg["attendance_status"],
+                    agg["eligibility_status"], agg["shortage_flag"],
+                )
+
+        sem_rows = await conn.fetch(
+            """
+            SELECT e.student_id, round(avg(a.attendance_percentage)::numeric, 2) AS mean
+            FROM attendance a
+            JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
+            WHERE e.student_id = ANY($1::text[]) AND e.semester_no = $2
+            GROUP BY e.student_id
+            """,
+            student_ids, semester_no,
+        )
+        overall_rows = await conn.fetch(
+            """
+            SELECT student_id, round(avg(attendance_percentage)::numeric, 2) AS mean
+            FROM attendance
+            WHERE student_id = ANY($1::text[])
+            GROUP BY student_id
+            """,
+            student_ids,
+        )
+        sem_by_sid = {r["student_id"]: r["mean"] for r in sem_rows}
+        overall_by_sid = {r["student_id"]: r["mean"] for r in overall_rows}
+
+        if sem_rows:
+            await conn.execute(
+                """
+                UPDATE student_semester_summary s
+                SET semester_attendance_percentage = agg.mean
+                FROM (
+                    SELECT e.student_id, round(avg(a.attendance_percentage)::numeric, 2) AS mean
+                    FROM attendance a
+                    JOIN student_subject_enrollment e
+                        ON e.enrollment_record_id = a.enrollment_record_id
+                    WHERE e.student_id = ANY($1::text[]) AND e.semester_no = $2
+                    GROUP BY e.student_id
+                ) agg
+                WHERE s.student_id = agg.student_id AND s.semester_no = $2
+                """,
+                student_ids, semester_no,
+            )
+            existing_summary_ids = {
+                r["student_id"]
+                for r in await conn.fetch(
+                    """
+                    SELECT student_id FROM student_semester_summary
+                    WHERE student_id = ANY($1::text[]) AND semester_no = $2
+                    """,
+                    student_ids, semester_no,
+                )
+            }
+            for sid in student_ids:
+                if sid in existing_summary_ids:
+                    continue
+                mean = sem_by_sid.get(sid)
+                if mean is None:
+                    continue
+                next_sum_id = await conn.fetchval(
+                    """
+                    SELECT COALESCE(max(substring(semester_summary_id from 4)::bigint), 0) + 1
+                    FROM student_semester_summary
+                    """
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO student_semester_summary (
+                        semester_summary_id, student_id, enrollment_no,
+                        semester_no, academic_year, semester_attendance_percentage
+                    ) VALUES ($1,$2,$3,$4,$5,$6)
+                    """,
+                    f"SEM{int(next_sum_id):06d}", sid,
+                    enrolled_by_sid[sid]["enrollment_no"], semester_no,
+                    academic_year, mean,
+                )
+
+        if overall_rows:
+            await conn.execute(
+                """
+                UPDATE students s
+                SET overall_attendance_percentage = sub.mean
+                FROM (
+                    SELECT student_id, round(avg(attendance_percentage)::numeric, 2) AS mean
+                    FROM attendance
+                    WHERE student_id = ANY($1::text[])
+                    GROUP BY student_id
+                ) sub
+                WHERE s.student_id = sub.student_id
+                """,
+                student_ids,
+            )
+
+        return agg_by_sid, sem_by_sid, overall_by_sid
+
+    async def correct_daily_attendance(
+        self,
+        faculty_id: str,
+        attendance_id: int,
+        status: str,
+        changed_by: str,
+        aggregate_fields: Callable[[Optional[float]], Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """Single-student correction of a recorded daily row (plan 15 §8.4)."""
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """
+                    SELECT d.attendance_id, d.student_id, d.enrollment_no, d.subject_id,
+                        d.lecture_date, d.lecture_number, d.attendance_status,
+                        d.semester_no, d.academic_year
+                    FROM daily_attendance_07 d
+                    JOIN student_subject_enrollment e
+                        ON e.student_id = d.student_id AND e.subject_id = d.subject_id
+                            AND e.semester_no = d.semester_no
+                    WHERE d.attendance_id = $1 AND e.faculty_id = $2
+                        AND e.enrollment_status = 'Active'
+                    LIMIT 1
+                    FOR UPDATE
+                    """,
+                    attendance_id, faculty_id,
+                )
+                if not row:
+                    raise FacultyScopeError("No authorized attendance record matches this id")
+
+                old_status = row["attendance_status"]
+                if old_status == status:
+                    return {
+                        "attendance_id": int(attendance_id),
+                        "student_id": row["student_id"],
+                        "subject_id": row["subject_id"],
+                        "lecture_date": row["lecture_date"],
+                        "lecture_number": row["lecture_number"],
+                        "operation": "unchanged",
+                        "attendance_status": status,
+                    }
+
+                await conn.execute(
+                    """
+                    UPDATE daily_attendance_07
+                    SET attendance_status = $1, updated_at = now()
+                    WHERE attendance_id = $2
+                    """,
+                    status, attendance_id,
+                )
+
+                await conn.execute(
+                    """
+                    INSERT INTO attendance_change_log (
+                        lecture_date, slot_no, student_id, subject_id,
+                        field_name, old_value, new_value, operation_type,
+                        changed_by, changed_at
+                    ) VALUES ($1,0,$2,$3,'attendance_status',$4,$5,'update',$6,now())
+                    """,
+                    row["lecture_date"], row["student_id"],
+                    row["subject_id"], self._jsonb(old_status), self._jsonb(status),
+                    changed_by,
+                )
+
+                enrolled = await conn.fetch(
+                    """
+                    SELECT enrollment_record_id, student_id, enrollment_no
+                    FROM student_subject_enrollment
+                    WHERE student_id = $1 AND subject_id = $2 AND semester_no = $3
+                        AND enrollment_status = 'Active'
+                    """,
+                    row["student_id"], row["subject_id"], row["semester_no"],
+                )
+                if not enrolled:
+                    raise FacultyScopeError("No authorized enrollment for this attendance record")
+                enrolled_by_sid = {r["student_id"]: r for r in enrolled}
+                agg_by_sid, sem_by_sid, overall_by_sid = await self._recompute_attendance(
+                    conn, row["subject_id"], row["semester_no"], row["academic_year"],
+                    [row["student_id"]], enrolled_by_sid, aggregate_fields,
+                )
+
+        agg = agg_by_sid.get(row["student_id"], {})
+        return {
+            "attendance_id": int(attendance_id),
+            "student_id": row["student_id"],
+            "subject_id": row["subject_id"],
+            "lecture_date": row["lecture_date"],
+            "lecture_number": row["lecture_number"],
+            "operation": "updated",
+            "attendance_status": status,
+            "attendance_percentage": agg.get("attendance_percentage"),
+            "attendance_status_band": agg.get("attendance_status"),
+            "eligibility_status": agg.get("eligibility_status"),
+            "shortage_flag": agg.get("shortage_flag"),
+            "semester_attendance_percentage": sem_by_sid.get(row["student_id"]),
+            "overall_attendance_percentage": overall_by_sid.get(row["student_id"]),
+        }
+
+    async def get_attendance_change_log(
+        self,
+        subject_id: str,
+        page: int,
+        page_size: int,
+    ) -> Dict[str, Any]:
+        async with self.pool.acquire() as conn:
+            total = await conn.fetchval(
+                "SELECT count(*) FROM attendance_change_log WHERE subject_id = $1",
+                subject_id,
+            )
+            rows = await conn.fetch(
+                """
+                SELECT cl.change_id, cl.lecture_date, cl.slot_no, cl.student_id,
+                    cl.subject_id, cl.field_name, cl.old_value, cl.new_value,
+                    cl.operation_type, cl.changed_by, cl.changed_at,
+                    st.first_name, st.last_name
+                FROM attendance_change_log cl
+                LEFT JOIN students st ON st.student_id = cl.student_id
+                WHERE cl.subject_id = $1
+                ORDER BY cl.changed_at DESC, cl.change_id DESC
+                LIMIT $2 OFFSET $3
+                """,
+                subject_id, page_size, (page - 1) * page_size,
+            )
+        return {
+            "total": int(total) if total else 0,
+            "items": [dict(r) for r in rows],
+        }

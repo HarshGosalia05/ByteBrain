@@ -79,11 +79,25 @@ export function SubjectDetail({
               {detail.department_name ? ` · ${detail.department_name}` : ""}
             </p>
           </div>
-          <span
-            className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"
-          >
-            Teaching now
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"
+            >
+              Teaching now
+            </span>
+            <Link
+              href={`/faculty/subjects/${detail.subject_id}/marks?semester=${detail.semester_no}&academic_year=${encodeURIComponent(detail.academic_year)}`}
+              className={buttonVariants({ variant: "default", size: "sm" })}
+            >
+              Enter Marks
+            </Link>
+            <Link
+              href={`/faculty/attendance/entry?subject_id=${detail.subject_id}&semester=${detail.semester_no}&academic_year=${encodeURIComponent(detail.academic_year)}`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              Enter Attendance
+            </Link>
+          </div>
         </div>
       </section>
 

@@ -1,8 +1,19 @@
 import asyncpg
 import math
+from datetime import date
 from typing import Any, Dict, List, Optional
-from app.core.config import settings
-from app.repositories.faculty_repo import FacultyRepository
+from app.core.config import (
+    settings,
+    MARKS_GRADE_BANDS,
+    MARKS_GRADE_FAIL,
+    MARKS_CATEGORY_BANDS,
+    MARKS_CATEGORY_LOW,
+)
+from app.repositories.faculty_repo import (
+    FacultyRepository,
+    FacultyScopeError,
+    DuplicateLectureError,
+)
 from app.schemas.faculty import (
     FacultyProfile,
     FacultyProfileUpdate,
@@ -117,6 +128,31 @@ from app.schemas.faculty import (
     WorkloadStudentsResponse,
     WorkloadHighlight,
     WorkloadHighlightsResponse,
+    MarksBand,
+    MarksCategoryBand,
+    MarksConfig,
+    SubjectMarksRow,
+    SubjectMarksGrid,
+    MarksRowInput,
+    MarksBatchSaveRequest,
+    MarksSaveResult,
+    MarksSaveSummary,
+    MarksBatchSaveResponse,
+    MarksChangeLogItem,
+    MarksChangeLogResponse,
+    AttendanceSession,
+    AttendanceEntryStudent,
+    AttendanceBands,
+    AttendanceEntryMeta,
+    LectureStudentRow,
+    LectureAttendance,
+    LectureAttendanceStudentInput,
+    LectureAttendanceSaveRequest,
+    AttendanceSaveSummary,
+    LectureAttendanceSaveResult,
+    LectureAttendanceSaveResponse,
+    AttendanceChangeLogItem,
+    AttendanceChangeLogResponse,
 )
 from fastapi import HTTPException, status
 
@@ -144,6 +180,93 @@ MENTEE_SORT_KEYS = {
 }
 
 GRADE_BY_POINT = {10: "O", 9: "A+", 8: "A", 7: "B+", 6: "B", 5: "C", 4: "D", 0: "F"}
+
+MARKS_SORT_EXPRESSIONS: Dict[str, str] = {
+    "name": "st.first_name",
+    "enrollment_no": "sse.enrollment_no",
+    "internal_marks": "sp.internal_marks",
+    "mid_sem_marks": "sp.mid_sem_marks",
+    "end_sem_marks": "sp.end_sem_marks",
+    "total_marks": "sp.total_marks",
+    "percentage": "sp.percentage",
+    "grade": "sp.grade_point",
+    "remarks": "sp.remarks",
+}
+
+
+def derive_marks_fields(
+    internal_marks: Optional[int],
+    mid_sem_marks: Optional[int],
+    end_sem_marks: Optional[int],
+) -> Dict[str, Any]:
+    """Single deterministic derivation for a performance row (plan 14 §7.2).
+
+    Derived values are only computed when all three components are present;
+    a NULL component keeps the derived fields NULL (end-sem not entered yet).
+    """
+    base = {
+        "total_marks": None,
+        "percentage": None,
+        "grade": None,
+        "grade_point": None,
+        "result_status": None,
+        "performance_category": None,
+    }
+    if internal_marks is None or mid_sem_marks is None or end_sem_marks is None:
+        return base
+
+    total = int(internal_marks) + int(mid_sem_marks) + int(end_sem_marks)
+    percentage = round(total / settings.MARKS_TOTAL_MAX * 100, 2)
+
+    grade, grade_point = MARKS_GRADE_FAIL
+    for min_pct, g, gp in MARKS_GRADE_BANDS:
+        if percentage >= min_pct:
+            grade, grade_point = g, gp
+            break
+
+    category = MARKS_CATEGORY_LOW
+    for min_pct, cat in MARKS_CATEGORY_BANDS:
+        if percentage >= min_pct:
+            category = cat
+            break
+
+    return {
+        "total_marks": total,
+        "percentage": percentage,
+        "grade": grade,
+        "grade_point": grade_point,
+        "result_status": "Pass" if percentage >= settings.MARKS_PASS_PERCENTAGE else "Fail",
+        "performance_category": category,
+    }
+
+
+def attendance_aggregate_fields(percentage: Optional[float]) -> Dict[str, Any]:
+    """Derive aggregate attendance status/eligibility/shortage (plan 15 §6.3)."""
+    critical = settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD
+    compliance = settings.FACULTY_ATTENDANCE_THRESHOLD
+    good_split = settings.ATTENDANCE_STATUS_GOOD_SPLIT
+    excellent = settings.FACULTY_ATTENDANCE_EXCELLENT_THRESHOLD
+    if percentage is None:
+        return {
+            "attendance_status": None,
+            "eligibility_status": "Not Eligible",
+            "shortage_flag": "Yes",
+        }
+    if percentage < critical:
+        status = "Critical"
+    elif percentage < compliance:
+        status = "Low"
+    elif percentage < good_split:
+        status = "Average"
+    elif percentage < excellent:
+        status = "Good"
+    else:
+        status = "Excellent"
+    return {
+        "attendance_status": status,
+        "eligibility_status": "Eligible" if percentage >= compliance else "Not Eligible",
+        "shortage_flag": "Yes" if percentage < compliance else "No",
+    }
 
 SUBJECT_SORT_EXPRESSIONS: Dict[str, str] = {
     "name": "sse.subject_name",
@@ -3948,3 +4071,465 @@ class FacultyService:
             item["reason"] = self._governance_reason(item, st, utilization, mean_credits, mean_students)
             item["health_band"] = self._workload_health_band(self._subject_health(item, derived))
         return items
+
+    # =========================================================================
+    # Marks Entry (plan 14)
+    # =========================================================================
+
+    def _marks_config(self) -> MarksConfig:
+        return MarksConfig(
+            internal_max=settings.MARKS_INTERNAL_MAX,
+            mid_sem_max=settings.MARKS_MID_SEM_MAX,
+            end_sem_max=settings.MARKS_END_SEM_MAX,
+            total_max=settings.MARKS_TOTAL_MAX,
+            pass_percentage=settings.MARKS_PASS_PERCENTAGE,
+            remarks_max_length=settings.MARKS_REMARKS_MAX_LENGTH,
+            grade_bands=[
+                MarksBand(min_percentage=float(m), grade=g, grade_point=int(gp))
+                for m, g, gp in MARKS_GRADE_BANDS
+            ],
+            category_bands=[
+                MarksCategoryBand(min_percentage=float(m), category=c)
+                for m, c in MARKS_CATEGORY_BANDS
+            ],
+        )
+
+    def _marks_row(self, row: Dict[str, Any]) -> SubjectMarksRow:
+        internal = row.get("internal_marks")
+        mid_sem = row.get("mid_sem_marks")
+        end_sem = row.get("end_sem_marks")
+        return SubjectMarksRow(
+            enrollment_record_id=row["enrollment_record_id"],
+            student_id=row["student_id"],
+            enrollment_no=int(row["enrollment_no"]),
+            first_name=row["first_name"],
+            last_name=row["last_name"],
+            internal_marks=internal,
+            mid_sem_marks=mid_sem,
+            end_sem_marks=end_sem,
+            total_marks=row.get("total_marks"),
+            percentage=row.get("percentage"),
+            grade=row.get("grade"),
+            grade_point=row.get("grade_point"),
+            result_status=row.get("result_status"),
+            performance_category=row.get("performance_category"),
+            remarks=row.get("remarks"),
+            complete=internal is not None and mid_sem is not None and end_sem is not None,
+        )
+
+    async def _resolve_entry_term(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+    ) -> tuple:
+        if semester_no is None or academic_year is None:
+            term = await self.repo.get_subject_term(faculty_id, subject_id)
+            if not term:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Subject not found"
+                )
+            return int(term["semester_no"]), term["academic_year"]
+        return semester_no, academic_year
+
+    async def get_subject_marks_grid(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        page: int,
+        page_size: int,
+        sort: str,
+        order: str,
+    ) -> SubjectMarksGrid:
+        await self._ensure_profile(faculty_id)
+        semester_no, academic_year = await self._resolve_entry_term(
+            faculty_id, subject_id, semester_no, academic_year
+        )
+        sort_key = sort if sort in MARKS_SORT_EXPRESSIONS else "name"
+        direction = "DESC" if order == "desc" else "ASC"
+        order_by = f"{MARKS_SORT_EXPRESSIONS[sort_key]} {direction}"
+
+        data = await self.repo.get_subject_marks_grid(
+            faculty_id, subject_id, semester_no, academic_year,
+            order_by, page_size, (page - 1) * page_size,
+        )
+        if not data or not data.get("meta"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Subject not found in your teaching assignments",
+            )
+
+        meta = data["meta"]
+        total = int(data["total"])
+        total_pages = max(1, -(-total // page_size)) if total else 0
+        return SubjectMarksGrid(
+            subject_id=meta["subject_id"],
+            subject_code=meta["subject_code"],
+            subject_name=meta["subject_name"],
+            credits=meta.get("credits"),
+            semester_no=semester_no,
+            academic_year=academic_year,
+            assessment_type=meta.get("assessment_type"),
+            department_name=meta.get("department_name"),
+            config=self._marks_config(),
+            rows=[self._marks_row(r) for r in data["rows"]],
+            pagination=FacultyPagination(
+                page=page,
+                page_size=page_size,
+                total=total,
+                total_pages=total_pages,
+            ),
+        )
+
+    async def save_subject_marks(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        request: MarksBatchSaveRequest,
+        changed_by: str,
+    ) -> MarksBatchSaveResponse:
+        await self._ensure_profile(faculty_id)
+        entries = [e.model_dump() for e in request.rows]
+        config = self._marks_config()
+        bounds = {
+            "internal_marks": (0, config.internal_max),
+            "mid_sem_marks": (0, config.mid_sem_max),
+            "end_sem_marks": (0, config.end_sem_max),
+        }
+        errors = []
+        for e in entries:
+            for field, (lo, hi) in bounds.items():
+                val = e.get(field)
+                if val is not None and not (isinstance(val, int) and lo <= val <= hi):
+                    errors.append(
+                        f"{field} for enrollment {e['enrollment_record_id']} must be an integer "
+                        f"between {lo} and {hi}"
+                    )
+            remarks = e.get("remarks")
+            if remarks is not None and len(remarks) > config.remarks_max_length:
+                errors.append(
+                    f"remarks for enrollment {e['enrollment_record_id']} exceeds "
+                    f"{config.remarks_max_length} characters"
+                )
+        if errors:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="; ".join(errors),
+            )
+        try:
+            result = await self.repo.upsert_subject_marks(
+                faculty_id, subject_id, request.semester_no, request.academic_year,
+                entries, changed_by, derive_marks_fields,
+            )
+        except FacultyScopeError as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
+        grid = await self.get_subject_marks_grid(
+            faculty_id, subject_id, request.semester_no, request.academic_year,
+            1, max(1000, len(request.rows)),
+            "name", "asc",
+        )
+        return MarksBatchSaveResponse(
+            subject_id=subject_id,
+            semester_no=request.semester_no,
+            academic_year=request.academic_year,
+            summary=MarksSaveSummary(**result["summary"]),
+            rows=[
+                MarksSaveResult(
+                    enrollment_record_id=r["enrollment_record_id"],
+                    student_id=r["student_id"],
+                    operation=r["operation"],
+                    fields_changed=r["fields_changed"],
+                )
+                for r in result["results"]
+            ],
+            grid=grid,
+        )
+
+    async def get_marks_change_log(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        page: int,
+        page_size: int,
+    ) -> MarksChangeLogResponse:
+        await self._ensure_profile(faculty_id)
+        semester_no, academic_year = await self._resolve_entry_term(
+            faculty_id, subject_id, semester_no, academic_year
+        )
+        data = await self.repo.get_marks_change_log(subject_id, page, page_size)
+        total = int(data["total"])
+        total_pages = max(1, -(-total // page_size)) if total else 0
+        items = []
+        for r in data["items"]:
+            name = None
+            if r.get("first_name"):
+                name = f"{r['first_name']} {r['last_name']}".strip()
+            items.append(MarksChangeLogItem(
+                change_id=int(r["change_id"]),
+                performance_id=r["performance_id"],
+                enrollment_record_id=r["enrollment_record_id"],
+                student_id=r["student_id"],
+                student_name=name,
+                subject_id=r["subject_id"],
+                field_name=r["field_name"],
+                old_value=r.get("old_value"),
+                new_value=r.get("new_value"),
+                operation_type=r["operation_type"],
+                changed_by=r.get("changed_by"),
+                changed_at=r["changed_at"],
+            ))
+        return MarksChangeLogResponse(
+            subject_id=subject_id,
+            semester_no=semester_no,
+            academic_year=academic_year,
+            items=items,
+            pagination=FacultyPagination(
+                page=page,
+                page_size=page_size,
+                total=total,
+                total_pages=total_pages,
+            ),
+        )
+
+    # =========================================================================
+    # Attendance Entry (plan 15)
+    # =========================================================================
+
+    def _attendance_bands(self) -> AttendanceBands:
+        return AttendanceBands(
+            critical_threshold=settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD,
+            compliance_threshold=settings.FACULTY_ATTENDANCE_THRESHOLD,
+            excellent_threshold=settings.FACULTY_ATTENDANCE_EXCELLENT_THRESHOLD,
+            good_split=settings.ATTENDANCE_STATUS_GOOD_SPLIT,
+        )
+
+    async def get_attendance_entry_meta(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+    ) -> AttendanceEntryMeta:
+        await self._ensure_profile(faculty_id)
+        semester_no, academic_year = await self._resolve_entry_term(
+            faculty_id, subject_id, semester_no, academic_year
+        )
+        data = await self.repo.get_attendance_meta(
+            faculty_id, subject_id, semester_no, academic_year
+        )
+        if not data or not data.get("meta"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Subject not found in your teaching assignments",
+            )
+        meta = data["meta"]
+        recorded = int(data.get("recorded_lectures") or 0)
+        sessions = [
+            AttendanceSession(
+                day_name=s["day_name"],
+                slot_no=int(s["slot_no"]),
+                start_time=s["start_time"],
+                end_time=s["end_time"],
+                subject_id=s["subject_id"],
+                subject_name=s["subject_name"],
+                faculty_id=s["faculty_id"],
+                lecture_type=s.get("lecture_type"),
+                recorded_lectures=recorded,
+            )
+            for s in data["sessions"]
+        ]
+        students = [
+            AttendanceEntryStudent(
+                enrollment_record_id=r["enrollment_record_id"],
+                student_id=r["student_id"],
+                enrollment_no=int(r["enrollment_no"]),
+                first_name=r["first_name"],
+                last_name=r["last_name"],
+                attendance_percentage=r.get("attendance_percentage"),
+                attendance_status=r.get("attendance_status"),
+                eligibility_status=r.get("eligibility_status"),
+                shortage_flag=r.get("shortage_flag"),
+            )
+            for r in data["students"]
+        ]
+        return AttendanceEntryMeta(
+            subject_id=meta["subject_id"],
+            subject_code=meta["subject_code"],
+            subject_name=meta["subject_name"],
+            semester_no=semester_no,
+            academic_year=academic_year,
+            department_code=int(meta["department_code"]),
+            sessions=sessions,
+            students=students,
+            bands=self._attendance_bands(),
+        )
+
+    async def get_lecture_attendance(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        lecture_date: date,
+        slot_no: int,
+    ) -> LectureAttendance:
+        await self._ensure_profile(faculty_id)
+        semester_no, academic_year = await self._resolve_entry_term(
+            faculty_id, subject_id, semester_no, academic_year
+        )
+        try:
+            data = await self.repo.get_lecture_attendance(
+                faculty_id, subject_id, semester_no, academic_year,
+                lecture_date, slot_no,
+            )
+        except FacultyScopeError as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+        if not data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Subject not found in your teaching assignments",
+            )
+
+        tt = data["timetable"]
+        daily = data["daily"]
+        students = []
+        for r in data["students"]:
+            sid = r["student_id"]
+            d = daily.get(sid) or {}
+            students.append(LectureStudentRow(
+                enrollment_record_id=r["enrollment_record_id"],
+                student_id=sid,
+                enrollment_no=int(r["enrollment_no"]),
+                first_name=r["first_name"],
+                last_name=r["last_name"],
+                attendance_id=d.get("attendance_id"),
+                attendance_status=d.get("attendance_status"),
+                attendance_percentage=r.get("attendance_percentage"),
+                attendance_status_band=r.get("band"),
+                eligibility_status=r.get("eligibility_status"),
+                shortage_flag=r.get("shortage_flag"),
+            ))
+        return LectureAttendance(
+            subject_id=tt["subject_id"],
+            subject_code=tt.get("subject_code"),
+            subject_name=tt["subject_name"],
+            semester_no=semester_no,
+            academic_year=academic_year,
+            lecture_date=lecture_date,
+            day_name=tt["day_name"],
+            slot_no=int(tt["slot_no"]),
+            start_time=tt["start_time"],
+            end_time=tt["end_time"],
+            lecture_type=tt.get("lecture_type"),
+            faculty_id=tt["faculty_id"],
+            faculty_name=None,
+            recorded=bool(data["recorded"]),
+            lecture_number=data["lecture_number"],
+            students=students,
+            bands=self._attendance_bands(),
+        )
+
+    async def save_lecture_attendance(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        request: LectureAttendanceSaveRequest,
+        changed_by: str,
+    ) -> LectureAttendanceSaveResponse:
+        await self._ensure_profile(faculty_id)
+        student_statuses = {s.student_id: s.attendance_status for s in request.students}
+        try:
+            data = await self.repo.upsert_lecture_attendance(
+                faculty_id, subject_id, request.semester_no, request.academic_year,
+                request.lecture_date, request.slot_no, student_statuses,
+                request.allow_correction, changed_by, attendance_aggregate_fields,
+            )
+        except FacultyScopeError as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+        except DuplicateLectureError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+        return LectureAttendanceSaveResponse(
+            subject_id=subject_id,
+            semester_no=request.semester_no,
+            academic_year=request.academic_year,
+            lecture_date=request.lecture_date,
+            day_name=request.lecture_date.strftime("%A"),
+            slot_no=request.slot_no,
+            lecture_number=data["lecture_number"],
+            recorded=bool(data["recorded"]),
+            summary=AttendanceSaveSummary(**data["summary"]),
+            students=[LectureAttendanceSaveResult(**r) for r in data["results"]],
+            semester_attendance_percentage=data["semester_attendance_percentage"],
+            overall_attendance_percentage=data["overall_attendance_percentage"],
+            bands=self._attendance_bands(),
+        )
+
+    async def correct_attendance_record(
+        self,
+        faculty_id: str,
+        attendance_id: int,
+        status: str,
+        changed_by: str,
+    ) -> Dict[str, Any]:
+        await self._ensure_profile(faculty_id)
+        try:
+            return await self.repo.correct_daily_attendance(
+                faculty_id, attendance_id, status, changed_by, attendance_aggregate_fields,
+            )
+        except FacultyScopeError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+    async def get_attendance_change_log(
+        self,
+        faculty_id: str,
+        subject_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        page: int,
+        page_size: int,
+    ) -> AttendanceChangeLogResponse:
+        await self._ensure_profile(faculty_id)
+        semester_no, academic_year = await self._resolve_entry_term(
+            faculty_id, subject_id, semester_no, academic_year
+        )
+        data = await self.repo.get_attendance_change_log(subject_id, page, page_size)
+        total = int(data["total"])
+        total_pages = max(1, -(-total // page_size)) if total else 0
+        items = []
+        for r in data["items"]:
+            name = None
+            if r.get("first_name"):
+                name = f"{r['first_name']} {r['last_name']}".strip()
+            items.append(AttendanceChangeLogItem(
+                change_id=int(r["change_id"]),
+                lecture_date=r["lecture_date"],
+                slot_no=int(r.get("slot_no") or 0),
+                student_id=r["student_id"],
+                student_name=name,
+                subject_id=r["subject_id"],
+                field_name=r["field_name"],
+                old_value=r.get("old_value"),
+                new_value=r.get("new_value"),
+                operation_type=r["operation_type"],
+                changed_by=r.get("changed_by"),
+                changed_at=r["changed_at"],
+            ))
+        return AttendanceChangeLogResponse(
+            subject_id=subject_id,
+            semester_no=semester_no,
+            academic_year=academic_year,
+            items=items,
+            pagination=FacultyPagination(
+                page=page,
+                page_size=page_size,
+                total=total,
+                total_pages=total_pages,
+            ),
+        )

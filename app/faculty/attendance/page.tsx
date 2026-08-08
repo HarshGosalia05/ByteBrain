@@ -1,6 +1,8 @@
 import { Suspense } from "react"
+import Link from "next/link"
 
 import { requireRole } from "@/lib/session"
+import { buttonVariants } from "@/components/ui/button"
 import {
   getFacultyAttendanceSummary,
   type AttendanceAppliedFilters,
@@ -84,7 +86,15 @@ export default async function AttendancePage(props: {
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Attendance Analytics</h1>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-3xl font-bold tracking-tight">Attendance Analytics</h1>
+          <Link
+            href={`/faculty/attendance/entry?semester=${semester ?? ""}&academic_year=${encodeURIComponent(academic_year ?? "")}`}
+            className={buttonVariants({ variant: "default", size: "sm" })}
+          >
+            Enter Attendance
+          </Link>
+        </div>
         <p className="text-muted-foreground">
           Descriptive attendance analytics with configurable low-attendance flags and
           attendance-vs-performance views.

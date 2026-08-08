@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
-from datetime import date
+from typing import Any, List, Literal, Optional
+from datetime import date, datetime, time
 
 class FacultyProfile(BaseModel):
     faculty_id: str
@@ -982,3 +982,251 @@ class WorkloadHighlight(BaseModel):
 
 class WorkloadHighlightsResponse(BaseModel):
     items: List[WorkloadHighlight]
+
+# =============================================================================
+# Marks Entry (plan 14)
+# =============================================================================
+
+class MarksBand(BaseModel):
+    min_percentage: float
+    grade: str
+    grade_point: int
+
+class MarksCategoryBand(BaseModel):
+    min_percentage: float
+    category: str
+
+class MarksConfig(BaseModel):
+    internal_max: int
+    mid_sem_max: int
+    end_sem_max: int
+    total_max: int
+    pass_percentage: float
+    remarks_max_length: int
+    grade_bands: List[MarksBand]
+    category_bands: List[MarksCategoryBand]
+
+class SubjectMarksRow(BaseModel):
+    enrollment_record_id: str
+    student_id: str
+    enrollment_no: int
+    first_name: str
+    last_name: str
+    internal_marks: Optional[int] = None
+    mid_sem_marks: Optional[int] = None
+    end_sem_marks: Optional[int] = None
+    total_marks: Optional[int] = None
+    percentage: Optional[float] = None
+    grade: Optional[str] = None
+    grade_point: Optional[int] = None
+    result_status: Optional[str] = None
+    performance_category: Optional[str] = None
+    remarks: Optional[str] = None
+    complete: bool
+
+class SubjectMarksGrid(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    credits: Optional[int] = None
+    semester_no: int
+    academic_year: str
+    assessment_type: Optional[str] = None
+    department_name: Optional[str] = None
+    config: MarksConfig
+    rows: List[SubjectMarksRow]
+    pagination: FacultyPagination
+
+class MarksRowInput(BaseModel):
+    enrollment_record_id: str
+    internal_marks: Optional[int] = None
+    mid_sem_marks: Optional[int] = None
+    end_sem_marks: Optional[int] = None
+    remarks: Optional[str] = None
+
+class MarksBatchSaveRequest(BaseModel):
+    semester_no: int
+    academic_year: str
+    rows: List[MarksRowInput]
+
+class MarksSaveResult(BaseModel):
+    enrollment_record_id: str
+    student_id: str
+    operation: str
+    fields_changed: List[str]
+
+class MarksSaveSummary(BaseModel):
+    saved: int
+    inserted: int
+    updated: int
+    unchanged: int
+    rejected: int
+
+class MarksBatchSaveResponse(BaseModel):
+    subject_id: str
+    semester_no: int
+    academic_year: str
+    summary: MarksSaveSummary
+    rows: List[MarksSaveResult]
+    grid: SubjectMarksGrid
+
+class MarksChangeLogItem(BaseModel):
+    change_id: int
+    performance_id: str
+    enrollment_record_id: str
+    student_id: str
+    student_name: Optional[str] = None
+    subject_id: str
+    field_name: str
+    old_value: Optional[Any] = None
+    new_value: Optional[Any] = None
+    operation_type: str
+    changed_by: Optional[str] = None
+    changed_at: datetime
+
+class MarksChangeLogResponse(BaseModel):
+    subject_id: str
+    semester_no: int
+    academic_year: str
+    items: List[MarksChangeLogItem]
+    pagination: FacultyPagination
+
+# =============================================================================
+# Attendance Entry (plan 15)
+# =============================================================================
+
+class AttendanceSession(BaseModel):
+    day_name: str
+    slot_no: int
+    start_time: time
+    end_time: time
+    subject_id: str
+    subject_name: str
+    faculty_id: str
+    lecture_type: Optional[str] = None
+    recorded_lectures: Optional[int] = None
+
+class AttendanceEntryStudent(BaseModel):
+    enrollment_record_id: str
+    student_id: str
+    enrollment_no: int
+    first_name: str
+    last_name: str
+    attendance_percentage: Optional[float] = None
+    attendance_status: Optional[str] = None
+    eligibility_status: Optional[str] = None
+    shortage_flag: Optional[str] = None
+
+class AttendanceBands(BaseModel):
+    critical_threshold: float
+    compliance_threshold: float
+    excellent_threshold: float
+    good_split: float
+
+class AttendanceEntryMeta(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    academic_year: str
+    department_code: int
+    sessions: List[AttendanceSession]
+    students: List[AttendanceEntryStudent]
+    bands: AttendanceBands
+
+class LectureStudentRow(BaseModel):
+    enrollment_record_id: str
+    student_id: str
+    enrollment_no: int
+    first_name: str
+    last_name: str
+    attendance_id: Optional[int] = None
+    attendance_status: Optional[str] = None
+    attendance_percentage: Optional[float] = None
+    attendance_status_band: Optional[str] = None
+    eligibility_status: Optional[str] = None
+    shortage_flag: Optional[str] = None
+
+class LectureAttendance(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    academic_year: str
+    lecture_date: date
+    day_name: str
+    slot_no: int
+    start_time: time
+    end_time: time
+    lecture_type: Optional[str] = None
+    faculty_id: str
+    faculty_name: Optional[str] = None
+    recorded: bool
+    lecture_number: Optional[int] = None
+    students: List[LectureStudentRow]
+    bands: AttendanceBands
+
+class LectureAttendanceStudentInput(BaseModel):
+    student_id: str
+    attendance_status: Literal["P", "A"]
+
+class LectureAttendanceSaveRequest(BaseModel):
+    semester_no: int
+    academic_year: str
+    lecture_date: date
+    slot_no: int
+    students: List[LectureAttendanceStudentInput]
+    allow_correction: bool = False
+
+class AttendanceSaveSummary(BaseModel):
+    inserted: int
+    updated: int
+    unchanged: int
+
+class LectureAttendanceSaveResult(BaseModel):
+    student_id: str
+    enrollment_no: int
+    operation: str
+    attendance_status: str
+    attendance_percentage: Optional[float] = None
+    attendance_status_band: Optional[str] = None
+    eligibility_status: Optional[str] = None
+    shortage_flag: Optional[str] = None
+    semester_attendance_percentage: Optional[float] = None
+    overall_attendance_percentage: Optional[float] = None
+
+class LectureAttendanceSaveResponse(BaseModel):
+    subject_id: str
+    semester_no: int
+    academic_year: str
+    lecture_date: date
+    day_name: str
+    slot_no: int
+    lecture_number: Optional[int] = None
+    recorded: bool
+    summary: AttendanceSaveSummary
+    students: List[LectureAttendanceSaveResult]
+    semester_attendance_percentage: Optional[float] = None
+    overall_attendance_percentage: Optional[float] = None
+    bands: AttendanceBands
+
+class AttendanceChangeLogItem(BaseModel):
+    change_id: int
+    lecture_date: date
+    slot_no: int
+    student_id: str
+    student_name: Optional[str] = None
+    subject_id: str
+    field_name: str
+    old_value: Optional[Any] = None
+    new_value: Optional[Any] = None
+    operation_type: str
+    changed_by: Optional[str] = None
+    changed_at: datetime
+
+class AttendanceChangeLogResponse(BaseModel):
+    subject_id: str
+    semester_no: int
+    academic_year: str
+    items: List[AttendanceChangeLogItem]
+    pagination: FacultyPagination

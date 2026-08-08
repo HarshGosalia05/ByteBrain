@@ -425,6 +425,7 @@ export type BffErrorCode =
   | "empty"
   | "server_error"
   | "invalid"
+  | "conflict"
 
 export type BffError = {
   status: number
@@ -501,6 +502,18 @@ function toBffError(status: number): BffError {
         status,
         code: "not_found",
         message: "No faculty records were found for this account.",
+      }
+    case 409:
+      return {
+        status,
+        code: "conflict",
+        message: "This record already exists. Refresh and try again.",
+      }
+    case 422:
+      return {
+        status,
+        code: "invalid",
+        message: "One or more entered values are outside the allowed range. Check the maxima and try again.",
       }
     case 503:
       return {
@@ -2389,4 +2402,488 @@ export function importFacultySettings(
 
 export function restoreFacultySettings(): Promise<BffResult<FacultySettingsUpdateResponse>> {
   return postFacultySettingsAction<FacultySettingsUpdateResponse>("settings/workspace/restore", null)
+}
+
+// =============================================================================
+// Marks Entry (plan 14) + Attendance Entry (plan 15) — BFF layer
+// =============================================================================
+
+function invalidateBffKeys(facultyId: string, prefixes: string[]) {
+  const base = `${facultyId}:`
+  for (const key of Array.from(bffCache.keys())) {
+    if (prefixes.some((p) => key.startsWith(`${base}${p}`))) {
+      bffCache.delete(key)
+    }
+  }
+}
+
+async function mutateFastapi<T>(
+  path: string,
+  method: "POST" | "PUT" | "PATCH",
+  body: unknown,
+  invalidatePrefixes: string[],
+): Promise<BffResult<T>> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "Faculty" || !user.faculty_id) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to make changes.",
+      },
+    }
+  }
+  try {
+    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const res = await fetch(`${FASTAPI_URL}/api/v1/faculty/${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      return { ok: false, error: toBffError(res.status) }
+    }
+    const data = (await res.json()) as T
+    invalidateBffKeys(user.faculty_id, invalidatePrefixes)
+    return { ok: true, data, fetchedAt: new Date().toISOString() }
+  } catch {
+    return {
+      ok: false,
+      error: {
+        status: 503,
+        code: "unavailable",
+        message: "The academic service is temporarily unavailable. Please try again later.",
+      },
+    }
+  }
+}
+
+export type MarksBand = { min_percentage: number; grade: string; grade_point: number }
+
+export type MarksCategoryBand = { min_percentage: number; category: string }
+
+export type MarksConfig = {
+  internal_max: number
+  mid_sem_max: number
+  end_sem_max: number
+  total_max: number
+  pass_percentage: number
+  remarks_max_length: number
+  grade_bands: MarksBand[]
+  category_bands: MarksCategoryBand[]
+}
+
+export type SubjectMarksRow = {
+  enrollment_record_id: string
+  student_id: string
+  enrollment_no: number
+  first_name: string
+  last_name: string
+  internal_marks: number | null
+  mid_sem_marks: number | null
+  end_sem_marks: number | null
+  total_marks: number | null
+  percentage: number | null
+  grade: string | null
+  grade_point: number | null
+  result_status: string | null
+  performance_category: string | null
+  remarks: string | null
+  complete: boolean
+}
+
+export type SubjectMarksGrid = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  credits: number | null
+  semester_no: number
+  academic_year: string
+  assessment_type: string | null
+  department_name: string | null
+  config: MarksConfig
+  rows: SubjectMarksRow[]
+  pagination: FacultyPagination
+}
+
+export type MarksRowInput = {
+  enrollment_record_id: string
+  internal_marks?: number | null
+  mid_sem_marks?: number | null
+  end_sem_marks?: number | null
+  remarks?: string | null
+}
+
+export type MarksBatchSaveRequest = {
+  semester_no: number
+  academic_year: string
+  rows: MarksRowInput[]
+}
+
+export type MarksSaveResult = {
+  enrollment_record_id: string
+  student_id: string
+  operation: string
+  fields_changed: string[]
+}
+
+export type MarksSaveSummary = {
+  saved: number
+  inserted: number
+  updated: number
+  unchanged: number
+  rejected: number
+}
+
+export type MarksBatchSaveResponse = {
+  subject_id: string
+  semester_no: number
+  academic_year: string
+  summary: MarksSaveSummary
+  rows: MarksSaveResult[]
+  grid: SubjectMarksGrid
+}
+
+export type MarksChangeLogItem = {
+  change_id: number
+  performance_id: string
+  enrollment_record_id: string
+  student_id: string
+  student_name: string | null
+  subject_id: string
+  field_name: string
+  old_value: unknown
+  new_value: unknown
+  operation_type: string
+  changed_by: string | null
+  changed_at: string
+}
+
+export type MarksChangeLogResponse = {
+  subject_id: string
+  semester_no: number
+  academic_year: string
+  items: MarksChangeLogItem[]
+  pagination: FacultyPagination
+}
+
+export type MarksQueryParams = {
+  semester?: number | null
+  academic_year?: string | null
+  page?: number
+  page_size?: number
+  sort?: string
+  order?: "asc" | "desc"
+}
+
+export function getSubjectMarks(
+  subjectId: string,
+  params: MarksQueryParams = {},
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<SubjectMarksGrid>> {
+  const searchParams = new URLSearchParams()
+  if (params.semester !== undefined) searchParams.set("semester", String(params.semester))
+  if (params.academic_year !== undefined)
+    searchParams.set("academic_year", params.academic_year ?? "")
+  if (params.page) searchParams.set("page", String(params.page))
+  if (params.page_size) searchParams.set("page_size", String(params.page_size))
+  if (params.sort) searchParams.set("sort", params.sort)
+  if (params.order) searchParams.set("order", params.order)
+  const query = searchParams.toString()
+  const path = query ? `subjects/${subjectId}/marks?${query}` : `subjects/${subjectId}/marks`
+  return callFastapi<SubjectMarksGrid>(path, BFF_TTL_MS, opts?.bypassCache)
+}
+
+export function saveSubjectMarks(
+  subjectId: string,
+  payload: MarksBatchSaveRequest,
+): Promise<BffResult<MarksBatchSaveResponse>> {
+  return mutateFastapi<MarksBatchSaveResponse>(
+    `subjects/${subjectId}/marks`,
+    "PUT",
+    payload,
+    [`subjects/${subjectId}/marks`, `subjects/${subjectId}`],
+  )
+}
+
+export function getMarksChangeLog(
+  subjectId: string,
+  params: Pick<MarksQueryParams, "semester" | "academic_year" | "page" | "page_size"> = {},
+): Promise<BffResult<MarksChangeLogResponse>> {
+  const searchParams = new URLSearchParams()
+  if (params.semester !== undefined) searchParams.set("semester", String(params.semester))
+  if (params.academic_year !== undefined)
+    searchParams.set("academic_year", params.academic_year ?? "")
+  if (params.page) searchParams.set("page", String(params.page))
+  if (params.page_size) searchParams.set("page_size", String(params.page_size))
+  const query = searchParams.toString()
+  const path = query ? `subjects/${subjectId}/marks/log?${query}` : `subjects/${subjectId}/marks/log`
+  return callFastapi<MarksChangeLogResponse>(path, BFF_TTL_MS)
+}
+
+export type AttendanceSession = {
+  day_name: string
+  slot_no: number
+  start_time: string
+  end_time: string
+  subject_id: string
+  subject_name: string
+  faculty_id: string
+  lecture_type: string | null
+  recorded_lectures: number | null
+}
+
+export type AttendanceEntryStudent = {
+  enrollment_record_id: string
+  student_id: string
+  enrollment_no: number
+  first_name: string
+  last_name: string
+  attendance_percentage: number | null
+  attendance_status: string | null
+  eligibility_status: string | null
+  shortage_flag: string | null
+}
+
+export type AttendanceBands = {
+  critical_threshold: number
+  compliance_threshold: number
+  excellent_threshold: number
+  good_split: number
+}
+
+export type AttendanceEntryMeta = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  semester_no: number
+  academic_year: string
+  department_code: number
+  sessions: AttendanceSession[]
+  students: AttendanceEntryStudent[]
+  bands: AttendanceBands
+}
+
+export type LectureStudentRow = {
+  enrollment_record_id: string
+  student_id: string
+  enrollment_no: number
+  first_name: string
+  last_name: string
+  attendance_id: number | null
+  attendance_status: string | null
+  attendance_percentage: number | null
+  attendance_status_band: string | null
+  eligibility_status: string | null
+  shortage_flag: string | null
+}
+
+export type LectureAttendance = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  semester_no: number
+  academic_year: string
+  lecture_date: string
+  day_name: string
+  slot_no: number
+  start_time: string
+  end_time: string
+  lecture_type: string | null
+  faculty_id: string
+  faculty_name: string | null
+  recorded: boolean
+  lecture_number: number | null
+  students: LectureStudentRow[]
+  bands: AttendanceBands
+}
+
+export type LectureAttendanceStudentInput = {
+  student_id: string
+  attendance_status: "P" | "A"
+}
+
+export type LectureAttendanceSaveRequest = {
+  semester_no: number
+  academic_year: string
+  lecture_date: string
+  slot_no: number
+  students: LectureAttendanceStudentInput[]
+  allow_correction?: boolean
+}
+
+export type AttendanceSaveSummary = {
+  inserted: number
+  updated: number
+  unchanged: number
+}
+
+export type LectureAttendanceSaveResult = {
+  student_id: string
+  enrollment_no: number
+  operation: string
+  attendance_status: string
+  attendance_percentage: number | null
+  attendance_status_band: string | null
+  eligibility_status: string | null
+  shortage_flag: string | null
+  semester_attendance_percentage: number | null
+  overall_attendance_percentage: number | null
+}
+
+export type LectureAttendanceSaveResponse = {
+  subject_id: string
+  semester_no: number
+  academic_year: string
+  lecture_date: string
+  day_name: string
+  slot_no: number
+  lecture_number: number | null
+  recorded: boolean
+  summary: AttendanceSaveSummary
+  students: LectureAttendanceSaveResult[]
+  semester_attendance_percentage: number | null
+  overall_attendance_percentage: number | null
+  bands: AttendanceBands
+}
+
+export type AttendanceChangeLogItem = {
+  change_id: number
+  lecture_date: string
+  slot_no: number
+  student_id: string
+  student_name: string | null
+  subject_id: string
+  field_name: string
+  old_value: unknown
+  new_value: unknown
+  operation_type: string
+  changed_by: string | null
+  changed_at: string
+}
+
+export type AttendanceChangeLogResponse = {
+  subject_id: string
+  semester_no: number
+  academic_year: string
+  items: AttendanceChangeLogItem[]
+  pagination: FacultyPagination
+}
+
+export type CorrectedAttendanceRecord = {
+  attendance_id: number
+  student_id: string
+  subject_id: string
+  lecture_date: string
+  lecture_number: number
+  operation: string
+  attendance_status: string
+  attendance_percentage: number | null
+  attendance_status_band: string | null
+  eligibility_status: string | null
+  shortage_flag: string | null
+  semester_attendance_percentage: number | null
+  overall_attendance_percentage: number | null
+}
+
+export type AttendanceEntryParams = {
+  semester?: number | null
+  academic_year?: string | null
+}
+
+export function getAttendanceEntryMeta(
+  subjectId: string,
+  params: AttendanceEntryParams = {},
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<AttendanceEntryMeta>> {
+  const searchParams = new URLSearchParams()
+  if (params.semester !== undefined) searchParams.set("semester", String(params.semester))
+  if (params.academic_year !== undefined)
+    searchParams.set("academic_year", params.academic_year ?? "")
+  const query = searchParams.toString()
+  const path = query
+    ? `subjects/${subjectId}/attendance/meta?${query}`
+    : `subjects/${subjectId}/attendance/meta`
+  return callFastapi<AttendanceEntryMeta>(path, BFF_TTL_MS, opts?.bypassCache)
+}
+
+export function getLectureAttendance(
+  subjectId: string,
+  params: {
+    lecture_date: string
+    slot_no: number
+    semester?: number | null
+    academic_year?: string | null
+  },
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<LectureAttendance>> {
+  const searchParams = new URLSearchParams()
+  searchParams.set("lecture_date", params.lecture_date)
+  searchParams.set("slot_no", String(params.slot_no))
+  if (params.semester !== undefined) searchParams.set("semester", String(params.semester))
+  if (params.academic_year !== undefined)
+    searchParams.set("academic_year", params.academic_year ?? "")
+  const query = searchParams.toString()
+  return callFastapi<LectureAttendance>(
+    `subjects/${subjectId}/attendance/lecture?${query}`,
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function saveLectureAttendance(
+  subjectId: string,
+  payload: LectureAttendanceSaveRequest,
+): Promise<BffResult<LectureAttendanceSaveResponse>> {
+  return mutateFastapi<LectureAttendanceSaveResponse>(
+    `subjects/${subjectId}/attendance/lecture`,
+    "POST",
+    payload,
+    [
+      `subjects/${subjectId}/attendance`,
+      `attendance/`,
+      `subjects/${subjectId}`,
+      `dashboard/summary`,
+    ],
+  )
+}
+
+export function correctLectureAttendance(
+  subjectId: string,
+  attendanceId: number,
+  status: "P" | "A",
+): Promise<BffResult<CorrectedAttendanceRecord>> {
+  return mutateFastapi<CorrectedAttendanceRecord>(
+    `attendance/${attendanceId}`,
+    "PATCH",
+    { status },
+    [
+      `subjects/${subjectId}/attendance`,
+      `attendance/`,
+      `subjects/${subjectId}`,
+      `dashboard/summary`,
+    ],
+  )
+}
+
+export function getAttendanceChangeLog(
+  subjectId: string,
+  params: AttendanceEntryParams & { page?: number; page_size?: number } = {},
+): Promise<BffResult<AttendanceChangeLogResponse>> {
+  const searchParams = new URLSearchParams()
+  if (params.semester !== undefined) searchParams.set("semester", String(params.semester))
+  if (params.academic_year !== undefined)
+    searchParams.set("academic_year", params.academic_year ?? "")
+  if (params.page) searchParams.set("page", String(params.page))
+  if (params.page_size) searchParams.set("page_size", String(params.page_size))
+  const query = searchParams.toString()
+  const path = query
+    ? `subjects/${subjectId}/attendance/log?${query}`
+    : `subjects/${subjectId}/attendance/log`
+  return callFastapi<AttendanceChangeLogResponse>(path, BFF_TTL_MS)
 }

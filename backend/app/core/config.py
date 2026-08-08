@@ -75,6 +75,21 @@ class Settings(BaseSettings):
     SETTINGS_READINESS_EXPORT_WEIGHT: float = 0.10
     SETTINGS_READINESS_PERSONALIZATION_WEIGHT: float = 0.10
 
+    # Marks Entry (plan 14): locked V1 scope + component maxima + pass mark
+    MARKS_SCOPE_SEMESTER: int = 7
+    MARKS_SCOPE_ACADEMIC_YEAR: str = "2026-27"
+    MARKS_INTERNAL_MAX: int = 20
+    MARKS_MID_SEM_MAX: int = 50
+    MARKS_END_SEM_MAX: int = 70
+    MARKS_TOTAL_MAX: int = 140
+    MARKS_PASS_PERCENTAGE: float = 40.0
+    MARKS_REMARKS_MAX_LENGTH: int = 500
+
+    # Attendance Entry (plan 15): locked V1 scope + Average/Good split point
+    ATTENDANCE_SCOPE_SEMESTER: int = 7
+    ATTENDANCE_SCOPE_ACADEMIC_YEAR: str = "2026-27"
+    ATTENDANCE_STATUS_GOOD_SPLIT: float = 80.0
+
     model_config = SettingsConfigDict(env_file="../.env.local", env_file_encoding="utf-8", extra="ignore")
 
     @property
@@ -84,3 +99,30 @@ class Settings(BaseSettings):
         return f"postgresql://{self.DB_USER}:{encoded_password}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
 settings = Settings()
+
+# --- Marks Entry band tables (plan 14 section 5.3) ---------------------------
+# Grade bands: (min_percentage, grade, grade_point), checked highest-first;
+# anything below the lowest band is the fail grade.
+MARKS_GRADE_BANDS = [
+    (90.0, "O", 10),
+    (80.0, "A+", 9),
+    (70.0, "A", 8),
+    (60.0, "B+", 7),
+    (50.0, "B", 6),
+    (40.0, "C", 5),
+]
+MARKS_GRADE_FAIL = ("F", 0)
+
+# Performance category bands: (min_percentage, category), checked highest-first;
+# anything below the lowest band is the low-performer category.
+MARKS_CATEGORY_BANDS = [
+    (90.0, "Top"),
+    (80.0, "Above Average"),
+    (60.0, "Average"),
+    (40.0, "Below Average"),
+]
+MARKS_CATEGORY_LOW = "Low Performer"
+
+# --- Attendance Entry aggregate bands (plan 15 section 6.3, verified vs seed) --
+# Critical < 60 | Low 60-75 | Average 75-80 | Good 80-90 | Excellent >= 90
+# Thresholds reused from the Threshold Engine settings above.

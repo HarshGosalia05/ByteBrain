@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 import asyncpg
+from datetime import date
 from typing import Any, Dict, List, Optional
 from app.api.dependencies import get_db_pool, require_faculty_role
 from app.services.faculty_service import FacultyService
@@ -45,6 +46,15 @@ from app.schemas.faculty import (
     WorkloadTimeline,
     WorkloadStudentsResponse,
     WorkloadHighlightsResponse,
+    SubjectMarksGrid,
+    MarksBatchSaveRequest,
+    MarksBatchSaveResponse,
+    MarksChangeLogResponse,
+    AttendanceEntryMeta,
+    LectureAttendance,
+    LectureAttendanceSaveRequest,
+    LectureAttendanceSaveResponse,
+    AttendanceChangeLogResponse,
 )
 from app.schemas.settings import (
     SettingsResponse,
@@ -64,6 +74,16 @@ def _faculty_id_or_error(user: dict) -> str:
     if not faculty_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No faculty_id found in user token")
     return faculty_id
+
+def _writer_user_id_or_error(user: dict) -> str:
+    """Return the audit identity for change-log rows (real user_id, fallback faculty_id)."""
+    user_id = user.get("user_id")
+    if user_id:
+        return user_id
+    faculty_id = user.get("faculty_id")
+    if faculty_id:
+        return faculty_id
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No user identity found in token")
 
 async def _settings_user_id_or_error(user: dict, service: SettingsService) -> str:
     """Resolve the `users.user_id` owning this session's preferences.
@@ -871,4 +891,120 @@ async def export_workload(
         content="\r\n".join(lines),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+# =============================================================================
+# Marks Entry (plan 14)
+# =============================================================================
+
+@router.get("/subjects/{subject_id}/marks", response_model=SubjectMarksGrid)
+async def get_subject_marks_grid(
+    subject_id: str,
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    sort: str = Query("name"),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_subject_marks_grid(
+        _faculty_id_or_error(user), subject_id, semester, academic_year,
+        page, page_size, sort, order,
+    )
+
+@router.put("/subjects/{subject_id}/marks", response_model=MarksBatchSaveResponse)
+async def save_subject_marks(
+    subject_id: str,
+    request: MarksBatchSaveRequest,
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.save_subject_marks(
+        _faculty_id_or_error(user), subject_id, request,
+        _writer_user_id_or_error(user),
+    )
+
+@router.get("/subjects/{subject_id}/marks/log", response_model=MarksChangeLogResponse)
+async def get_marks_change_log(
+    subject_id: str,
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_marks_change_log(
+        _faculty_id_or_error(user), subject_id, semester, academic_year, page, page_size,
+    )
+
+# =============================================================================
+# Attendance Entry (plan 15)
+# =============================================================================
+
+@router.get("/subjects/{subject_id}/attendance/meta", response_model=AttendanceEntryMeta)
+async def get_attendance_entry_meta(
+    subject_id: str,
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_attendance_entry_meta(
+        _faculty_id_or_error(user), subject_id, semester, academic_year,
+    )
+
+@router.get("/subjects/{subject_id}/attendance/lecture", response_model=LectureAttendance)
+async def get_lecture_attendance(
+    subject_id: str,
+    lecture_date: date = Query(...),
+    slot_no: int = Query(...),
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_lecture_attendance(
+        _faculty_id_or_error(user), subject_id, semester, academic_year,
+        lecture_date, slot_no,
+    )
+
+@router.post("/subjects/{subject_id}/attendance/lecture", response_model=LectureAttendanceSaveResponse)
+async def save_lecture_attendance(
+    subject_id: str,
+    request: LectureAttendanceSaveRequest,
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.save_lecture_attendance(
+        _faculty_id_or_error(user), subject_id, request,
+        _writer_user_id_or_error(user),
+    )
+
+@router.patch("/attendance/{attendance_id}")
+async def correct_attendance_record(
+    attendance_id: int,
+    status: str = Body(..., embed=True),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.correct_attendance_record(
+        _faculty_id_or_error(user), attendance_id, status,
+        _writer_user_id_or_error(user),
+    )
+
+@router.get("/subjects/{subject_id}/attendance/log", response_model=AttendanceChangeLogResponse)
+async def get_attendance_change_log(
+    subject_id: str,
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_attendance_change_log(
+        _faculty_id_or_error(user), subject_id, semester, academic_year, page, page_size,
     )
