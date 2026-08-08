@@ -11,7 +11,7 @@
 | Repo root | `D:\KenexAI\ByteBrain` |
 | Ownership | Lead Solution Architect / Technical Documentation Lead |
 
-> This document is additive to the plan folder. It summarizes and cross-references the locked planning documents (`plan/00`–`plan/06`, `plan/faculty/07`–`13`, `plan/student/07`) and the implemented codebase. It introduces no new architecture. Where this document conflicts with a locked plan file, the locked plan file wins.
+> This document is additive to the plan folder. It summarizes and cross-references the locked planning documents (`plan/00`–`plan/06`, `plan/faculty/07`–`15`, `plan/student/07`) and the implemented codebase. It introduces no new architecture. Where this document conflicts with a locked plan file, the locked plan file wins. Plans 14 (Marks Entry) and 15 (Attendance Entry) are **Planned, not implemented**.
 
 ---
 
@@ -433,7 +433,7 @@ plan/
 
 ### 6.1 Connected Datasets
 
-All data lives in one Supabase PostgreSQL database, seeded by 13 SQL files. ~13,132 rows across 14 tables, organized in four functional groups.
+All data lives in one Supabase PostgreSQL database, seeded by 13 SQL files. ~19,297 rows across 16 tables, organized in four functional groups.
 
 **Master data layer**
 
@@ -460,14 +460,18 @@ All data lives in one Supabase PostgreSQL database, seeded by 13 SQL files. ~13,
 | `lifestyle_survey` | `student_id`, `average_sleep_hours`, `daily_study_hours`, `stress_level`, `mental_wellbeing`, `part_time_job` | 80 | Sensitive self-reported context |
 | `career_preferences` | `student_id`, `preferred_domain`, `dream_job_role`, `preferred_industry`, `target_package_lpa`, `placement_readiness_level` | 80 | Grounds career guidance |
 | `faculty_student_map` | `faculty_student_map_id` (PK), `faculty_id`, `student_id`, `mentor_role`, `mentor_since`, `status` | 80 | Second bridge table; mentorship relationship |
+| `weekly_timetable_07` | `timetable_id` (PK), `department_code`, `semester_no`, `academic_year`, `day_name`, `slot_no`, `start_time`, `end_time`, `subject_id`, `faculty_id`, `lecture_type` | 15 | Sem-7 CSE weekly timetable (5 days × 3 slots); live table exists; migration stub `10` is empty; **Planned as the validation source for Attendance Entry (plan 15)** |
+| `daily_attendance_07` | `attendance_id` (PK), `student_id`, `enrollment_no`, `subject_id`, `faculty_id`, `lecture_date`, `lecture_number`, `day_name`, `attendance_status` (P/A) | 6,150 | **Canonical lecture-level attendance** (50 students × 123 sessions); live table exists; migration stub `11` is empty; **Planned as the write/source-of-truth table for Attendance Entry (plan 15)** |
 
 **Intelligence output layer**
 
 | Table | Key columns | Rows | Purpose |
 |---|---|---|---|
 | `risk_predictions` | `risk_prediction_id` (PK), `student_id`, `prediction_status`, `prediction_timestamp`, `created_at` | 80 | Versioned ML output (all rows currently `Pending`, no timestamps) |
-| `genai_insights` | — | 0 | **Documented in `plan/03` §7.2 but no DDL/table/seed exists yet** |
-| `users` | `user_id` (PK), `username`, `password`, `role`, `student_id`, `faculty_id`, `department`, `is_active` | 106 | Auth bridge (role: Student / Faculty / Admin) |
+| `student_messages` | `message_id` (PK), student messaging records | 0 | Present in live DB; not yet consumed by any module |
+| `users` | `user_id` (PK), `username`, `password`, `role`, `student_id`, `faculty_id`, `department`, `is_active`, `preferences` (jsonb) | 106 | Auth bridge (role: Student / Faculty / Admin); `preferences` column added by `14_users_preferences_column.sql` |
+
+> **Note:** `genai_insights` is documented in `plan/03` §7.2 but does **not** exist as a live table. `student_messages` exists (0 rows). Two future audit tables are planned — `performance_change_log` (plan 14) and `attendance_change_log` (plan 15) — no DDL created yet.
 
 ### 6.2 Relationships & Keys
 
@@ -494,6 +498,10 @@ student_subject_enrollment (enrollment_record_id PK)
     ◄── student_subject_performance.enrollment_record_id             (1:1)
     ◄── attendance.enrollment_record_id                             (1:1)
 
+daily_attendance_07 (lecture-level, canonical write source)
+    ◄── weekly_timetable_07 (subject/date/slot/faculty validation)
+    ◄── drives recompute of aggregate `attendance` + semester summaries + students.overall_attendance_percentage (plans 14/15)
+
 STITCH KEYS:
   Student_ID    = canonical cross-table person key (stable)
   Enrollment_No = repeated academic number preserved in fact tables
@@ -511,13 +519,17 @@ STITCH KEYS:
 
 | Readiness axis | Status |
 |---|---|
-| Schema (14 tables, 4 groups) | ✅ Present and seeded |
+| Schema (16 tables, 4 groups) | ✅ Present and seeded |
 | Student-grain model | ✅ Present |
 | Bridge tables with history | ✅ Present |
 | Multi-tenancy readiness | ✅ Documented (`plan/03` §8); tables compatible with an institution identifier |
 | ETL pipeline (Extract→Stage→Stitch→Load→Derive) | ❌ Design-only; zero ETL code |
 | Derived-table refresh discipline | ❌ `student_semester_summary` seeded directly; no ETL to refresh it |
-| `GenAI_Insights` table | ❌ Planned only |
+| **Lecture-level attendance canonical source** | 🟡 `daily_attendance_07` + `weekly_timetable_07` exist and are seeded, but not yet wired into code — **planned as the write path in plan 15** |
+| **Aggregate `attendance` reconciliation on write** | 🟡 Planned in plan 15 (recompute aggregate + semester summaries + `overall_attendance_percentage` transactionally) |
+| **Marks write path** | 🟡 Planned in plan 14 (`student_subject_performance` updates, server-side derivation, audit) |
+| **Audit change-log tables** | 🟡 Planned — `performance_change_log` (14), `attendance_change_log` (15); no DDL yet |
+| `GenAI_Insights` table | ❌ Planned only (does not exist as a live table) |
 | Student360 student-grain view | ❌ Planned for reuse across HOD/Admin/Student dashboards |
 
 ---
@@ -592,11 +604,15 @@ Each analytics module has a dedicated `filter-bar.tsx` sharing one URL-driven pa
 | **Performance Analytics** (`/faculty/performance`) | `10` | ✅ KPIs + SoSDelta + FreshnessStrip + FilterBar + 7 ChartCards + Insights + LearningGaps + Students table + CSV export | ✅ all 8 endpoints verified; typecheck/lint/build green | ✅ Shipped (Slices 1–5) | ChartCard, Threshold Engine, Rule-Based Insight Engine, StudentDrawer, Export layer |
 | **Attendance Analytics** (`/faculty/attendance`) | `11` | ✅ 10 endpoints; Charts (incl. heatmap + scatter), Governance, Highlights, Students | ✅ live verification | ✅ Shipped | HeatmapGrid, ScatterChart, Governance bands |
 | **Teaching Workload** (`/faculty/workload`) | `12` | ✅ 14 endpoints; 15 ChartCards, matrices, benchmark, timeline, capacity gauge, forecast | ✅ live verification | ✅ Shipped | CapacityGauge, WorkloadMatrixGrid, `_analytics_where` consolidation |
+| **Marks Entry** (`/faculty/subjects/[id]/marks`) | `14` (approved) | ⬜ **Planned** — batch + single-row write path to `student_subject_performance`, server-side derivation, `performance_change_log` audit | ⬜ not started | ⬜ Not shipped | Subject Detail scope check, Threshold Engine, BFF mutation pattern |
+| **Attendance Entry** (`/faculty/attendance/entry`) | `15` (approved) | ⬜ **Planned** — lecture-level entry into `daily_attendance_07`, timetable-validated, aggregate `attendance` recompute on write, `attendance_change_log` audit | ⬜ not started | ⬜ Not shipped | Timetable scope check, Threshold Engine bands, BFF mutation pattern |
 | **Settings** (`/faculty/settings`) | `13` (approved) | ⬜ **Placeholder** `placeholder-page.tsx` | ⬜ not started | ⬜ Not shipped | Preference Engine (designed) |
 
 ### 8.1 Faculty sidebar (8 items)
 
 `components/faculty/shell/side-nav.tsx` — NAV_ITEMS: Dashboard, Profile, Students, Subjects, Performance Analytics, Attendance Analytics, Teaching Workload, Settings.
+
+> **Navigation decision (plans 14/15):** Marks Entry and Attendance Entry are reached via deep links from Subject context and Attendance Analytics (plus an optional Dashboard "needs attention" strip row), **not** new sidebar items — the sidebar stays at 8 items to avoid clutter.
 
 ### 8.2 Completed analytics surface per module
 
@@ -902,6 +918,8 @@ Every analytics module flows through one foundation: **repository (parameterized
 
 | Work | Status | Notes |
 |---|---|---|
+| **Faculty Marks Entry** (`/faculty/subjects/[id]/marks`) | ⬜ Planned (documented in `plan/14`) | Write path to `student_subject_performance` for authorized teaching scope (V1: Sem-7 CSE 2026-27, SUB0050–56). Server-side derivation (total/percentage/grade/result/category), all-or-nothing batch, `performance_change_log` audit. Not implemented. |
+| **Faculty Attendance Entry** (`/faculty/attendance/entry`) | ⬜ Planned (documented in `plan/15`) | Lecture-level entry into `daily_attendance_07` (canonical), timetable-validated, aggregate `attendance` + semester summary + overall attendance recompute on write, `attendance_change_log` audit. Not implemented. |
 | **Faculty Settings** (`/faculty/settings`) | ⬜ Planned (documented in `plan/13`) | Enterprise Workspace & Preferences Center; JSONB `preferences` column on `users`; Preference Engine; scoped resets; workspace backup/import/export; readiness score. Currently a placeholder page. |
 | **Admin Dashboard** | ⬜ Planned | Placeholder page exists at `/admin/dashboard`; no backend endpoints. |
 | **Student Notifications / Settings** | ⬜ Planned | Placeholder empty states exist; write APIs deferred. |
@@ -1014,9 +1032,10 @@ Which shared assets are reused across modules:
 
 | Category | Count |
 |---|---|
-| Planning documents (Markdown) | 18 (7 root + 7 faculty + 1 student + 1 status + 2 reference MD) |
+| Planning documents (Markdown) | 20 (7 root + 9 faculty + 1 student + 1 status + 2 reference MD) |
 | Reference documents | 3 (Blueprint .md/.docx, Handover) |
 | Implemented modules | 9 (Student Module, Faculty Dashboard/Profile/Students/Subjects/Performance/Attendance/Workload, shared architecture) |
+| Planned (approved, not implemented) modules | 4 (Faculty Settings, Marks Entry, Attendance Entry, Admin Dashboard) |
 | Frontend routes (pages) | 19 (`app/**/page.tsx`) |
 | Frontend components | ~91 (`ui` 10, `shared` 18, `faculty` 52, `student` 9, `login`/`theme` 2) |
 | BFF route handlers | 7 (`app/api/**/route.ts`) |
@@ -1026,9 +1045,9 @@ Which shared assets are reused across modules:
 | Backend repository methods | 66 (63 faculty + 3 student) |
 | Backend service methods | 47 (44 faculty + 3 student) |
 | Backend schema models | 112 (107 faculty + 5 student) |
-| Database tables | 14 |
+| Database tables | 16 |
 | Seed SQL files | 13 |
-| Seed data rows | ~13,132 (80 students, 25 faculty, 99 subjects, 3,850 enrollments/performance/attendance, 500 semester summaries) |
+| Seed data rows | ~19,297 (80 students, 25 faculty, 99 subjects, 3,850 enrollments/performance/attendance, 500 semester summaries, 6,150 daily_attendance_07, 15 weekly_timetable_07) |
 | Analytics modules (live) | 3 (Performance, Attendance, Workload) |
 | Reusable engines | 3 (Threshold Engine, Rule-Based Insight Engine, shared analytics layer) |
 | Shared chart components | 6 |
@@ -1043,14 +1062,16 @@ Based on `plan/06` §3/§9 and the current state, the next recommended sequence:
 
 | # | Work item | Prerequisite | Notes |
 |---|---|---|---|
-| 1 | **Faculty Settings implementation** | `plan/13` (approved) | Add `preferences` JSONB column; Preference Engine; workspace, dashboard, analytics, notifications, accessibility, export, security, reset surfaces. |
-| 2 | **Admin Dashboard** | Student/Faculty APIs | Operational readiness, data completeness, platform health; first consumer of aggregate analytics. |
-| 3 | **ETL pipeline** | `plan/03` | Extract → Validate/Stage → Stitch → Load → Derive; populate/refresh `student_semester_summary`; quarantine + lineage. Unblocks M2. |
-| 4 | **Descriptive analytics completion** (learning-gap drill-downs, HOD scoping) | shared analytics layer | Extend existing endpoints; no new engines. |
-| 5 | **ML feature engineering + batch predictions** | ETL + analytics | Feature tables, XGBoost/logistic regression, MLflow registry, SHAP, `risk_predictions` provenance; M4. |
-| 6 | **GenAI adapter + insight layer** | ML | Provider-agnostic adapter, batch generation, `genai_insights`, cost caps; M5. |
-| 7 | **Dashboard completion (Admin; Student/Faculty polish)** | ML/GenAI outputs | Replace remaining placeholders; insights panels; M7. |
-| 8 | **Operational hardening** | all above | Docker Compose full stack, health checks, secrets manager, environments, observability, formal ADRs; M6. |
+| 1 | **Faculty Marks Entry implementation** | `plan/14` (approved) | Write path to `student_subject_performance`; server-side derivation; `performance_change_log`; `/faculty/subjects/[id]/marks`. |
+| 2 | **Faculty Attendance Entry implementation** | `plan/15` (approved) | `daily_attendance_07` canonical; timetable validation; aggregate `attendance` + summary recompute on write; `attendance_change_log`; `/faculty/attendance/entry`. |
+| 3 | **Faculty Settings implementation** | `plan/13` (approved) | Add `preferences` JSONB column; Preference Engine; workspace, dashboard, analytics, notifications, accessibility, export, security, reset surfaces. |
+| 4 | **Admin Dashboard** | Student/Faculty APIs | Operational readiness, data completeness, platform health; first consumer of aggregate analytics. |
+| 5 | **ETL pipeline** | `plan/03` | Extract → Validate/Stage → Stitch → Load → Derive; populate/refresh `student_semester_summary`; quarantine + lineage. Unblocks M2. |
+| 6 | **Descriptive analytics completion** (learning-gap drill-downs, HOD scoping) | shared analytics layer | Extend existing endpoints; no new engines. |
+| 7 | **ML feature engineering + batch predictions** | ETL + analytics | Feature tables, XGBoost/logistic regression, MLflow registry, SHAP, `risk_predictions` provenance; M4. |
+| 8 | **GenAI adapter + insight layer** | ML | Provider-agnostic adapter, batch generation, `genai_insights`, cost caps; M5. |
+| 9 | **Dashboard completion (Admin; Student/Faculty polish)** | ML/GenAI outputs | Replace remaining placeholders; insights panels; M7. |
+| 10 | **Operational hardening** | all above | Docker Compose full stack, health checks, secrets manager, environments, observability, formal ADRs; M6. |
 
 **Rules:** backend-first per module; phases may start in parallel when the dependency is a stable interface; a phase is only complete when its dependencies are complete (`plan/06` §9.2).
 
@@ -1073,6 +1094,9 @@ Only real remaining work, no invented concerns:
 | 9 | Untracked root artifacts | Low | `next.err.log`, `next.log`, `plan_demo.zip` at repo root — cleanup/`.gitignore` candidates. |
 | 10 | `hooks/` empty | Low | No custom hooks needed yet (React built-ins + `useSyncExternalStore` cover current needs). |
 | 11 | No formal ADRs yet | Low | Implicit decisions (RLS disabled, direct `pg`, custom auth, XGBoost, MLflow, Compose, batch ETL) should be formalized per `plan/06` §17. |
+| 12 | Empty migration stubs `10_weekly_timetable_07.sql` / `11_daily_attendance_07.sql` | Medium | The live tables exist and are seeded, but the migration files are 0-byte stubs, so repo history cannot recreate them. Plans 14/15 require documenting (not re-executing) these tables in migration history without duplicating or destroying live data; the two new audit tables (`performance_change_log`, `attendance_change_log`) must be added as forward migrations only. |
+| 13 | Sem-7 marks incomplete (end_sem NULL) | Low (data, not code) | All 350 V1-scope `student_subject_performance` rows have `end_sem_marks` NULL; Marks Entry (plan 14) must surface this state and complete rows via entry — never fabricate values. |
+| 14 | `daily_attendance_07` / `weekly_timetable_07` not yet wired | Medium | Live but unreferenced by code; Attendance Entry (plan 15) makes `daily_attendance_07` the canonical write source and reconciles the aggregate `attendance` table on write so existing analytics remain read-compatible. |
 
 ---
 
@@ -1085,9 +1109,9 @@ Concretely:
 - A **stable identity and routing foundation** — custom auth, httpOnly session cookies, role-based dashboards, direct PostgreSQL access — that all later modules build on without rework.
 - A **FastAPI analytics backend** (46 endpoints) with a strict repository → service → API layering, 107+ Pydantic v2 models, a centralized Threshold Engine, and a deterministic Rule-Based Insight Engine that keeps every output explainable and free of prediction/AI language.
 - A **Next.js 16 interface** built on a TweakCN/base-nova design system with 90+ components, a reusable chart library, URL-driven filters, BFF caching, server actions, and full loading/empty/error/freshness state discipline.
-- A **verified, consistent warehouse** of 14 tables and ~13,130 seeded rows around a student-grain model with two first-class bridge tables.
+- A **verified, consistent warehouse** of 16 tables and ~19,300 seeded rows around a student-grain model with two first-class bridge tables, plus the live `daily_attendance_07` / `weekly_timetable_07` operational tables (canonical attendance-write source, planned in `plan/15`).
 - **Completed vertical slices**: Student Module V1 (7 pages), Faculty Module V1 (7 of 8 sections), and three descriptive analytics modules (Performance, Attendance, Teaching Workload) that share one analytics foundation.
-- **Documented future**: 18 planning documents lock the path to Settings, Admin, ETL, ML, GenAI, HOD, TPO, and Student360 without requiring an architectural rewrite.
+- **Documented future**: 20 planning documents lock the path to Marks Entry, Attendance Entry, Settings, Admin, ETL, ML, GenAI, HOD, TPO, and Student360 without requiring an architectural rewrite. Marks Entry (`plan/14`) and Attendance Entry (`plan/15`) are **Planned — approved but not implemented**; `daily_attendance_07` / `weekly_timetable_07` are planned as the canonical lecture-attendance write source with transactional reconciliation into the existing aggregate `attendance` table and semester/overall attendance summaries, while all existing analytics read paths stay unchanged.
 
 What KenexAI is **not** yet: it is not an ETL-driven warehouse, not a predictive platform, and not a GenAI system. Those layers are specified, planned, and architecturally accommodated — but they remain the next chapters, not the current state. The project's discipline, however, is already production-grade: backend-first delivery, verified milestones, deterministic analytics, role-scoped access, and a documentation set that lets any engineer or AI assistant reconstruct the entire system from one folder.
 
