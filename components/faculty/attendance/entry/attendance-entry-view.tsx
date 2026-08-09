@@ -1,24 +1,23 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import {
-  ArrowLeft,
   CalendarDays,
-  CheckCircle2,
-  Clock,
+  Check,
+  CheckCheck,
+  Eraser,
+  History,
   LoaderCircle,
   RefreshCw,
   Save,
+  Search,
   TriangleAlert,
-  Users,
+  UserX,
+  X,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Select,
   SelectContent,
@@ -28,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -36,60 +36,111 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/shared/state/empty-state"
 import { ErrorState } from "@/components/shared/state/error-state"
+import { AttendanceChangeHistory } from "./attendance-change-history"
 import type {
   AttendanceEntryMeta,
   AttendanceSession,
   FacultyClassCard,
   LectureAttendance,
-  LectureAttendanceSaveRequest,
   LectureAttendanceSaveResponse,
 } from "@/lib/faculty-api"
+import { cn } from "@/lib/utils"
 
-import { AttendanceChangeHistory } from "./attendance-change-history"
+type Status = "P" | "A"
+type StatusMap = Record<string, Status>
 
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+type SessionTerm = { semester: number; academic_year: string | null }
 
-function todayString(): string {
-  const now = new Date()
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
+type Notice = { kind: "success" | "error"; message: string }
+
+type BffError = { status: number; code: string; message: string }
+type BffData<T> =
+  | { ok: true; data: T; fetchedAt: string }
+  | { ok: false; error: BffError }
+
+async function fetchMeta(
+  subjectId: string,
+  term: SessionTerm | null,
+): Promise<BffData<AttendanceEntryMeta>> {
+  const params = new URLSearchParams({ refresh: "1" })
+  if (term?.semester) params.set("semester", String(term.semester))
+  if (term?.academic_year) params.set("academic_year", term.academic_year)
+  const res = await fetch(`/api/faculty/subjects/${subjectId}/attendance?${params.toString()}`)
+  return (await res.json()) as BffData<AttendanceEntryMeta>
 }
 
-function weekdayOf(date: string): string {
-  return WEEKDAYS[new Date(`${date}T00:00:00`).getDay()]
-}
-
-function formatTime(value: string): string {
-  if (!value) return ""
-  const [hours, minutes] = value.split(":")
-  if (hours === undefined || minutes === undefined) return value
-  return `${hours}:${minutes}`
-}
-
-function sessionLabel(session: AttendanceSession): string {
-  const type = session.lecture_type ? ` · ${session.lecture_type}` : ""
-  return `Slot ${session.slot_no} · ${formatTime(session.start_time)}–${formatTime(
-    session.end_time,
-  )}${type}`
-}
-
-function SummaryStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string
-  value: number | string | null
-  tone?: "good" | "bad"
-}) {
-  const color = tone === "good" ? "text-chart-2" : tone === "bad" ? "text-destructive" : ""
-  return (
-    <span className="whitespace-nowrap text-sm">
-      <span className="text-muted-foreground">{label}</span>{" "}
-      <span className={`font-medium tabular-nums ${color}`}>{value ?? "—"}</span>
-    </span>
+async function fetchLecture(
+  subjectId: string,
+  date: string,
+  slot: number,
+  term: SessionTerm | null,
+): Promise<BffData<LectureAttendance>> {
+  const params = new URLSearchParams({ slot_no: String(slot), refresh: "1" })
+  if (term?.semester) params.set("semester", String(term.semester))
+  if (term?.academic_year) params.set("academic_year", term.academic_year)
+  const res = await fetch(
+    `/api/faculty/subjects/${subjectId}/attendance/lectures/${date}?${params.toString()}`,
+    { cache: "no-store" },
   )
+  return (await res.json()) as BffData<LectureAttendance>
+}
+
+async function saveLecture(
+  subjectId: string,
+  payload: {
+    semester_no: number
+    academic_year: string
+    lecture_date: string
+    slot_no: number
+    students: { student_id: string; attendance_status: "P" | "A" }[]
+    allow_correction?: boolean
+  },
+): Promise<BffData<LectureAttendanceSaveResponse>> {
+  const res = await fetch(`/api/faculty/subjects/${subjectId}/attendance/lecture`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  return (await res.json()) as BffData<LectureAttendanceSaveResponse>
+}
+
+function formatTime(value: string | null | undefined): string {
+  if (!value) return ""
+  return value.slice(0, 5)
+}
+
+function localDateString(value: Date): string {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, "0")
+  const day = String(value.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function dayNameFromDate(value: string): string {
+  const parsed = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) return ""
+  return parsed.toLocaleDateString("en-US", { weekday: "long" })
+}
+
+function slotLabel(session: AttendanceSession): string {
+  const start = formatTime(session.start_time)
+  const end = formatTime(session.end_time)
+  const time = start && end ? `${start} – ${end}` : start || end
+  const type = session.lecture_type ? ` · ${session.lecture_type}` : ""
+  return `Slot ${session.slot_no} · ${time}${type}`
+}
+
+function statusesFromLecture(lecture: LectureAttendance): StatusMap {
+  const map: StatusMap = {}
+  for (const row of lecture.students) {
+    if (row.attendance_status === "P" || row.attendance_status === "A") {
+      map[row.student_id] = row.attendance_status
+    }
+  }
+  return map
 }
 
 export function AttendanceEntryView({
@@ -103,745 +154,775 @@ export function AttendanceEntryView({
   initialSemester?: number
   initialAcademicYear?: string
 }) {
-  const [semester] = React.useState<number | undefined>(initialSemester)
-  const [academicYear] = React.useState<string | undefined>(initialAcademicYear)
-
-  const defaultSubjectId = React.useMemo(() => {
-    if (!initialSubjectId || !subjectOptions.some((o) => o.subject_id === initialSubjectId)) {
-      return subjectOptions[0]?.subject_id ?? null
-    }
-    return initialSubjectId
-  }, [initialSubjectId, subjectOptions])
-
-  const [subjectId, setSubjectId] = React.useState<string | null>(defaultSubjectId)
-  const [meta, setMeta] = React.useState<AttendanceEntryMeta | null>(null)
-  const [metaLoading, setMetaLoading] = React.useState(Boolean(defaultSubjectId))
-  const [metaError, setMetaError] = React.useState<string | null>(null)
-  const [date, setDate] = React.useState(todayString())
+  const [subjectId, setSubjectId] = React.useState<string | null>(initialSubjectId ?? null)
+  const [sessionTerm, setSessionTerm] = React.useState<SessionTerm | null>(
+    initialSemester !== undefined && initialAcademicYear
+      ? { semester: initialSemester, academic_year: initialAcademicYear }
+      : null,
+  )
+  const [date, setDate] = React.useState(() => localDateString(new Date()))
   const [slotNo, setSlotNo] = React.useState<number | null>(null)
+
+  const [meta, setMeta] = React.useState<AttendanceEntryMeta | null>(null)
+  const [metaLoading, setMetaLoading] = React.useState(false)
+  const [metaError, setMetaError] = React.useState<number | null>(null)
+  const [metaReloadKey, setMetaReloadKey] = React.useState(0)
+  const [resolvedTerm, setResolvedTerm] = React.useState<SessionTerm | null>(null)
+
   const [lecture, setLecture] = React.useState<LectureAttendance | null>(null)
   const [lectureLoading, setLectureLoading] = React.useState(false)
-  const [lectureError, setLectureError] = React.useState<string | null>(null)
-  const [statuses, setStatuses] = React.useState<Record<string, "P" | "A">>({})
-  const [bulkText, setBulkText] = React.useState("")
-  const [bulkAccepted, setBulkAccepted] = React.useState<string[]>([])
-  const [bulkRejected, setBulkRejected] = React.useState<string[]>([])
+  const [lectureError, setLectureError] = React.useState<number | null>(null)
+
+  const [statuses, setStatuses] = React.useState<StatusMap>({})
+  const [search, setSearch] = React.useState("")
   const [saving, setSaving] = React.useState(false)
-  const [saveError, setSaveError] = React.useState<string | null>(null)
-  const [saveResult, setSaveResult] = React.useState<LectureAttendanceSaveResponse | null>(null)
-  const [activeTab, setActiveTab] = React.useState("entry")
+  const [showIncomplete, setShowIncomplete] = React.useState(false)
+  const [confirmIncomplete, setConfirmIncomplete] = React.useState(false)
+  const [notice, setNotice] = React.useState<Notice | null>(null)
 
-  const queryParams = React.useMemo(() => {
-    const params = new URLSearchParams()
-    if (semester !== undefined) params.set("semester", String(semester))
-    if (academicYear) params.set("academic_year", academicYear)
-    return params.toString()
-  }, [semester, academicYear])
+  const semesterOptions = React.useMemo(
+    () => Array.from(new Set(subjectOptions.map((s) => s.semester_no))).sort((a, b) => a - b),
+    [subjectOptions],
+  )
 
-  const weekday = date ? weekdayOf(date) : null
   const sessionsForDate = React.useMemo(() => {
-    if (!meta || !weekday) return []
-    return meta.sessions.filter(
-      (s) => s.day_name.toLowerCase() === weekday.toLowerCase(),
-    )
-  }, [meta, weekday])
+    if (!meta) return []
+    const day = dayNameFromDate(date)
+    if (!day) return []
+    return meta.sessions.filter((session) => session.day_name === day)
+  }, [meta, date])
 
-  const dateRef = React.useRef(date)
+  const query = search.trim().toLowerCase()
+  const visibleStudents = React.useMemo(() => {
+    if (!lecture) return []
+    if (!query) return lecture.students
+    return lecture.students.filter((student) => {
+      const name = `${student.first_name} ${student.last_name}`.toLowerCase()
+      return (
+        name.includes(query) ||
+        String(student.enrollment_no).includes(query) ||
+        student.student_id.toLowerCase().includes(query)
+      )
+    })
+  }, [lecture, query])
+
+  const totalStudents = lecture?.students.length ?? 0
+  const presentCount = Object.values(statuses).filter((s) => s === "P").length
+  const absentCount = Object.values(statuses).filter((s) => s === "A").length
+  const notMarkedCount = Math.max(0, totalStudents - presentCount - absentCount)
+
+  function resetSession() {
+    setLecture(null)
+    setLectureError(null)
+    setStatuses({})
+    setSlotNo(null)
+    setNotice(null)
+    setShowIncomplete(false)
+    setConfirmIncomplete(false)
+  }
+
+  function changeSubject(nextId: string | null) {
+    setSubjectId(nextId)
+    resetSession()
+  }
+
+  function changeTerm(term: { semester: number } | null) {
+    setSessionTerm(term ? { semester: term.semester, academic_year: null } : null)
+    resetSession()
+  }
+
+  function changeDate(nextDate: string) {
+    setDate(nextDate)
+    resetSession()
+  }
+
+  function changeSlot(nextSlot: number | null) {
+    setSlotNo(nextSlot)
+    setLecture(null)
+    setLectureError(null)
+    setStatuses({})
+    setNotice(null)
+    setShowIncomplete(false)
+    setConfirmIncomplete(false)
+  }
+
+  // Auto-select the only session of the day, if unambiguous.
   React.useEffect(() => {
-    dateRef.current = date
-  }, [date])
+    if (sessionsForDate.length === 1 && slotNo === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSlotNo(sessionsForDate[0].slot_no)
+    }
+  }, [sessionsForDate, slotNo])
 
-  const loadMeta = React.useCallback(async () => {
-    if (!subjectId) return
-    try {
-      const qs = queryParams ? `?${queryParams}` : ""
-      const res = await fetch(`/api/faculty/subjects/${subjectId}/attendance${qs}`, {
-        cache: "no-store",
-      })
-      const result = (await res.json()) as
-        | { ok: true; data: AttendanceEntryMeta }
-        | { ok: false; error: { status: number; message: string } }
-      if (!result.ok) {
-        setMetaError(result.error.message)
-        setLectureLoading(false)
+  // Load the entry meta (schedule + class list) whenever the subject or term changes.
+  React.useEffect(() => {
+    let cancelled = false
+    async function run() {
+      if (!subjectId) {
+        setMeta(null)
+        setMetaLoading(false)
+        setMetaError(null)
         return
       }
-      setMeta(result.data)
-      const currentWeekday = dateRef.current ? weekdayOf(dateRef.current) : null
-      const matches = currentWeekday
-        ? result.data.sessions.filter(
-            (s) => s.day_name.toLowerCase() === currentWeekday.toLowerCase(),
-          )
-        : []
-      setSlotNo(matches.length === 1 ? matches[0].slot_no : null)
-      setLectureLoading(matches.length === 1)
-    } catch {
-      setMetaError("Could not load the lecture schedule. Please try again.")
-      setLectureLoading(false)
-    } finally {
+      setMetaLoading(true)
+      setMetaError(null)
+      const result = await fetchMeta(subjectId, sessionTerm)
+      if (cancelled) return
+      if (result.ok) {
+        setMeta(result.data)
+        setResolvedTerm({
+          semester: result.data.semester_no,
+          academic_year: result.data.academic_year,
+        })
+      } else {
+        setMeta(null)
+        setResolvedTerm(null)
+        setMetaError(result.error.status)
+      }
       setMetaLoading(false)
     }
-  }, [subjectId, queryParams])
-
-  const loadLecture = React.useCallback(async () => {
-    if (!subjectId || !date || slotNo === null) {
-      setLectureLoading(false)
-      setLecture(null)
-      return
+    void run()
+    return () => {
+      cancelled = true
     }
-    try {
-      const params = new URLSearchParams({ slot_no: String(slotNo) })
-      if (queryParams) {
-        for (const [key, value] of new URLSearchParams(queryParams).entries()) {
-          params.set(key, value)
-        }
-      }
-      const res = await fetch(
-        `/api/faculty/subjects/${subjectId}/attendance/lectures/${date}?${params.toString()}`,
-        { cache: "no-store" },
-      )
-      const result = (await res.json()) as
-        | { ok: true; data: LectureAttendance }
-        | { ok: false; error: { status: number; message: string } }
-      if (!result.ok) {
-        setLectureError(result.error.message)
+  }, [subjectId, sessionTerm, metaReloadKey])
+
+  // Load the lecture attendance whenever the session selection is complete.
+  React.useEffect(() => {
+    let cancelled = false
+    async function run() {
+      if (!subjectId || !date || slotNo === null || !resolvedTerm) {
+        setLecture(null)
+        setLectureError(null)
         return
       }
-      setLecture(result.data)
-      const next: Record<string, "P" | "A"> = {}
-      for (const student of result.data.students) {
-        if (student.attendance_status === "P" || student.attendance_status === "A") {
-          next[student.student_id] = student.attendance_status
-        }
-      }
-      setStatuses(next)
-      setBulkAccepted([])
-      setBulkRejected([])
-    } catch {
-      setLectureError("Could not load the lecture attendance. Please try again.")
-    } finally {
+      setLectureLoading(true)
+      setLectureError(null)
+      const result = await fetchLecture(subjectId, date, slotNo, resolvedTerm)
+      if (cancelled) return
       setLectureLoading(false)
-    }
-  }, [subjectId, date, slotNo, queryParams])
-
-  function changeSubject(id: string) {
-    setSubjectId(id)
-    setMetaLoading(true)
-    setMetaError(null)
-    setLectureLoading(true)
-    setLectureError(null)
-    setSlotNo(null)
-    setLecture(null)
-    setStatuses({})
-    setBulkText("")
-    setBulkAccepted([])
-    setBulkRejected([])
-    setSaveResult(null)
-  }
-
-  React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadMeta()
-  }, [loadMeta])
-
-  React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadLecture()
-  }, [loadLecture])
-
-  function toggleStatus(studentId: string) {
-    setStatuses((prev) => ({
-      ...prev,
-      [studentId]: prev[studentId] === "P" ? "A" : "P",
-    }))
-  }
-
-  function markAll(value: "P" | "A") {
-    if (!lecture) return
-    const next: Record<string, "P" | "A"> = {}
-    for (const student of lecture.students) next[student.student_id] = value
-    setStatuses(next)
-  }
-
-  function applyBulk() {
-    if (!lecture) return
-    const tokens = bulkText.trim().split(/\s+/).filter(Boolean)
-    const accepted: string[] = []
-    const rejected: string[] = []
-    const presentIds = new Set<string>()
-    for (const token of tokens) {
-      const num = Number(token)
-      if (!Number.isInteger(num) || num < 0) {
-        rejected.push(token)
-        continue
-      }
-      const matches = lecture.students.filter(
-        (s) => s.enrollment_no === num || s.enrollment_no % 1000 === num,
-      )
-      if (matches.length === 1) {
-        presentIds.add(matches[0].student_id)
-        accepted.push(token)
+      if (result.ok) {
+        setLecture(result.data)
+        setStatuses(statusesFromLecture(result.data))
       } else {
-        rejected.push(token)
+        setLecture(null)
+        setStatuses({})
+        setLectureError(result.error.status)
       }
     }
-    setBulkAccepted(accepted)
-    setBulkRejected(rejected)
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [subjectId, date, slotNo, resolvedTerm])
+
+  // Auto-dismiss success/error notices.
+  React.useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(
+      () => setNotice(null),
+      notice.kind === "success" ? 4000 : 6000,
+    )
+    return () => window.clearTimeout(timer)
+  }, [notice])
+
+  function pressStatus(studentId: string, status: Status) {
     setStatuses((prev) => {
-      const next: Record<string, "P" | "A"> = { ...prev }
-      for (const student of lecture.students) {
-        next[student.student_id] = presentIds.has(student.student_id) ? "P" : "A"
+      const next = { ...prev }
+      if (prev[studentId] === status) {
+        delete next[studentId]
+      } else {
+        next[studentId] = status
       }
       return next
     })
   }
 
-  async function handleSave() {
-    if (!lecture || !subjectId || !date || slotNo === null) return
-    const students = lecture.students.map((student) => ({
-      student_id: student.student_id,
-      attendance_status: statuses[student.student_id] ?? "A",
-    }))
-    const payload: LectureAttendanceSaveRequest = {
-      semester_no: lecture.semester_no,
-      academic_year: lecture.academic_year,
-      lecture_date: date,
-      slot_no: slotNo,
-      students,
+  function clearStatus(studentId: string) {
+    setStatuses((prev) => {
+      const next = { ...prev }
+      delete next[studentId]
+      return next
+    })
+  }
+
+  function markAll(status: Status) {
+    if (!lecture) return
+    const next: StatusMap = {}
+    for (const student of lecture.students) {
+      next[student.student_id] = status
     }
-    setSaving(true)
-    setSaveError(null)
-    setSaveResult(null)
-    try {
-      const url = lecture.recorded
-        ? `/api/faculty/subjects/${subjectId}/attendance/lectures/${date}?slot_no=${slotNo}`
-        : `/api/faculty/subjects/${subjectId}/attendance`
-      const res = await fetch(url, {
-        method: lecture.recorded ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        cache: "no-store",
-      })
-      const result = (await res.json()) as
-        | { ok: true; data: LectureAttendanceSaveResponse }
-        | { ok: false; error: { status: number; message: string } }
-      if (!result.ok) {
-        setSaveError(result.error.message)
-        return
-      }
-      setSaveResult(result.data)
-      await loadLecture()
-    } catch {
-      setSaveError("Could not save attendance. Please try again.")
-    } finally {
-      setSaving(false)
+    setStatuses(next)
+  }
+
+  async function refreshLecture(silent = false) {
+    if (!subjectId || !date || slotNo === null || !resolvedTerm) return
+    if (!silent) setLectureLoading(true)
+    setLectureError(null)
+    const result = await fetchLecture(subjectId, date, slotNo, resolvedTerm)
+    if (!silent) setLectureLoading(false)
+    if (result.ok) {
+      setLecture(result.data)
+      setStatuses(statusesFromLecture(result.data))
+    } else {
+      setLecture(null)
+      setLectureError(result.error.status)
     }
   }
 
-  const presentCount = Object.values(statuses).filter((s) => s === "P").length
-  const absentCount = Object.values(statuses).filter((s) => s === "A").length
-  const studentCount = lecture?.students.length ?? 0
-  const notMarkedCount = studentCount - presentCount - absentCount
-  const shortageCount = lecture?.students.filter((s) => s.shortage_flag === "Yes").length ?? 0
+  async function persist() {
+    if (!subjectId || !lecture || !resolvedTerm) return
+    setSaving(true)
+    setNotice(null)
+    const students = lecture.students
+      .filter((student) => statuses[student.student_id])
+      .map((student) => ({
+        student_id: student.student_id,
+        attendance_status: statuses[student.student_id],
+      }))
+    const result = await saveLecture(subjectId, {
+      semester_no: resolvedTerm.semester,
+      academic_year: resolvedTerm.academic_year ?? "",
+      lecture_date: lecture.lecture_date,
+      slot_no: lecture.slot_no,
+      students,
+      allow_correction: true,
+    })
+    setSaving(false)
+    if (result.ok) {
+      setShowIncomplete(false)
+      setConfirmIncomplete(false)
+      setNotice({
+        kind: "success",
+        message: `Attendance saved for ${result.data.lecture_date} · Slot ${result.data.slot_no}.`,
+      })
+      void refreshLecture(true)
+    } else {
+      setNotice({ kind: "error", message: result.error.message })
+    }
+  }
 
-  const confirmedStats = saveResult
-    ? {
-        total: saveResult.students.length,
-        present: saveResult.students.filter((s) => s.attendance_status === "P").length,
-        absent: saveResult.students.filter((s) => s.attendance_status === "A").length,
-        notMarked: saveResult.students.filter(
-          (s) => s.attendance_status !== "P" && s.attendance_status !== "A",
-        ).length,
-        totalClasses: saveResult.lecture_number,
-        shortage: saveResult.students.filter((s) => s.shortage_flag === "Yes").length,
-      }
-    : null
+  function handleSaveClick() {
+    if (!lecture) return
+    const unmarked = lecture.students.filter((student) => !statuses[student.student_id])
+    if (unmarked.length > 0 && !confirmIncomplete) {
+      setShowIncomplete(true)
+      return
+    }
+    setShowIncomplete(false)
+    void persist()
+  }
+
+  const metaDescription =
+    metaError === 404
+      ? "No active teaching term or lecture schedule could be found for this subject."
+      : "Unable to load the lecture schedule. Please try again."
+
+  const lectureDescription =
+    lectureError === 404
+      ? "No valid lecture session was found for the selected date and slot."
+      : "Unable to load the lecture attendance. Please try again."
+
+  const slotPlaceholder = (): string => {
+    if (!subjectId) return "Select subject"
+    if (metaLoading) return "Loading slots…"
+    if (metaError) return "Unable to load slots"
+    if (!meta) return "Select slot"
+    if (sessionsForDate.length === 0) return "No slots available"
+    return "Select slot"
+  }
+
+  const noLectureDescription =
+    meta && meta.sessions.length > 0
+      ? `No attendance session is available on ${dayNameFromDate(date)}. This subject's weekly sessions are on ${Array.from(
+          new Set(meta.sessions.map((s) => s.day_name)),
+        ).join(", ")}.`
+      : "No attendance session is available for this subject on the selected date."
+
+  const termChip =
+    "flex min-h-8 items-center rounded-full border px-3 text-xs font-medium transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+  const termChipActive = "border-primary bg-primary text-primary-foreground"
+  const termChipIdle = "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
 
   return (
-    <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Attendance Entry</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Record or correct lecture attendance for a subject and timetable slot.
-            </p>
+    <div className="flex flex-col gap-4">
+      <section className="flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="entry-subject" className="text-xs font-medium text-muted-foreground">
+              Subject
+            </label>
+            <Select value={subjectId ?? null} onValueChange={(value) => changeSubject(value)}>
+              <SelectTrigger id="entry-subject" className="w-full">
+                <SelectValue>
+                  {(selected: string | null) =>
+                    selected
+                      ? subjectOptions.find((s) => s.subject_id === selected)?.subject_name ??
+                        selected
+                      : "Select subject"
+                  }
+                </SelectValue>
+                <SelectIcon />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectList>
+                  {subjectOptions.map((subject) => (
+                    <SelectItem key={subject.subject_id} value={subject.subject_id}>
+                      {subject.subject_code} · {subject.subject_name}
+                    </SelectItem>
+                  ))}
+                </SelectList>
+              </SelectContent>
+            </Select>
           </div>
-          <Link
-            href="/faculty/attendance"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="size-4" />
-            Back to Attendance Analytics
-          </Link>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Semester</span>
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by semester">
+              <button
+                type="button"
+                onClick={() => changeTerm(null)}
+                aria-pressed={!sessionTerm}
+                className={cn(termChip, !sessionTerm ? termChipActive : termChipIdle)}
+              >
+                Auto
+              </button>
+              {semesterOptions.map((semester) => (
+                <button
+                  key={semester}
+                  type="button"
+                  onClick={() => changeTerm({ semester })}
+                  aria-pressed={sessionTerm?.semester === semester}
+                  className={cn(termChip, sessionTerm?.semester === semester ? termChipActive : termChipIdle)}
+                >
+                  Sem {semester}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="entry-date" className="text-xs font-medium text-muted-foreground">
+              Lecture date
+            </label>
+            <Input
+              id="entry-date"
+              type="date"
+              value={date}
+              max={localDateString(new Date())}
+              onChange={(event) => changeDate(event.target.value)}
+              className="h-9"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="entry-slot" className="text-xs font-medium text-muted-foreground">
+              Slot
+            </label>
+            <Select
+              value={slotNo !== null ? String(slotNo) : null}
+              onValueChange={(value) => changeSlot(value !== null ? Number(value) : null)}
+              disabled={!subjectId || sessionsForDate.length === 0}
+            >
+              <SelectTrigger id="entry-slot" className="w-full">
+                <SelectValue>
+                  {(selected: string | null) => {
+                    if (selected) {
+                      const session = sessionsForDate.find((s) => String(s.slot_no) === selected)
+                      return session ? slotLabel(session) : `Slot ${selected}`
+                    }
+                    if (sessionsForDate.length === 1 && slotNo === null) {
+                      return slotLabel(sessionsForDate[0])
+                    }
+                    return slotPlaceholder()
+                  }}
+                </SelectValue>
+                <SelectIcon />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectList>
+                  {sessionsForDate.map((session) => (
+                    <SelectItem key={session.slot_no} value={String(session.slot_no)}>
+                      {slotLabel(session)}
+                    </SelectItem>
+                  ))}
+                </SelectList>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
+
+        {meta && (
+          <div className="flex flex-wrap items-center gap-2 border-t pt-3 text-sm">
+            <Badge variant="outline">{meta.subject_code}</Badge>
+            <span className="font-medium">{meta.subject_name}</span>
+            <span className="text-muted-foreground">
+              Semester {meta.semester_no} · {meta.academic_year}
+            </span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground">{meta.students.length} enrolled</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground">{meta.sessions.length} weekly sessions</span>
+          </div>
+        )}
       </section>
 
-      {subjectOptions.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="No subjects available"
-          description="You have no subjects with a scheduled lecture this term."
-        />
-      ) : (
-        <>
-          <section className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
-            <div className="flex flex-wrap items-end gap-4">
-              <div className="flex w-full flex-col gap-1.5 sm:w-auto">
-                <Label htmlFor="attendance-subject">Subject</Label>
-                <Select
-                  id="attendance-subject"
-                  value={subjectId ?? ""}
-                  onValueChange={(value) => {
-                    if (value) changeSubject(value)
-                  }}
-                >
-                  <SelectTrigger className="w-full sm:w-80">
-                    <SelectValue>
-                      {(selected: string | null) => {
-                        const option = subjectOptions.find((o) => o.subject_id === selected)
-                        return option ? `${option.subject_code} · ${option.subject_name}` : ""
-                      }}
-                    </SelectValue>
-                    <SelectIcon />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectList>
-                      {subjectOptions.map((option) => (
-                        <SelectItem key={option.subject_id} value={option.subject_id}>
-                          {option.subject_code} · {option.subject_name}
-                        </SelectItem>
-                      ))}
-                    </SelectList>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex w-full flex-col gap-1.5 sm:w-auto">
-                <Label htmlFor="attendance-date">Lecture date</Label>
-                <Input
-                  id="attendance-date"
-                  type="date"
-                  value={date}
-                  onChange={(event) => {
-                    const nextDate = event.target.value
-                    setDate(nextDate)
-                    setLecture(null)
-                    setLectureError(null)
-                    setSaveResult(null)
-                    setStatuses({})
-                    setBulkAccepted([])
-                    setBulkRejected([])
-                    const nextWeekday = nextDate ? weekdayOf(nextDate) : null
-                    const matches =
-                      nextWeekday && meta
-                        ? meta.sessions.filter(
-                            (s) => s.day_name.toLowerCase() === nextWeekday.toLowerCase(),
-                          )
-                        : []
-                    setSlotNo(matches.length === 1 ? matches[0].slot_no : null)
-                    setLectureLoading(matches.length === 1)
-                  }}
-                  className="w-full sm:w-44"
-                />
-              </div>
-              <div className="flex w-full flex-col gap-1.5 sm:w-auto">
-                <Label htmlFor="attendance-slot">Slot</Label>
-                <Select
-                  id="attendance-slot"
-                  value={slotNo === null ? "" : String(slotNo)}
-                  onValueChange={(value) => {
-                    if (value) {
-                      setSlotNo(Number(value))
-                      setLectureLoading(true)
-                      setLectureError(null)
-                      setSaveResult(null)
-                    }
-                  }}
-                >
-                  <SelectTrigger className="w-full sm:w-64">
-                    <SelectValue>
-                      {(selected: string | null) => {
-                        const session = sessionsForDate.find(
-                          (s) => String(s.slot_no) === selected,
-                        )
-                        return session ? sessionLabel(session) : ""
-                      }}
-                    </SelectValue>
-                    <SelectIcon />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectList>
-                      {sessionsForDate.map((session) => (
-                        <SelectItem key={session.slot_no} value={String(session.slot_no)}>
-                          {sessionLabel(session)}
-                        </SelectItem>
-                      ))}
-                    </SelectList>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {meta && (
-              <p className="mt-3 text-xs text-muted-foreground">
-                {meta.subject_code} · {meta.subject_name} · Sem {meta.semester_no} ·{" "}
-                {meta.academic_year} · {meta.sessions.length} scheduled session
-                {meta.sessions.length === 1 ? "" : "s"}
-              </p>
-            )}
-          </section>
+      {notice && (
+        <div
+          role="status"
+          className={cn(
+            "flex items-start gap-3 rounded-xl border px-4 py-3",
+            notice.kind === "success"
+              ? "border-chart-2/40 bg-chart-2/10"
+              : "border-destructive/40 bg-destructive/10",
+          )}
+        >
+          {notice.kind === "success" ? (
+            <Check className="mt-0.5 size-4 shrink-0 text-chart-2" />
+          ) : (
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
+          )}
+          <p className="flex-1 text-sm">{notice.message}</p>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            aria-label="Dismiss"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
 
-          {metaLoading && (
+      <Tabs defaultValue="entry">
+        <TabsList>
+          <TabsTrigger value="entry">Daily entry</TabsTrigger>
+          <TabsTrigger value="history">Change history</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="entry">
+          {!subjectId ? (
+            <EmptyState
+              icon={CalendarDays}
+              title="Select a subject to begin"
+              description="Pick a subject and a lecture date to record attendance."
+            />
+          ) : metaLoading ? (
             <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
               <LoaderCircle className="size-4 animate-spin" />
               Loading lecture schedule…
             </p>
-          )}
-          {metaError && <ErrorState title="Failed to load lecture schedule" description={metaError} />}
-
-          {meta && meta.sessions.length === 0 && !metaLoading && (
+          ) : metaError ? (
+            <ErrorState
+              title="Unable to load lecture schedule"
+              description={metaDescription}
+              onRetry={() => setMetaReloadKey((key) => key + 1)}
+            />
+          ) : !meta ? null : sessionsForDate.length === 0 ? (
             <EmptyState
               icon={CalendarDays}
-              title="No scheduled sessions"
-              description="There is no timetable session for this subject in the selected term."
+              title="No lecture scheduled"
+              description={noLectureDescription}
+            />
+          ) : slotNo === null ? (
+            <EmptyState
+              icon={CalendarDays}
+              title="Select a slot"
+              description={`${sessionsForDate.length} lecture session${sessionsForDate.length === 1 ? "" : "s"} scheduled for ${dayNameFromDate(date)}. Choose a slot to begin.`}
+            />
+          ) : lectureLoading ? (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
+              <LoaderCircle className="size-4 animate-spin" />
+              Loading lecture…
+            </p>
+          ) : lectureError ? (
+            <ErrorState
+              title="Unable to load lecture"
+              description={lectureDescription}
+              onRetry={() => void refreshLecture()}
+            />
+          ) : lecture ? (
+            <div className="flex flex-col gap-4">
+              <div
+                className={cn(
+                  "flex flex-wrap items-start gap-3 rounded-xl border px-4 py-3",
+                  lecture.recorded
+                    ? "border-border bg-muted/50"
+                    : "border-chart-3/40 bg-chart-3/10",
+                )}
+              >
+                {lecture.recorded ? (
+                  <Check className="mt-0.5 size-4 shrink-0 text-chart-2" />
+                ) : (
+                  <TriangleAlert className="mt-0.5 size-4 shrink-0 text-chart-3" />
+                )}
+                <div className="flex-1">
+                  <p className="text-sm font-medium">
+                    {lecture.recorded ? "Recorded lecture" : "Not recorded yet"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {lecture.recorded
+                      ? `Lecture ${lecture.lecture_number ?? "—"} is already recorded. Changes below update the existing records.`
+                      : "This lecture has not been recorded. Save attendance to record it."}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void refreshLecture()}
+                  disabled={saving}
+                  title="Reload lecture from server"
+                >
+                  <RefreshCw className={cn(lectureLoading && "animate-spin")} />
+                  Refresh
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">Total {totalStudents}</Badge>
+                  <Badge variant="success">Present {presentCount}</Badge>
+                  <Badge variant="destructive">Absent {absentCount}</Badge>
+                  <Badge variant="muted">Not marked {notMarkedCount}</Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Search students…"
+                      aria-label="Search students"
+                      className="h-9 w-52 pr-8 pl-8"
+                    />
+                    {search && (
+                      <button
+                        type="button"
+                        onClick={() => setSearch("")}
+                        aria-label="Clear search"
+                        className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => markAll("P")}
+                    disabled={saving}
+                    title="Mark all students present"
+                  >
+                    <CheckCheck />
+                    Mark all present
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => markAll("A")}
+                    disabled={saving}
+                    title="Mark all students absent"
+                  >
+                    <UserX />
+                    Mark all absent
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setStatuses({})}
+                    disabled={saving}
+                    title="Clear all statuses"
+                  >
+                    <Eraser />
+                    Clear all
+                  </Button>
+                </div>
+              </div>
+
+              {query && (
+                <p className="text-xs text-muted-foreground">
+                  Showing {visibleStudents.length} of {totalStudents} students
+                </p>
+              )}
+
+              {visibleStudents.length === 0 ? (
+                <EmptyState
+                  icon={Search}
+                  title="No matching students"
+                  description="Try a different search term."
+                />
+              ) : (
+                <div className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-28">Enrollment</TableHead>
+                        <TableHead>Student</TableHead>
+                        <TableHead className="w-72">Status</TableHead>
+                        <TableHead className="w-28 text-right">Attendance %</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {visibleStudents.map((student) => {
+                        const status = statuses[student.student_id]
+                        return (
+                          <TableRow key={student.student_id}>
+                            <TableCell className="font-mono text-xs text-muted-foreground">
+                              {student.enrollment_no}
+                            </TableCell>
+                            <TableCell>
+                              <p className="font-medium">
+                                {student.first_name} {student.last_name}
+                              </p>
+                              <p className="font-mono text-xs text-muted-foreground">
+                                {student.student_id}
+                              </p>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => pressStatus(student.student_id, "P")}
+                                  aria-label={`Mark ${student.first_name} ${student.last_name} present`}
+                                  aria-pressed={status === "P"}
+                                  title="Present"
+                                  className={cn(
+                                    "h-7 w-9 rounded-md border text-xs font-semibold transition-colors",
+                                    status === "P"
+                                      ? "border-transparent bg-chart-2 text-white hover:bg-chart-2/80"
+                                      : "border-border bg-background text-muted-foreground hover:bg-muted",
+                                  )}
+                                >
+                                  P
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => pressStatus(student.student_id, "A")}
+                                  aria-label={`Mark ${student.first_name} ${student.last_name} absent`}
+                                  aria-pressed={status === "A"}
+                                  title="Absent"
+                                  className={cn(
+                                    "h-7 w-9 rounded-md border text-xs font-semibold transition-colors",
+                                    status === "A"
+                                      ? "border-transparent bg-destructive text-white hover:bg-destructive/80"
+                                      : "border-border bg-background text-muted-foreground hover:bg-muted",
+                                  )}
+                                >
+                                  A
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => clearStatus(student.student_id)}
+                                  aria-label={`Clear status for ${student.first_name} ${student.last_name}`}
+                                  aria-pressed={!status}
+                                  title="Not marked"
+                                  className={cn(
+                                    "h-7 w-9 rounded-md border text-xs transition-colors",
+                                    !status
+                                      ? "border-border bg-muted text-muted-foreground"
+                                      : "border-border bg-background text-muted-foreground hover:bg-muted",
+                                  )}
+                                >
+                                  —
+                                </button>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {student.attendance_percentage !== null &&
+                              student.attendance_percentage !== undefined
+                                ? `${student.attendance_percentage.toFixed(1)}%`
+                                : "—"}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {showIncomplete && (
+                <div
+                  role="alert"
+                  className="flex flex-wrap items-center gap-3 rounded-xl border border-chart-3/40 bg-chart-3/10 px-4 py-3"
+                >
+                  <TriangleAlert className="size-4 shrink-0 text-chart-3" />
+                  <div className="min-w-48 flex-1 text-sm">
+                    <p className="font-medium">
+                      {notMarkedCount} student{notMarkedCount === 1 ? "" : "s"} not marked
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Mark attendance for every student before saving, or save as-is and leave the
+                      rest unrecorded.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => markAll("P")}
+                    disabled={saving}
+                  >
+                    <CheckCheck />
+                    Mark all present
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={saving}
+                    onClick={() => {
+                      setConfirmIncomplete(true)
+                      setShowIncomplete(false)
+                      void persist()
+                    }}
+                  >
+                    Save anyway
+                  </Button>
+                </div>
+              )}
+
+              <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-2 text-sm">
+                  {saving ? (
+                    <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Check className="size-4 text-chart-2" />
+                  )}
+                  <span className="font-medium">{saving ? "Saving…" : "Ready to save"}</span>
+                  <span className="text-muted-foreground">
+                    {presentCount} present · {absentCount} absent · {notMarkedCount} not marked
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleSaveClick}
+                  disabled={saving || totalStudents === 0}
+                >
+                  {saving ? <LoaderCircle className="animate-spin" /> : <Save />}
+                  {lecture.recorded ? "Update attendance" : "Save attendance"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </TabsContent>
+
+        <TabsContent value="history">
+          {subjectId ? (
+            <AttendanceChangeHistory
+              subjectId={subjectId}
+              semester={resolvedTerm?.semester}
+              academicYear={resolvedTerm?.academic_year ?? undefined}
+              lectureDate={date}
+              slotNo={slotNo ?? undefined}
+            />
+          ) : (
+            <EmptyState
+              icon={History}
+              title="Select a subject"
+              description="Pick a subject to view its attendance change history."
             />
           )}
-
-          {meta && meta.sessions.length > 0 && (
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList>
-                <TabsTrigger value="entry">Attendance grid</TabsTrigger>
-                <TabsTrigger value="history">Change history</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="entry">
-                <div className="flex flex-col gap-4">
-                  {lectureLoading && (
-                    <p
-                      className="flex items-center gap-2 text-sm text-muted-foreground"
-                      role="status"
-                    >
-                      <LoaderCircle className="size-4 animate-spin" />
-                      Loading lecture…
-                    </p>
-                  )}
-
-                  {lectureError && (
-                    <ErrorState title="Failed to load lecture" description={lectureError} />
-                  )}
-
-                  {!lectureLoading &&
-                    !lectureError &&
-                    !lecture &&
-                    weekday &&
-                    sessionsForDate.length === 0 && (
-                      <EmptyState
-                        icon={CalendarDays}
-                        title="No timetable session found for this date"
-                        description={`${weekday} has no scheduled ${meta.subject_code} session in this term. Pick another date to record attendance.`}
-                      />
-                    )}
-
-                  {!lectureLoading &&
-                    !lectureError &&
-                    !lecture &&
-                    weekday &&
-                    sessionsForDate.length > 1 && (
-                      <p className="rounded-xl bg-muted/50 p-4 text-sm text-muted-foreground">
-                        {sessionsForDate.length} sessions are scheduled for {weekday}. Select a slot
-                        above to load the attendance grid.
-                      </p>
-                    )}
-
-                  {lecture && !lectureLoading && (
-                    <>
-                      {lecture.recorded ? (
-                        <section
-                          className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"
-                          role="status"
-                        >
-                          <TriangleAlert className="size-4 shrink-0 text-amber-500" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium">
-                              Lecture already recorded
-                              {lecture.lecture_number !== null
-                                ? ` (lecture #${lecture.lecture_number})`
-                                : ""}{" "}
-                              for {lecture.day_name}, slot {lecture.slot_no}.
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              Editing this grid corrects the existing record.
-                            </p>
-                          </div>
-                        </section>
-                      ) : (
-                        <section className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-                          <CalendarDays className="size-4 shrink-0 text-amber-500" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium">Not yet recorded</p>
-                            <p className="text-sm text-muted-foreground">
-                              Saving creates a new lecture record for {lecture.day_name}, slot{" "}
-                              {lecture.slot_no}.
-                            </p>
-                          </div>
-                        </section>
-                      )}
-
-                      {saveError && (
-                        <section
-                          className="flex flex-wrap items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"
-                          role="alert"
-                        >
-                          <TriangleAlert className="size-4 text-destructive" />
-                          <p className="text-sm text-destructive">{saveError}</p>
-                        </section>
-                      )}
-
-                      <section
-                        className="rounded-xl bg-card p-4 ring-1 ring-foreground/10"
-                        aria-label="Lecture metadata"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <Badge variant="secondary">
-                              <Clock className="mr-1 size-3" />
-                              Slot {lecture.slot_no}
-                            </Badge>
-                            <Badge variant="muted">
-                              {formatTime(lecture.start_time)}–{formatTime(lecture.end_time)}
-                            </Badge>
-                            <Badge variant="muted">{lecture.day_name}</Badge>
-                            {lecture.lecture_type && (
-                              <Badge variant="muted">{lecture.lecture_type}</Badge>
-                            )}
-                            {lecture.faculty_name && (
-                              <Badge variant="muted">{lecture.faculty_name}</Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setLectureLoading(true)
-                                setLectureError(null)
-                                void loadLecture()
-                              }}
-                            >
-                              <RefreshCw className="size-3.5" />
-                              Refresh
-                            </Button>
-                          </div>
-                        </div>
-                      </section>
-
-                      <section
-                        className="rounded-xl bg-card p-4 ring-1 ring-foreground/10"
-                        aria-label="Bulk entry"
-                      >
-                        <div className="flex flex-col gap-2">
-                          <Label htmlFor="bulk-input">Bulk present list</Label>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Input
-                              id="bulk-input"
-                              value={bulkText}
-                              onChange={(event) => setBulkText(event.target.value)}
-                              placeholder="e.g. 1 2 3 — enrollment suffixes to mark Present"
-                              className="h-9 w-full sm:max-w-md"
-                            />
-                            <Button variant="secondary" onClick={applyBulk} disabled={!bulkText.trim()}>
-                              Apply
-                            </Button>
-                            <Button variant="outline" onClick={() => markAll("P")}>
-                              All present
-                            </Button>
-                            <Button variant="outline" onClick={() => markAll("A")}>
-                              All absent
-                            </Button>
-                          </div>
-                          {bulkAccepted.length > 0 && (
-                            <p className="text-sm text-chart-2">
-                              Marked present: {bulkAccepted.join(", ")}
-                            </p>
-                          )}
-                          {bulkRejected.length > 0 && (
-                            <p className="text-sm text-destructive">
-                              Rejected (no unique match): {bulkRejected.join(", ")}
-                            </p>
-                          )}
-                        </div>
-                      </section>
-
-                      <section className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Enrollment No</TableHead>
-                              <TableHead>Student</TableHead>
-                              <TableHead className="w-28">Attendance</TableHead>
-                              <TableHead>Current</TableHead>
-                              <TableHead>Status</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {lecture.students.map((student) => (
-                              <TableRow key={student.student_id}>
-                                <TableCell className="font-mono text-xs text-muted-foreground">
-                                  {String(student.enrollment_no).padStart(3, "0")}
-                                </TableCell>
-                                <TableCell className="font-medium">
-                                  {student.first_name} {student.last_name}
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex items-center gap-1">
-                                    <Button
-                                      size="xs"
-                                      variant={
-                                        statuses[student.student_id] === "P"
-                                          ? "default"
-                                          : "outline"
-                                      }
-                                      onClick={() => toggleStatus(student.student_id)}
-                                      className={
-                                        statuses[student.student_id] === "P"
-                                          ? "bg-chart-2 text-white hover:bg-chart-2/80"
-                                          : ""
-                                      }
-                                    >
-                                      P
-                                    </Button>
-                                    <Button
-                                      size="xs"
-                                      variant={
-                                        statuses[student.student_id] === "A"
-                                          ? "destructive"
-                                          : "outline"
-                                      }
-                                      onClick={() => toggleStatus(student.student_id)}
-                                    >
-                                      A
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="tabular-nums">
-                                  {student.attendance_percentage !== null
-                                    ? `${student.attendance_percentage.toFixed(1)}%`
-                                    : "—"}
-                                  {student.shortage_flag === "Yes" && (
-                                    <Badge variant="destructive" className="ml-2">
-                                      Shortage
-                                    </Badge>
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-muted-foreground">
-                                  {student.eligibility_status ?? "—"}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </section>
-
-                      <section
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10"
-                        aria-label="Save bar"
-                      >
-                        <div className="flex min-w-0 flex-col gap-2">
-                          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
-                            {confirmedStats ? (
-                              <>
-                                <SummaryStat label="Total Students" value={confirmedStats.total} />
-                                <SummaryStat
-                                  label="Present"
-                                  value={confirmedStats.present}
-                                  tone="good"
-                                />
-                                <SummaryStat
-                                  label="Absent"
-                                  value={confirmedStats.absent}
-                                  tone="bad"
-                                />
-                                <SummaryStat label="Not Marked" value={confirmedStats.notMarked} />
-                                <SummaryStat
-                                  label="Total Classes"
-                                  value={confirmedStats.totalClasses}
-                                />
-                                <SummaryStat
-                                  label="Shortage"
-                                  value={confirmedStats.shortage}
-                                  tone={confirmedStats.shortage > 0 ? "bad" : undefined}
-                                />
-                              </>
-                            ) : (
-                              <>
-                                <SummaryStat label="Total Students" value={studentCount} />
-                                <SummaryStat label="Present" value={presentCount} tone="good" />
-                                <SummaryStat label="Absent" value={absentCount} tone="bad" />
-                                <SummaryStat label="Not Marked" value={notMarkedCount} />
-                                <SummaryStat
-                                  label="Total Classes"
-                                  value={lecture.lecture_number}
-                                />
-                                <SummaryStat
-                                  label="Shortage"
-                                  value={shortageCount}
-                                  tone={shortageCount > 0 ? "bad" : undefined}
-                                />
-                              </>
-                            )}
-                          </div>
-                          {saveResult ? (
-                            <p
-                              className="flex flex-wrap items-center gap-1.5 text-sm text-chart-2"
-                              role="status"
-                            >
-                              <CheckCircle2 className="size-4 shrink-0" />
-                              Saved · {saveResult.summary.inserted} inserted ·{" "}
-                              {saveResult.summary.updated} updated ·{" "}
-                              {saveResult.summary.unchanged} unchanged
-                              {saveResult.lecture_number !== null &&
-                                ` · Lecture #${saveResult.lecture_number}`}
-                            </p>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              Totals, total classes, and shortage flags are confirmed by the server
-                              after saving.
-                            </p>
-                          )}
-                        </div>
-                        <Button
-                          onClick={() => void handleSave()}
-                          disabled={saving || studentCount === 0}
-                        >
-                          {saving ? (
-                            <LoaderCircle className="size-4 animate-spin" />
-                          ) : (
-                            <Save className="size-4" />
-                          )}
-                          {saving
-                            ? "Saving…"
-                            : lecture.recorded
-                              ? "Save correction"
-                              : "Record lecture"}
-                        </Button>
-                      </section>
-                    </>
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="history">
-                {meta && (
-                  <AttendanceChangeHistory
-                    subjectId={meta.subject_id}
-                    semester={meta.semester_no}
-                    academicYear={meta.academic_year}
-                  />
-                )}
-              </TabsContent>
-            </Tabs>
-          )}
-        </>
-      )}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

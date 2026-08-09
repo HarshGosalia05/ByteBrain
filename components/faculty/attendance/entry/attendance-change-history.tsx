@@ -31,10 +31,14 @@ export function AttendanceChangeHistory({
   subjectId,
   semester,
   academicYear,
+  lectureDate,
+  slotNo,
 }: {
   subjectId: string
-  semester: number
-  academicYear: string
+  semester?: number
+  academicYear?: string
+  lectureDate?: string
+  slotNo?: number
 }) {
   const [data, setData] = React.useState<AttendanceChangeLogResponse | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -42,11 +46,12 @@ export function AttendanceChangeHistory({
 
   async function load() {
     try {
-      const params = new URLSearchParams({
-        semester: String(semester),
-        academic_year: academicYear,
-        page_size: "50",
-      })
+      const params = new URLSearchParams({ page_size: "50" })
+      if (semester !== undefined && semester !== null && !Number.isNaN(semester))
+        params.set("semester", String(semester))
+      if (academicYear) params.set("academic_year", academicYear)
+      if (lectureDate) params.set("lecture_date", lectureDate)
+      if (slotNo !== undefined && slotNo !== null) params.set("slot_no", String(slotNo))
       const res = await fetch(
         `/api/faculty/subjects/${subjectId}/attendance/change-log?${params.toString()}`,
         { cache: "no-store" },
@@ -70,7 +75,7 @@ export function AttendanceChangeHistory({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subjectId, semester, academicYear])
+  }, [subjectId, semester, academicYear, lectureDate, slotNo])
 
   if (loading) {
     return (
@@ -99,8 +104,11 @@ export function AttendanceChangeHistory({
     <section className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          {data.items.length} recent change{data.items.length === 1 ? "" : "s"} · Sem {semester} ·{" "}
-          {academicYear}
+          {data.items.length} recent change{data.items.length === 1 ? "" : "s"}
+          {lectureDate ? ` · ${lectureDate}` : ""}
+          {slotNo !== undefined && slotNo !== null ? ` · slot ${slotNo}` : ""}
+          {semester !== undefined ? ` · Sem ${semester}` : ""}
+          {academicYear ? ` · ${academicYear}` : ""}
         </p>
         <Button
           variant="outline"

@@ -12,13 +12,13 @@ export async function GET(
 ) {
   const { subjectId } = await props.params
   const url = new URL(request.url)
-  const params = {
-    semester: url.searchParams.get("semester")
-      ? Number(url.searchParams.get("semester"))
-      : undefined,
-    academic_year: url.searchParams.get("academic_year") ?? undefined,
-  }
-  const result = await getAttendanceEntryMeta(subjectId, params, {
+  const semesterParam = url.searchParams.get("semester")
+  const semester =
+    semesterParam && semesterParam.trim() !== "" && !Number.isNaN(Number(semesterParam))
+      ? Number(semesterParam)
+      : undefined
+  const academic_year = (url.searchParams.get("academic_year") ?? "").trim() || undefined
+  const result = await getAttendanceEntryMeta(subjectId, { semester, academic_year }, {
     bypassCache: url.searchParams.get("refresh") === "1",
   })
   return NextResponse.json(result, { status: result.ok ? 200 : result.error.status })

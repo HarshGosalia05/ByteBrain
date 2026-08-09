@@ -4509,12 +4509,16 @@ class FacultyService:
         academic_year: Optional[str],
         page: int,
         page_size: int,
+        lecture_date: Optional[date] = None,
+        slot_no: Optional[int] = None,
     ) -> AttendanceChangeLogResponse:
         await self._ensure_profile(faculty_id)
         semester_no, academic_year = await self._resolve_entry_term(
             faculty_id, subject_id, semester_no, academic_year
         )
-        data = await self.repo.get_attendance_change_log(subject_id, page, page_size)
+        data = await self.repo.get_attendance_change_log(
+            subject_id, page, page_size, lecture_date=lecture_date, slot_no=slot_no,
+        )
         total = int(data["total"])
         total_pages = max(1, -(-total // page_size)) if total else 0
         items = []

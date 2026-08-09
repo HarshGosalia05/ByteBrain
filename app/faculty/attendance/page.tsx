@@ -83,13 +83,24 @@ export default async function AttendancePage(props: {
     return <ErrorState title="Failed to load attendance data" description={res.error.message} />
   }
 
+  // Only forward filters the entry page can act on. An empty "semester=" or
+  // "academic_year=" is never emitted: the entry page treats a missing term as
+  // "resolve my current teaching term" and an empty value would otherwise be
+  // parsed as NaN (semester) or an invalid term key (academic_year).
+  const entryParams = new URLSearchParams()
+  if (semester !== null && semester !== undefined) entryParams.set("semester", String(semester))
+  if (academic_year) entryParams.set("academic_year", academic_year)
+  if (subject_id) entryParams.set("subject_id", subject_id)
+  const entryHref =
+    entryParams.size > 0 ? `/faculty/attendance/entry?${entryParams.toString()}` : "/faculty/attendance/entry"
+
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-3xl font-bold tracking-tight">Attendance Analytics</h1>
           <Link
-            href={`/faculty/attendance/entry?semester=${semester ?? ""}&academic_year=${encodeURIComponent(academic_year ?? "")}`}
+            href={entryHref}
             className={buttonVariants({ variant: "default", size: "sm" })}
           >
             Enter Attendance

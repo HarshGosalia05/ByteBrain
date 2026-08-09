@@ -1012,6 +1012,8 @@ async def get_attendance_change_log(
     subject_id: str,
     semester: Optional[int] = Query(None),
     academic_year: Optional[str] = Query(None),
+    lecture_date: Optional[date] = Query(None),
+    slot_no: Optional[int] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user: dict = Depends(require_faculty_role),
@@ -1019,4 +1021,5 @@ async def get_attendance_change_log(
 ):
     return await service.get_attendance_change_log(
         _faculty_id_or_error(user), subject_id, semester, academic_year, page, page_size,
+        lecture_date=lecture_date, slot_no=slot_no,
     )

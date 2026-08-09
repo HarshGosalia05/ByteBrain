@@ -3394,26 +3394,33 @@ class FacultyRepository:
         subject_id: str,
         page: int,
         page_size: int,
+        lecture_date: Any = None,
+        slot_no: Optional[int] = None,
     ) -> Dict[str, Any]:
         async with self.pool.acquire() as conn:
-            total = await conn.fetchval(
-                "SELECT count(*) FROM attendance_change_log WHERE subject_id = $1",
-                subject_id,
-            )
-            rows = await conn.fetch(
-                """
+            conditions = ["cl.subject_id = $1"]
+            params: List[Any] = [subject_id]
+            if lecture_date is not None:
+                params.append(lecture_date)
+                conditions.append(f"cl.lecture_date = ${len(params)}")
+            if slot_no is not None:
+                params.append(int(slot_no))
+                conditions.append(f"cl.slot_no = ${len(params)}")
+            where = " AND ".join(conditions)
+            count_query = f"SELECT count(*) FROM attendance_change_log cl WHERE {where}"
+            total = await conn.fetchval(count_query, *params)
+            page_query = f"""
                 SELECT cl.change_id, cl.lecture_date, cl.slot_no, cl.student_id,
                     cl.subject_id, cl.field_name, cl.old_value, cl.new_value,
                     cl.operation_type, cl.changed_by, cl.changed_at,
                     st.first_name, st.last_name
                 FROM attendance_change_log cl
                 LEFT JOIN students st ON st.student_id = cl.student_id
-                WHERE cl.subject_id = $1
+                WHERE {where}
                 ORDER BY cl.changed_at DESC, cl.change_id DESC
-                LIMIT $2 OFFSET $3
-                """,
-                subject_id, page_size, (page - 1) * page_size,
-            )
+                LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
+            """
+            rows = await conn.fetch(page_query, *params, page_size, (page - 1) * page_size)
         return {
             "total": int(total) if total else 0,
             "items": [dict(r) for r in rows],

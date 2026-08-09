@@ -22,15 +22,19 @@ export async function GET(
       { status: 400 },
     )
   }
+  const semesterParam = url.searchParams.get("semester")
+  const semester =
+    semesterParam && semesterParam.trim() !== "" && !Number.isNaN(Number(semesterParam))
+      ? Number(semesterParam)
+      : undefined
+  const academic_year = (url.searchParams.get("academic_year") ?? "").trim() || undefined
   const result = await getLectureAttendance(
     subjectId,
     {
       lecture_date: lectureDate,
       slot_no: Number(slot_no),
-      semester: url.searchParams.get("semester")
-        ? Number(url.searchParams.get("semester"))
-        : undefined,
-      academic_year: url.searchParams.get("academic_year") ?? undefined,
+      semester,
+      academic_year,
     },
     { bypassCache: url.searchParams.get("refresh") === "1" },
   )

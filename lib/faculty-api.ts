@@ -513,7 +513,11 @@ function toBffError(status: number): BffError {
       return {
         status,
         code: "invalid",
-        message: "One or more entered values are outside the allowed range. Check the maxima and try again.",
+        // Deliberately module-neutral: FastAPI's 422 can be produced by any
+        // request-validation failure (e.g. an invalid query parameter). It must
+        // NOT carry Marks-specific wording, which previously leaked into
+        // Attendance Entry whenever an attendance call returned 422.
+        message: "The submitted request was rejected because one or more values were invalid. Please review your input and try again.",
       }
     case 503:
       return {
@@ -2826,15 +2830,27 @@ export type FacultyTimetableResponse = {
   days: FacultyTimetableDay[]
 }
 
+function appendAttendanceTermParams(
+  searchParams: URLSearchParams,
+  params: { semester?: number | null; academic_year?: string | null },
+) {
+  // Only set params that are actually usable. An empty academic_year or a NaN
+  // semester (e.g. an empty "semester=" URL segment) must never reach FastAPI:
+  // academic_year="" would resolve to a bogus term and semester=NaN fails its
+  // Optional[int] coercion with HTTP 422.
+  if (params.semester !== undefined && params.semester !== null && !Number.isNaN(params.semester)) {
+    searchParams.set("semester", String(params.semester))
+  }
+  if (params.academic_year) searchParams.set("academic_year", params.academic_year)
+}
+
 export function getAttendanceEntryMeta(
   subjectId: string,
   params: AttendanceEntryParams = {},
   opts?: { bypassCache?: boolean },
 ): Promise<BffResult<AttendanceEntryMeta>> {
   const searchParams = new URLSearchParams()
-  if (params.semester !== undefined) searchParams.set("semester", String(params.semester))
-  if (params.academic_year !== undefined)
-    searchParams.set("academic_year", params.academic_year ?? "")
+  appendAttendanceTermParams(searchParams, params)
   const query = searchParams.toString()
   const path = query
     ? `subjects/${subjectId}/attendance/meta?${query}`
@@ -2855,9 +2871,7 @@ export function getLectureAttendance(
   const searchParams = new URLSearchParams()
   searchParams.set("lecture_date", params.lecture_date)
   searchParams.set("slot_no", String(params.slot_no))
-  if (params.semester !== undefined) searchParams.set("semester", String(params.semester))
-  if (params.academic_year !== undefined)
-    searchParams.set("academic_year", params.academic_year ?? "")
+  appendAttendanceTermParams(searchParams, params)
   const query = searchParams.toString()
   return callFastapi<LectureAttendance>(
     `subjects/${subjectId}/attendance/lecture?${query}`,
@@ -2903,12 +2917,18 @@ export function correctLectureAttendance(
 
 export function getAttendanceChangeLog(
   subjectId: string,
-  params: AttendanceEntryParams & { page?: number; page_size?: number } = {},
+  params: AttendanceEntryParams & {
+    page?: number
+    page_size?: number
+    lecture_date?: string
+    slot_no?: number
+  } = {},
 ): Promise<BffResult<AttendanceChangeLogResponse>> {
   const searchParams = new URLSearchParams()
-  if (params.semester !== undefined) searchParams.set("semester", String(params.semester))
-  if (params.academic_year !== undefined)
-    searchParams.set("academic_year", params.academic_year ?? "")
+  appendAttendanceTermParams(searchParams, params)
+  if (params.lecture_date) searchParams.set("lecture_date", params.lecture_date)
+  if (params.slot_no !== undefined && !Number.isNaN(params.slot_no))
+    searchParams.set("slot_no", String(params.slot_no))
   if (params.page) searchParams.set("page", String(params.page))
   if (params.page_size) searchParams.set("page_size", String(params.page_size))
   const query = searchParams.toString()
@@ -2922,9 +2942,7 @@ export function getFacultyTimetable(
   params: AttendanceEntryParams = {},
 ): Promise<BffResult<FacultyTimetableResponse>> {
   const searchParams = new URLSearchParams()
-  if (params.semester !== undefined) searchParams.set("semester", String(params.semester))
-  if (params.academic_year !== undefined)
-    searchParams.set("academic_year", params.academic_year ?? "")
+  appendAttendanceTermParams(searchParams, params)
   const query = searchParams.toString()
   const path = query ? `timetable?${query}` : "timetable"
   return callFastapi<FacultyTimetableResponse>(path, BFF_TTL_MS)
