@@ -1253,9 +1253,22 @@ class FacultyTimetableDay(BaseModel):
     day_name: str
     sessions: List[FacultyTimetableSession]
 
+class TimetableSlot(BaseModel):
+    slot_no: int
+    start_time: time
+    end_time: time
+
 class FacultyTimetableResponse(BaseModel):
     faculty_id: str
     semester_no: int
     academic_year: str
     total_sessions: int
+    slots: List[TimetableSlot]
+    days: List[FacultyTimetableDay]
+
+class FullTimetableResponse(BaseModel):
+    semester_no: int
+    academic_year: str
+    total_sessions: int
+    slots: List[TimetableSlot]
     days: List[FacultyTimetableDay]

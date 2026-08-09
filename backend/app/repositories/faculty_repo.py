@@ -3430,7 +3430,7 @@ class FacultyRepository:
         self,
         faculty_id: str,
         semester_no: int,
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         query = """
             SELECT
                 wt.timetable_id, wt.day_name, wt.slot_no, wt.start_time, wt.end_time,
@@ -3443,6 +3443,64 @@ class FacultyRepository:
                 AND wt.semester_no = $2
             ORDER BY wt.slot_no, wt.start_time
         """
+        slots_query = """
+            SELECT DISTINCT slot_no, start_time, end_time
+            FROM weekly_timetable_07
+            WHERE semester_no = $1
+            ORDER BY slot_no, start_time
+        """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, faculty_id, semester_no)
-            return [dict(row) for row in rows]
+            slots = await conn.fetch(slots_query, semester_no)
+            return {
+                "sessions": [dict(row) for row in rows],
+                "slots": [dict(row) for row in slots],
+            }
+
+    async def get_full_timetable(
+        self,
+        semester_no: int,
+        academic_year: str,
+    ) -> Dict[str, Any]:
+        query = """
+            SELECT
+                wt.timetable_id, wt.day_name, wt.slot_no, wt.start_time, wt.end_time,
+                wt.subject_id, wt.subject_name, wt.faculty_id, wt.lecture_type,
+                wt.department_code, wt.academic_year,
+                s.subject_code, s.credits
+            FROM weekly_timetable_07 wt
+            LEFT JOIN subjects s ON s.subject_id = wt.subject_id
+            WHERE wt.semester_no = $1
+                AND wt.academic_year = $2
+            ORDER BY wt.day_name, wt.slot_no, wt.start_time
+        """
+        semester_query = """
+            SELECT
+                wt.timetable_id, wt.day_name, wt.slot_no, wt.start_time, wt.end_time,
+                wt.subject_id, wt.subject_name, wt.faculty_id, wt.lecture_type,
+                wt.department_code, wt.academic_year,
+                s.subject_code, s.credits
+            FROM weekly_timetable_07 wt
+            LEFT JOIN subjects s ON s.subject_id = wt.subject_id
+            WHERE wt.semester_no = $1
+            ORDER BY wt.day_name, wt.slot_no, wt.start_time
+        """
+        slots_query = """
+            SELECT DISTINCT slot_no, start_time, end_time
+            FROM weekly_timetable_07
+            WHERE semester_no = $1
+            ORDER BY slot_no, start_time
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, semester_no, academic_year)
+            year = academic_year
+            if not rows:
+                rows = await conn.fetch(semester_query, semester_no)
+                if rows:
+                    year = rows[0]["academic_year"]
+            slots = await conn.fetch(slots_query, semester_no)
+            return {
+                "sessions": [dict(row) for row in rows],
+                "slots": [dict(row) for row in slots],
+                "academic_year": year,
+            }

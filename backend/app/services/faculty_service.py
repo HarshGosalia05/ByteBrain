@@ -159,6 +159,8 @@ from app.schemas.faculty import (
     FacultyTimetableSession,
     FacultyTimetableDay,
     FacultyTimetableResponse,
+    FullTimetableResponse,
+    TimetableSlot,
 )
 from fastapi import HTTPException, status
 
@@ -4572,7 +4574,9 @@ class FacultyService:
             if academic_year is None:
                 academic_year = current["academic_year"]
 
-        rows = await self.repo.get_faculty_timetable(faculty_id, semester_no)
+        data = await self.repo.get_faculty_timetable(faculty_id, semester_no)
+        rows = data["sessions"]
+        slots = data["slots"]
 
         day_order = {
             "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
@@ -4590,6 +4594,52 @@ class FacultyService:
             semester_no=semester_no,
             academic_year=academic_year,
             total_sessions=len(rows),
+            slots=[TimetableSlot(**slot) for slot in slots],
+            days=[
+                FacultyTimetableDay(day_name=day, sessions=sessions)
+                for day, sessions in grouped.items()
+            ],
+        )
+
+    async def get_full_timetable(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+    ) -> FullTimetableResponse:
+        await self._ensure_profile(faculty_id)
+        if semester_no is None or academic_year is None:
+            current = await self.repo.get_current_term(faculty_id)
+            if not current:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No active teaching term found for this faculty",
+                )
+            if semester_no is None:
+                semester_no = current["semester_no"]
+            if academic_year is None:
+                academic_year = current["academic_year"]
+
+        data = await self.repo.get_full_timetable(semester_no, academic_year)
+        rows = data["sessions"]
+        slots = data["slots"]
+
+        day_order = {
+            "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
+            "Friday": 4, "Saturday": 5, "Sunday": 6,
+        }
+        grouped: Dict[str, List[FacultyTimetableSession]] = {}
+        for r in sorted(
+            rows,
+            key=lambda row: (day_order.get(row["day_name"], 99), row["slot_no"], str(row["start_time"])),
+        ):
+            grouped.setdefault(r["day_name"], []).append(FacultyTimetableSession(**r))
+
+        return FullTimetableResponse(
+            semester_no=semester_no,
+            academic_year=data["academic_year"],
+            total_sessions=len(rows),
+            slots=[TimetableSlot(**slot) for slot in slots],
             days=[
                 FacultyTimetableDay(day_name=day, sessions=sessions)
                 for day, sessions in grouped.items()

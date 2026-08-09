@@ -2822,11 +2822,26 @@ export type FacultyTimetableDay = {
   sessions: FacultyTimetableSession[]
 }
 
+export type FacultyTimetableSlot = {
+  slot_no: number
+  start_time: string
+  end_time: string
+}
+
 export type FacultyTimetableResponse = {
   faculty_id: string
   semester_no: number
   academic_year: string
   total_sessions: number
+  slots: FacultyTimetableSlot[]
+  days: FacultyTimetableDay[]
+}
+
+export type FullTimetableResponse = {
+  semester_no: number
+  academic_year: string
+  total_sessions: number
+  slots: FacultyTimetableSlot[]
   days: FacultyTimetableDay[]
 }
 
@@ -2946,4 +2961,14 @@ export function getFacultyTimetable(
   const query = searchParams.toString()
   const path = query ? `timetable?${query}` : "timetable"
   return callFastapi<FacultyTimetableResponse>(path, BFF_TTL_MS)
+}
+
+export function getFullTimetable(
+  params: AttendanceEntryParams = {},
+): Promise<BffResult<FullTimetableResponse>> {
+  const searchParams = new URLSearchParams()
+  appendAttendanceTermParams(searchParams, params)
+  const query = searchParams.toString()
+  const path = query ? `timetable/full?${query}` : "timetable/full"
+  return callFastapi<FullTimetableResponse>(path, BFF_TTL_MS)
 }

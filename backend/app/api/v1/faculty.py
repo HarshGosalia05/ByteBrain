@@ -56,6 +56,7 @@ from app.schemas.faculty import (
     LectureAttendanceSaveResponse,
     AttendanceChangeLogResponse,
     FacultyTimetableResponse,
+    FullTimetableResponse,
 )
 from app.schemas.settings import (
     SettingsResponse,
@@ -333,6 +334,17 @@ async def get_my_timetable(
     service: FacultyService = Depends(get_faculty_service)
 ):
     return await service.get_faculty_timetable(
+        _faculty_id_or_error(user), semester, academic_year,
+    )
+
+@router.get("/timetable/full", response_model=FullTimetableResponse)
+async def get_full_timetable(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_full_timetable(
         _faculty_id_or_error(user), semester, academic_year,
     )
 
