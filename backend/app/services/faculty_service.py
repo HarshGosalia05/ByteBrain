@@ -8,6 +8,8 @@ from app.core.config import (
     MARKS_GRADE_FAIL,
     MARKS_CATEGORY_BANDS,
     MARKS_CATEGORY_LOW,
+    MARKS_REMARK_BANDS,
+    MARKS_REMARK_LOW,
 )
 from app.repositories.faculty_repo import (
     FacultyRepository,
@@ -130,6 +132,7 @@ from app.schemas.faculty import (
     WorkloadHighlightsResponse,
     MarksBand,
     MarksCategoryBand,
+    MarksRemarkBand,
     MarksConfig,
     SubjectMarksRow,
     SubjectMarksGrid,
@@ -214,6 +217,7 @@ def derive_marks_fields(
         "grade_point": None,
         "result_status": None,
         "performance_category": None,
+        "remarks": None,
     }
     if internal_marks is None or mid_sem_marks is None or end_sem_marks is None:
         return base
@@ -233,6 +237,12 @@ def derive_marks_fields(
             category = cat
             break
 
+    remark = MARKS_REMARK_LOW
+    for min_pct, r in MARKS_REMARK_BANDS:
+        if percentage >= min_pct:
+            remark = r
+            break
+
     return {
         "total_marks": total,
         "percentage": percentage,
@@ -240,6 +250,7 @@ def derive_marks_fields(
         "grade_point": grade_point,
         "result_status": "Pass" if percentage >= settings.MARKS_PASS_PERCENTAGE else "Fail",
         "performance_category": category,
+        "remarks": remark,
     }
 
 
@@ -4095,6 +4106,10 @@ class FacultyService:
                 MarksCategoryBand(min_percentage=float(m), category=c)
                 for m, c in MARKS_CATEGORY_BANDS
             ],
+            remark_bands=[
+                MarksRemarkBand(min_percentage=float(m), remark=r)
+                for m, r in MARKS_REMARK_BANDS
+            ],
         )
 
     def _marks_row(self, row: Dict[str, Any]) -> SubjectMarksRow:
@@ -4214,12 +4229,6 @@ class FacultyService:
                         f"{field} for enrollment {e['enrollment_record_id']} must be an integer "
                         f"between {lo} and {hi}"
                     )
-            remarks = e.get("remarks")
-            if remarks is not None and len(remarks) > config.remarks_max_length:
-                errors.append(
-                    f"remarks for enrollment {e['enrollment_record_id']} exceeds "
-                    f"{config.remarks_max_length} characters"
-                )
         if errors:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

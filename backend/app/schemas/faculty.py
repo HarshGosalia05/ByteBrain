@@ -996,6 +996,10 @@ class MarksCategoryBand(BaseModel):
     min_percentage: float
     category: str
 
+class MarksRemarkBand(BaseModel):
+    min_percentage: float
+    remark: str
+
 class MarksConfig(BaseModel):
     internal_max: int
     mid_sem_max: int
@@ -1005,6 +1009,7 @@ class MarksConfig(BaseModel):
     remarks_max_length: int
     grade_bands: List[MarksBand]
     category_bands: List[MarksCategoryBand]
+    remark_bands: List[MarksRemarkBand]
 
 class SubjectMarksRow(BaseModel):
     enrollment_record_id: str
@@ -1042,7 +1047,6 @@ class MarksRowInput(BaseModel):
     internal_marks: Optional[int] = None
     mid_sem_marks: Optional[int] = None
     end_sem_marks: Optional[int] = None
-    remarks: Optional[str] = None
 
 class MarksBatchSaveRequest(BaseModel):
     semester_no: int

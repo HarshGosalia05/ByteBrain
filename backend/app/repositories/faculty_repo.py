@@ -2533,7 +2533,9 @@ class FacultyRepository:
         changed_by: str,
         derive_marks: Callable[[Optional[int], Optional[int], Optional[int]], Dict[str, Any]],
     ) -> Dict[str, Any]:
-        editable = ["internal_marks", "mid_sem_marks", "end_sem_marks", "remarks"]
+        # Remarks is a derived field (like total/percentage/grade): it is never
+        # accepted from the client. Only the three raw marks are editable.
+        editable = ["internal_marks", "mid_sem_marks", "end_sem_marks"]
         results: List[Dict[str, Any]] = []
         async with self.pool.acquire() as conn:
             async with conn.transaction():
@@ -2628,7 +2630,7 @@ class FacultyRepository:
                             merged["internal_marks"], merged["mid_sem_marks"], merged["end_sem_marks"],
                             derived["total_marks"], derived["percentage"], derived["grade"],
                             derived["grade_point"], derived["result_status"],
-                            derived["performance_category"], merged["remarks"], changed_by,
+                            derived["performance_category"], derived["remarks"], changed_by,
                         )
                         for field in editable:
                             new_val = merged[field]
@@ -2665,7 +2667,7 @@ class FacultyRepository:
                         merged["internal_marks"], merged["mid_sem_marks"], merged["end_sem_marks"],
                         derived["total_marks"], derived["percentage"], derived["grade"],
                         derived["grade_point"], derived["result_status"],
-                        derived["performance_category"], merged["remarks"], changed_by, enr,
+                        derived["performance_category"], derived["remarks"], changed_by, enr,
                     )
                     for field in changed:
                         await conn.execute(

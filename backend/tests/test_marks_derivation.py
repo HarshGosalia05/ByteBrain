@@ -2,10 +2,13 @@
 
 Contract under test:
   * Derived fields (total/percentage/grade/grade_point/result_status/
-    performance_category) are calculated ONLY when ALL THREE marks
+    performance_category/remarks) are calculated ONLY when ALL THREE marks
     (internal, mid-sem, end-sem) are present.
   * A single NULL mark keeps every derived field NULL (never a partial
     total, never a derived value from COALESCE(NULL, 0)).
+  * Remarks is an automatic derived value mapped from percentage
+    (>=90 Excellent / >=75 Good / >=60 Satisfactory / >=40 Needs
+    improvement / <40 At risk) and is NULL for incomplete records.
   * Explicit NULL is a legal "clear" action and passes validation.
   * Out-of-range marks are rejected with 422 before any DB write.
 
@@ -29,6 +32,7 @@ DERIVED_FIELDS = (
     "grade_point",
     "result_status",
     "performance_category",
+    "remarks",
 )
 
 
@@ -68,13 +72,14 @@ class DeriveMarksFieldsTests(unittest.TestCase):
         self.assertEqual(result["grade_point"], 9)
         self.assertEqual(result["result_status"], "Pass")
         self.assertEqual(result["performance_category"], "Above Average")
+        self.assertEqual(result["remarks"], "Good performance")
 
     def test_f_clear_end_after_complete(self):
-        # 18/47/60 -> clear end -> 18/47/NULL -> ALL derived NULL.
+        # 18/47/60 -> clear end -> 18/47/NULL -> ALL derived NULL (incl remarks).
         self.assert_all_derived_null(18, 47, None)
 
     def test_g_clear_mid_after_complete(self):
-        # 18/47/60 -> clear mid -> 18/NULL/60 -> ALL derived NULL.
+        # 18/47/60 -> clear mid -> 18/NULL/60 -> ALL derived NULL (incl remarks).
         self.assert_all_derived_null(18, None, 60)
 
     def test_i_complete_with_end_65(self):
@@ -85,6 +90,7 @@ class DeriveMarksFieldsTests(unittest.TestCase):
         self.assertEqual(result["grade_point"], 10)
         self.assertEqual(result["result_status"], "Pass")
         self.assertEqual(result["performance_category"], "Top")
+        self.assertEqual(result["remarks"], "Excellent performance")
 
     def test_zero_is_a_value_not_none(self):
         # 0 is a legitimate mark: it must NOT be treated as NULL.
@@ -95,6 +101,26 @@ class DeriveMarksFieldsTests(unittest.TestCase):
         self.assertEqual(result["grade_point"], 0)
         self.assertEqual(result["result_status"], "Fail")
         self.assertEqual(result["performance_category"], "Low Performer")
+        self.assertEqual(result["remarks"], "At risk - improvement required")
+
+    def test_remark_band_boundaries(self):
+        # (internal, mid, end) -> expected percentage and remark. Boundaries of
+        # the automatic-remark bands (90/75/60/40) are exercised both sides.
+        cases = [
+            ((20, 50, 56), 90.0, "Excellent performance"),
+            ((20, 45, 60), 89.29, "Good performance"),
+            ((10, 45, 50), 75.0, "Good performance"),
+            ((14, 40, 50), 74.29, "Satisfactory performance"),
+            ((10, 30, 44), 60.0, "Satisfactory performance"),
+            ((13, 30, 40), 59.29, "Needs improvement"),
+            ((10, 20, 26), 40.0, "Needs improvement"),
+            ((15, 20, 20), 39.29, "At risk - improvement required"),
+        ]
+        for marks, expected_pct, expected_remark in cases:
+            with self.subTest(marks=marks):
+                result = derive_marks_fields(*marks)
+                self.assertEqual(result["percentage"], expected_pct)
+                self.assertEqual(result["remarks"], expected_remark)
 
 
 class SaveSubjectMarksValidationTests(unittest.TestCase):
@@ -200,6 +226,51 @@ class SaveSubjectMarksValidationTests(unittest.TestCase):
             self.assertIsNone(entries[0]["end_sem_marks"])
             # The repo receives the authoritative derivator.
             self.assertIs(captured["derivator"], derive_marks_fields)
+
+        asyncio.run(scenario())
+
+    def test_client_supplied_remarks_are_never_forwarded(self):
+        # Remarks is a derived field: arbitrary text sent by a client must be
+        # ignored (extra input fields are dropped by the request schema).
+        async def scenario():
+            svc = self._make_service()
+            captured = {}
+
+            async def fake_upsert(faculty_id, subject_id, sem, year, entries,
+                                  changed_by, derivator):
+                captured["entries"] = entries
+                return {
+                    "summary": {
+                        "saved": 1, "inserted": 0, "updated": 1,
+                        "unchanged": 0, "rejected": 0,
+                    },
+                    "results": [],
+                }
+
+            svc.repo.upsert_subject_marks.side_effect = fake_upsert
+            svc.get_subject_marks_grid = mock.AsyncMock(
+                side_effect=RuntimeError("STOP")
+            )
+
+            request = self._request(
+                MarksRowInput(
+                    enrollment_record_id="ENR000050",
+                    internal_marks=18,
+                    mid_sem_marks=47,
+                    end_sem_marks=60,
+                    remarks="custom text must be ignored",
+                )
+            )
+            try:
+                await svc.save_subject_marks(
+                    "FAC001", "SUB0001", request, "FAC001"
+                )
+            except RuntimeError as exc:
+                if str(exc) != "STOP":
+                    raise
+            entries = captured["entries"]
+            self.assertEqual(len(entries), 1)
+            self.assertNotIn("remarks", entries[0])
 
         asyncio.run(scenario())
 

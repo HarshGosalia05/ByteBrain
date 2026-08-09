@@ -13,7 +13,6 @@ export async function PATCH(
     internal_marks?: number | null
     mid_sem_marks?: number | null
     end_sem_marks?: number | null
-    remarks?: string | null
   }
   try {
     body = (await request.json()) as typeof body
@@ -44,7 +43,6 @@ export async function PATCH(
         internal_marks: body.internal_marks ?? null,
         mid_sem_marks: body.mid_sem_marks ?? null,
         end_sem_marks: body.end_sem_marks ?? null,
-        remarks: body.remarks ?? null,
       },
     ],
   })

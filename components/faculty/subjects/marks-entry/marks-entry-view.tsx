@@ -117,6 +117,7 @@ type LiveDerived = {
   gradePoint: number | null
   resultStatus: string | null
   category: string | null
+  remark: string | null
 }
 
 const INCOMPLETE_DERIVED: LiveDerived = {
@@ -127,6 +128,7 @@ const INCOMPLETE_DERIVED: LiveDerived = {
   gradePoint: null,
   resultStatus: null,
   category: null,
+  remark: null,
 }
 
 function computeLiveDerived(
@@ -164,6 +166,14 @@ function computeLiveDerived(
     }
   }
 
+  let remark: string | null = "At risk - improvement required"
+  for (const band of config.remark_bands ?? []) {
+    if (percentage >= band.min_percentage) {
+      remark = band.remark
+      break
+    }
+  }
+
   return {
     complete: true,
     total,
@@ -172,6 +182,7 @@ function computeLiveDerived(
     gradePoint,
     resultStatus: percentage >= config.pass_percentage ? "Pass" : "Fail",
     category,
+    remark,
   }
 }
 
@@ -697,9 +708,10 @@ export function MarksEntryView({
   }
 
   function remarksValue(live: LiveDerived): string {
-    // Automatic academic remark: the authoritative performance category is the
-    // single source of truth. Incomplete marks -> "—". No invented text.
-    return live.complete ? (live.category ?? "—") : "—"
+    // Automatic academic remark derived from percentage via the server-provided
+    // remark bands (single source of truth). Incomplete marks -> no remark, and
+    // the database value stays NULL; the UI shows "Not available yet".
+    return live.complete ? (live.remark ?? "Not available yet") : "Not available yet"
   }
 
   function derivedChips(row: SubjectMarksRow, live: LiveDerived) {

@@ -123,6 +123,21 @@ MARKS_CATEGORY_BANDS = [
 ]
 MARKS_CATEGORY_LOW = "Low Performer"
 
+# Automatic remarks bands: (min_percentage, remark), checked highest-first.
+# Remarks are derived from percentage with the V1 spec mapping
+# (>=90 Excellent / >=75 Good / >=60 Satisfactory / >=40 Needs improvement /
+# below 40 At risk). This is deliberately a separate band table from the
+# performance category so the human-readable remark stays concise; it is
+# computed in the same single derive_marks_fields flow and mirrored by the
+# live database trigger.
+MARKS_REMARK_BANDS = [
+    (90.0, "Excellent performance"),
+    (75.0, "Good performance"),
+    (60.0, "Satisfactory performance"),
+    (40.0, "Needs improvement"),
+]
+MARKS_REMARK_LOW = "At risk - improvement required"
+
 # --- Attendance Entry aggregate bands (plan 15 section 6.3, verified vs seed) --
 # Critical < 60 | Low 60-75 | Average 75-80 | Good 80-90 | Excellent >= 90
 # Thresholds reused from the Threshold Engine settings above.

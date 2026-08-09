@@ -2467,6 +2467,8 @@ export type MarksBand = { min_percentage: number; grade: string; grade_point: nu
 
 export type MarksCategoryBand = { min_percentage: number; category: string }
 
+export type MarksRemarkBand = { min_percentage: number; remark: string }
+
 export type MarksConfig = {
   internal_max: number
   mid_sem_max: number
@@ -2476,6 +2478,7 @@ export type MarksConfig = {
   remarks_max_length: number
   grade_bands: MarksBand[]
   category_bands: MarksCategoryBand[]
+  remark_bands: MarksRemarkBand[]
 }
 
 export type SubjectMarksRow = {
@@ -2516,7 +2519,6 @@ export type MarksRowInput = {
   internal_marks?: number | null
   mid_sem_marks?: number | null
   end_sem_marks?: number | null
-  remarks?: string | null
 }
 
 export type MarksBatchSaveRequest = {
