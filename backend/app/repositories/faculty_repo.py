@@ -2581,13 +2581,18 @@ class FacultyRepository:
                     merged: Dict[str, Any] = {}
                     changed: List[str] = []
                     for field in editable:
-                        new_val = entry.get(field)
                         old_val = existing[field] if existing is not None else None
-                        if new_val is None:
+                        if field not in entry:
+                            # Field omitted from the request -> leave DB value untouched.
                             merged[field] = old_val
-                        elif new_val == old_val:
+                            continue
+                        new_val = entry[field]
+                        if new_val == old_val:
                             merged[field] = old_val
                         else:
+                            # Includes explicit null (clear) -> null differs from a
+                            # populated old value, so the field is written as NULL and
+                            # the change is recorded for the audit log.
                             merged[field] = new_val
                             changed.append(field)
 
@@ -3411,3 +3416,24 @@ class FacultyRepository:
             "total": int(total) if total else 0,
             "items": [dict(r) for r in rows],
         }
+
+    async def get_faculty_timetable(
+        self,
+        faculty_id: str,
+        semester_no: int,
+    ) -> List[Dict[str, Any]]:
+        query = """
+            SELECT
+                wt.timetable_id, wt.day_name, wt.slot_no, wt.start_time, wt.end_time,
+                wt.subject_id, wt.subject_name, wt.faculty_id, wt.lecture_type,
+                wt.department_code,
+                s.subject_code, s.credits
+            FROM weekly_timetable_07 wt
+            LEFT JOIN subjects s ON s.subject_id = wt.subject_id
+            WHERE wt.faculty_id = $1
+                AND wt.semester_no = $2
+            ORDER BY wt.slot_no, wt.start_time
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, faculty_id, semester_no)
+            return [dict(row) for row in rows]

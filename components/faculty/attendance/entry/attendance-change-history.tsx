@@ -142,10 +142,10 @@ export function AttendanceChangeHistory({
                   {item.student_name ?? item.student_id}
                 </TableCell>
                 <TableCell className="font-mono text-xs">{item.field_name}</TableCell>
-                <TableCell className="max-w-24 truncate text-muted-foreground">
+                <TableCell className="max-w-56 break-words text-muted-foreground">
                   {formatValue(item.old_value)}
                 </TableCell>
-                <TableCell className="max-w-24 truncate font-medium">
+                <TableCell className="max-w-56 break-words font-medium">
                   {formatValue(item.new_value)}
                 </TableCell>
                 <TableCell>

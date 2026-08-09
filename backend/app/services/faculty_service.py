@@ -153,6 +153,9 @@ from app.schemas.faculty import (
     LectureAttendanceSaveResponse,
     AttendanceChangeLogItem,
     AttendanceChangeLogResponse,
+    FacultyTimetableSession,
+    FacultyTimetableDay,
+    FacultyTimetableResponse,
 )
 from fastapi import HTTPException, status
 
@@ -4192,7 +4195,10 @@ class FacultyService:
         changed_by: str,
     ) -> MarksBatchSaveResponse:
         await self._ensure_profile(faculty_id)
-        entries = [e.model_dump() for e in request.rows]
+        # exclude_unset keeps the partial-save contract: a field omitted from the
+        # request means "leave the existing value alone", while an explicit null
+        # means "clear this field" (used by the per-field clear action).
+        entries = [e.model_dump(exclude_unset=True) for e in request.rows]
         config = self._marks_config()
         bounds = {
             "internal_marks": (0, config.internal_max),
@@ -4532,4 +4538,47 @@ class FacultyService:
                 total=total,
                 total_pages=total_pages,
             ),
+        )
+
+    async def get_faculty_timetable(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+    ) -> FacultyTimetableResponse:
+        await self._ensure_profile(faculty_id)
+        if semester_no is None or academic_year is None:
+            current = await self.repo.get_current_term(faculty_id)
+            if not current:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No active teaching term found for this faculty",
+                )
+            if semester_no is None:
+                semester_no = current["semester_no"]
+            if academic_year is None:
+                academic_year = current["academic_year"]
+
+        rows = await self.repo.get_faculty_timetable(faculty_id, semester_no)
+
+        day_order = {
+            "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
+            "Friday": 4, "Saturday": 5, "Sunday": 6,
+        }
+        grouped: Dict[str, List[FacultyTimetableSession]] = {}
+        for r in sorted(
+            rows,
+            key=lambda row: (day_order.get(row["day_name"], 99), row["slot_no"], str(row["start_time"])),
+        ):
+            grouped.setdefault(r["day_name"], []).append(FacultyTimetableSession(**r))
+
+        return FacultyTimetableResponse(
+            faculty_id=faculty_id,
+            semester_no=semester_no,
+            academic_year=academic_year,
+            total_sessions=len(rows),
+            days=[
+                FacultyTimetableDay(day_name=day, sessions=sessions)
+                for day, sessions in grouped.items()
+            ],
         )

@@ -2796,6 +2796,34 @@ export type AttendanceEntryParams = {
   academic_year?: string | null
 }
 
+export type FacultyTimetableSession = {
+  timetable_id: number
+  day_name: string
+  slot_no: number
+  start_time: string
+  end_time: string
+  subject_id: string
+  subject_code: string | null
+  subject_name: string
+  credits: number | null
+  lecture_type: string | null
+  department_code: number | null
+  faculty_id: string
+}
+
+export type FacultyTimetableDay = {
+  day_name: string
+  sessions: FacultyTimetableSession[]
+}
+
+export type FacultyTimetableResponse = {
+  faculty_id: string
+  semester_no: number
+  academic_year: string
+  total_sessions: number
+  days: FacultyTimetableDay[]
+}
+
 export function getAttendanceEntryMeta(
   subjectId: string,
   params: AttendanceEntryParams = {},
@@ -2886,4 +2914,16 @@ export function getAttendanceChangeLog(
     ? `subjects/${subjectId}/attendance/log?${query}`
     : `subjects/${subjectId}/attendance/log`
   return callFastapi<AttendanceChangeLogResponse>(path, BFF_TTL_MS)
+}
+
+export function getFacultyTimetable(
+  params: AttendanceEntryParams = {},
+): Promise<BffResult<FacultyTimetableResponse>> {
+  const searchParams = new URLSearchParams()
+  if (params.semester !== undefined) searchParams.set("semester", String(params.semester))
+  if (params.academic_year !== undefined)
+    searchParams.set("academic_year", params.academic_year ?? "")
+  const query = searchParams.toString()
+  const path = query ? `timetable?${query}` : "timetable"
+  return callFastapi<FacultyTimetableResponse>(path, BFF_TTL_MS)
 }

@@ -74,6 +74,24 @@ function sessionLabel(session: AttendanceSession): string {
   )}${type}`
 }
 
+function SummaryStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number | string | null
+  tone?: "good" | "bad"
+}) {
+  const color = tone === "good" ? "text-chart-2" : tone === "bad" ? "text-destructive" : ""
+  return (
+    <span className="whitespace-nowrap text-sm">
+      <span className="text-muted-foreground">{label}</span>{" "}
+      <span className={`font-medium tabular-nums ${color}`}>{value ?? "—"}</span>
+    </span>
+  )
+}
+
 export function AttendanceEntryView({
   subjectOptions,
   initialSubjectId,
@@ -120,6 +138,19 @@ export function AttendanceEntryView({
     return params.toString()
   }, [semester, academicYear])
 
+  const weekday = date ? weekdayOf(date) : null
+  const sessionsForDate = React.useMemo(() => {
+    if (!meta || !weekday) return []
+    return meta.sessions.filter(
+      (s) => s.day_name.toLowerCase() === weekday.toLowerCase(),
+    )
+  }, [meta, weekday])
+
+  const dateRef = React.useRef(date)
+  React.useEffect(() => {
+    dateRef.current = date
+  }, [date])
+
   const loadMeta = React.useCallback(async () => {
     if (!subjectId) return
     try {
@@ -132,21 +163,32 @@ export function AttendanceEntryView({
         | { ok: false; error: { status: number; message: string } }
       if (!result.ok) {
         setMetaError(result.error.message)
+        setLectureLoading(false)
         return
       }
       setMeta(result.data)
-      if (result.data.sessions.length === 1) {
-        setSlotNo(result.data.sessions[0].slot_no)
-      }
+      const currentWeekday = dateRef.current ? weekdayOf(dateRef.current) : null
+      const matches = currentWeekday
+        ? result.data.sessions.filter(
+            (s) => s.day_name.toLowerCase() === currentWeekday.toLowerCase(),
+          )
+        : []
+      setSlotNo(matches.length === 1 ? matches[0].slot_no : null)
+      setLectureLoading(matches.length === 1)
     } catch {
       setMetaError("Could not load the lecture schedule. Please try again.")
+      setLectureLoading(false)
     } finally {
       setMetaLoading(false)
     }
   }, [subjectId, queryParams])
 
   const loadLecture = React.useCallback(async () => {
-    if (!subjectId || !date || slotNo === null) return
+    if (!subjectId || !date || slotNo === null) {
+      setLectureLoading(false)
+      setLecture(null)
+      return
+    }
     try {
       const params = new URLSearchParams({ slot_no: String(slotNo) })
       if (queryParams) {
@@ -168,12 +210,13 @@ export function AttendanceEntryView({
       setLecture(result.data)
       const next: Record<string, "P" | "A"> = {}
       for (const student of result.data.students) {
-        next[student.student_id] = student.attendance_status === "P" ? "P" : "A"
+        if (student.attendance_status === "P" || student.attendance_status === "A") {
+          next[student.student_id] = student.attendance_status
+        }
       }
       setStatuses(next)
       setBulkAccepted([])
       setBulkRejected([])
-      setSaveResult(null)
     } catch {
       setLectureError("Could not load the lecture attendance. Please try again.")
     } finally {
@@ -205,14 +248,6 @@ export function AttendanceEntryView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadLecture()
   }, [loadLecture])
-
-  const weekday = date ? weekdayOf(date) : null
-  const sessionsForDate = React.useMemo(() => {
-    if (!meta || !weekday) return []
-    return meta.sessions.filter(
-      (s) => s.day_name.toLowerCase() === weekday.toLowerCase(),
-    )
-  }, [meta, weekday])
 
   function toggleStatus(studentId: string) {
     setStatuses((prev) => ({
@@ -304,7 +339,23 @@ export function AttendanceEntryView({
   }
 
   const presentCount = Object.values(statuses).filter((s) => s === "P").length
+  const absentCount = Object.values(statuses).filter((s) => s === "A").length
   const studentCount = lecture?.students.length ?? 0
+  const notMarkedCount = studentCount - presentCount - absentCount
+  const shortageCount = lecture?.students.filter((s) => s.shortage_flag === "Yes").length ?? 0
+
+  const confirmedStats = saveResult
+    ? {
+        total: saveResult.students.length,
+        present: saveResult.students.filter((s) => s.attendance_status === "P").length,
+        absent: saveResult.students.filter((s) => s.attendance_status === "A").length,
+        notMarked: saveResult.students.filter(
+          (s) => s.attendance_status !== "P" && s.attendance_status !== "A",
+        ).length,
+        totalClasses: saveResult.lecture_number,
+        shortage: saveResult.students.filter((s) => s.shortage_flag === "Yes").length,
+      }
+    : null
 
   return (
     <div className="flex flex-col gap-6">
@@ -375,8 +426,11 @@ export function AttendanceEntryView({
                     const nextDate = event.target.value
                     setDate(nextDate)
                     setLecture(null)
-                    setLectureLoading(true)
                     setLectureError(null)
+                    setSaveResult(null)
+                    setStatuses({})
+                    setBulkAccepted([])
+                    setBulkRejected([])
                     const nextWeekday = nextDate ? weekdayOf(nextDate) : null
                     const matches =
                       nextWeekday && meta
@@ -385,6 +439,7 @@ export function AttendanceEntryView({
                           )
                         : []
                     setSlotNo(matches.length === 1 ? matches[0].slot_no : null)
+                    setLectureLoading(matches.length === 1)
                   }}
                   className="w-full sm:w-44"
                 />
@@ -399,6 +454,7 @@ export function AttendanceEntryView({
                       setSlotNo(Number(value))
                       setLectureLoading(true)
                       setLectureError(null)
+                      setSaveResult(null)
                     }
                   }}
                 >
@@ -472,6 +528,29 @@ export function AttendanceEntryView({
                   {lectureError && (
                     <ErrorState title="Failed to load lecture" description={lectureError} />
                   )}
+
+                  {!lectureLoading &&
+                    !lectureError &&
+                    !lecture &&
+                    weekday &&
+                    sessionsForDate.length === 0 && (
+                      <EmptyState
+                        icon={CalendarDays}
+                        title="No timetable session found for this date"
+                        description={`${weekday} has no scheduled ${meta.subject_code} session in this term. Pick another date to record attendance.`}
+                      />
+                    )}
+
+                  {!lectureLoading &&
+                    !lectureError &&
+                    !lecture &&
+                    weekday &&
+                    sessionsForDate.length > 1 && (
+                      <p className="rounded-xl bg-muted/50 p-4 text-sm text-muted-foreground">
+                        {sessionsForDate.length} sessions are scheduled for {weekday}. Select a slot
+                        above to load the attendance grid.
+                      </p>
+                    )}
 
                   {lecture && !lectureLoading && (
                     <>
@@ -666,11 +745,50 @@ export function AttendanceEntryView({
                         className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10"
                         aria-label="Save bar"
                       >
-                        <div className="flex min-w-0 flex-col gap-1">
-                          <p className="text-sm font-medium">
-                            {studentCount} students · {presentCount} present ·{" "}
-                            {studentCount - presentCount} absent
-                          </p>
+                        <div className="flex min-w-0 flex-col gap-2">
+                          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
+                            {confirmedStats ? (
+                              <>
+                                <SummaryStat label="Total Students" value={confirmedStats.total} />
+                                <SummaryStat
+                                  label="Present"
+                                  value={confirmedStats.present}
+                                  tone="good"
+                                />
+                                <SummaryStat
+                                  label="Absent"
+                                  value={confirmedStats.absent}
+                                  tone="bad"
+                                />
+                                <SummaryStat label="Not Marked" value={confirmedStats.notMarked} />
+                                <SummaryStat
+                                  label="Total Classes"
+                                  value={confirmedStats.totalClasses}
+                                />
+                                <SummaryStat
+                                  label="Shortage"
+                                  value={confirmedStats.shortage}
+                                  tone={confirmedStats.shortage > 0 ? "bad" : undefined}
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <SummaryStat label="Total Students" value={studentCount} />
+                                <SummaryStat label="Present" value={presentCount} tone="good" />
+                                <SummaryStat label="Absent" value={absentCount} tone="bad" />
+                                <SummaryStat label="Not Marked" value={notMarkedCount} />
+                                <SummaryStat
+                                  label="Total Classes"
+                                  value={lecture.lecture_number}
+                                />
+                                <SummaryStat
+                                  label="Shortage"
+                                  value={shortageCount}
+                                  tone={shortageCount > 0 ? "bad" : undefined}
+                                />
+                              </>
+                            )}
+                          </div>
                           {saveResult ? (
                             <p
                               className="flex flex-wrap items-center gap-1.5 text-sm text-chart-2"
@@ -685,7 +803,8 @@ export function AttendanceEntryView({
                             </p>
                           ) : (
                             <p className="text-xs text-muted-foreground">
-                              Aggregate percentages and shortage flags refresh after save.
+                              Totals, total classes, and shortage flags are confirmed by the server
+                              after saving.
                             </p>
                           )}
                         </div>

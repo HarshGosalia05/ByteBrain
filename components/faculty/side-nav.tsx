@@ -7,6 +7,7 @@ import {
   BookOpen,
   Briefcase,
   CalendarCheck,
+  CalendarRange,
   LayoutDashboard,
   Settings,
   User,
@@ -23,6 +24,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/faculty/subjects", label: "Subjects", icon: BookOpen },
   { href: "/faculty/performance", label: "Performance Analytics", icon: BarChart3 },
   { href: "/faculty/attendance", label: "Attendance Analytics", icon: CalendarCheck },
+  { href: "/faculty/timetable", label: "Time Table", icon: CalendarRange },
   { href: "/faculty/workload", label: "Teaching Workload", icon: Briefcase },
   { href: "/faculty/settings", label: "Settings", icon: Settings },
 ]

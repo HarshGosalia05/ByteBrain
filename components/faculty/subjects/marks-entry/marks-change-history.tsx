@@ -23,6 +23,32 @@ function formatValue(value: unknown): string {
   return String(value)
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  internal_marks: "Internal Marks",
+  mid_sem_marks: "Mid-sem Marks",
+  end_sem_marks: "End-sem Marks",
+  total_marks: "Total Marks",
+  percentage: "Percentage",
+  grade: "Grade",
+  grade_point: "Grade Point",
+  result_status: "Result",
+  performance_category: "Performance Category",
+  remarks: "Remarks",
+}
+
+function fieldLabel(fieldName: string): string {
+  return FIELD_LABELS[fieldName] ?? fieldName
+}
+
+function isClearChange(item: MarksChangeLogResponse["items"][number]): boolean {
+  return (
+    item.new_value === null &&
+    item.old_value !== null &&
+    item.old_value !== undefined &&
+    item.operation_type === "update"
+  )
+}
+
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString()
 }
@@ -139,12 +165,12 @@ export function MarksChangeHistory({
                 <TableCell className="font-medium">
                   {item.student_name ?? item.student_id}
                 </TableCell>
-                <TableCell className="font-mono text-xs">{item.field_name}</TableCell>
-                <TableCell className="max-w-40 truncate text-muted-foreground">
+                <TableCell className="font-mono text-xs">{fieldLabel(item.field_name)}</TableCell>
+                <TableCell className="max-w-56 break-words text-muted-foreground">
                   {formatValue(item.old_value)}
                 </TableCell>
-                <TableCell className="max-w-40 truncate font-medium">
-                  {formatValue(item.new_value)}
+                <TableCell className="max-w-56 break-words font-medium">
+                  {isClearChange(item) ? "Cleared" : formatValue(item.new_value)}
                 </TableCell>
                 <TableCell>
                   <span

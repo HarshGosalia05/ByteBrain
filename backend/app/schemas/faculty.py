@@ -1230,3 +1230,28 @@ class AttendanceChangeLogResponse(BaseModel):
     academic_year: str
     items: List[AttendanceChangeLogItem]
     pagination: FacultyPagination
+
+class FacultyTimetableSession(BaseModel):
+    timetable_id: int
+    day_name: str
+    slot_no: int
+    start_time: time
+    end_time: time
+    subject_id: str
+    subject_code: Optional[str] = None
+    subject_name: str
+    credits: Optional[int] = None
+    lecture_type: Optional[str] = None
+    department_code: Optional[int] = None
+    faculty_id: str
+
+class FacultyTimetableDay(BaseModel):
+    day_name: str
+    sessions: List[FacultyTimetableSession]
+
+class FacultyTimetableResponse(BaseModel):
+    faculty_id: str
+    semester_no: int
+    academic_year: str
+    total_sessions: int
+    days: List[FacultyTimetableDay]
