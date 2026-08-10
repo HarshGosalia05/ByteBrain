@@ -180,7 +180,11 @@ function computeLiveDerived(
     percentage,
     grade,
     gradePoint,
-    resultStatus: percentage >= config.pass_percentage ? "Pass" : "Fail",
+    resultStatus:
+      percentage >= config.pass_percentage &&
+      end >= (config.end_sem_pass_min ?? 18)
+        ? "Pass"
+        : "Fail",
     category,
     remark,
   }
@@ -211,6 +215,18 @@ function validateMarksField(raw: string, max: number): string | null {
 
 function formatPercent(value: number | null): string {
   return value !== null ? `${value.toFixed(1)}%` : "—"
+}
+
+// Block single-character keys that are not digits so "-", "+", "e", "." and
+// whitespace can never be typed into a marks field. Control keys (Backspace,
+// Delete, Arrows, Tab, Enter) pass through, and copy/paste shortcuts are
+// allowed so pasted values are still validated by validateMarksField / the
+// backend before they can be saved.
+function guardNumericKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+  if (event.ctrlKey || event.metaKey || event.altKey) return
+  if (event.key.length === 1 && !/[0-9]/.test(event.key)) {
+    event.preventDefault()
+  }
 }
 
 function fieldDraftValue(
@@ -635,6 +651,7 @@ export function MarksEntryView({
           placeholder="Not entered"
           value={fieldDraftValue(row, drafts[row.enrollment_record_id], field)}
           onChange={(event) => setField(row.enrollment_record_id, field, event.target.value)}
+          onKeyDown={guardNumericKeyDown}
           aria-invalid={error ? true : undefined}
           aria-describedby={
             error ? `${row.enrollment_record_id}-${field}-error` : undefined

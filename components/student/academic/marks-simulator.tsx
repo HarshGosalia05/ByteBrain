@@ -1,11 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { Calculator, Info } from "lucide-react"
+import { Calculator, Info, TriangleAlert } from "lucide-react"
 
 import {
+  MARKS_COMPONENT_RANGE,
   MARKS_TOTAL_MAX,
+  parseMarksField,
   simulateMarks,
+  type MarksComponentKey,
   type MarksSimulationResult,
 } from "@/lib/student/marks-simulation"
 
@@ -23,15 +26,6 @@ import {
 } from "@/components/ui/select"
 import { GradeBadge } from "@/components/shared/data/grade-badge"
 
-// Verified assessment model (MD-03 brief §4): Internal /20, Mid-Sem /50,
-// End-Sem /70, Total /140. Display-only labels (mirrors the shared
-// lib/student/marks-simulation.ts maxima).
-const COMPONENT_MAX = {
-  internal: 20,
-  mid: 50,
-  end: 70,
-} as const
-
 export type SimulatorSubject = {
   subject_code: string
   subject_name: string
@@ -40,40 +34,76 @@ export type SimulatorSubject = {
   end_sem_marks: number | null
 }
 
-type Values = { internal: string; mid: string; end: string }
+type Values = Record<MarksComponentKey, string>
+
+// UI field order and the snake_case component each maps to.
+const FIELD_KEYS: MarksComponentKey[] = ["internal_marks", "mid_sem_marks", "end_sem_marks"]
 
 function valuesFromSubject(subject: SimulatorSubject): Values {
   return {
-    internal: subject.internal_marks === null ? "" : String(subject.internal_marks),
-    mid: subject.mid_sem_marks === null ? "" : String(subject.mid_sem_marks),
-    end: subject.end_sem_marks === null ? "" : String(subject.end_sem_marks),
+    internal_marks: subject.internal_marks === null ? "" : String(subject.internal_marks),
+    mid_sem_marks: subject.mid_sem_marks === null ? "" : String(subject.mid_sem_marks),
+    end_sem_marks: subject.end_sem_marks === null ? "" : String(subject.end_sem_marks),
   }
 }
 
-function parseValue(raw: string): number | null {
-  const trimmed = raw.trim()
-  if (trimmed === "") return null
-  const value = Number(trimmed)
-  if (!Number.isFinite(value)) return null
-  return Math.trunc(value)
+const EMPTY_VALUES: Values = { internal_marks: "", mid_sem_marks: "", end_sem_marks: "" }
+
+function emptyErrors(): Record<MarksComponentKey, string> {
+  return { internal_marks: "", mid_sem_marks: "", end_sem_marks: "" }
+}
+
+// Block single-character keys that are not digits. Control keys (Backspace,
+// Delete, Arrows, Tab, Enter, Home, End) have multi-character `key` values and
+// pass through. Copy/paste/cut/select-all shortcuts are allowed so the paste
+// path is still validated by the onChange sanitizer below.
+function guardNumericKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+  if (event.ctrlKey || event.metaKey || event.altKey) return
+  if (event.key.length === 1 && !/[0-9]/.test(event.key)) {
+    event.preventDefault()
+  }
 }
 
 export function MarksSimulator({ subjects }: { subjects: SimulatorSubject[] }) {
   const first = subjects[0]
   const [selectedCode, setSelectedCode] = React.useState(first?.subject_code ?? "")
   const [values, setValues] = React.useState<Values>(() =>
-    first ? valuesFromSubject(first) : { internal: "", mid: "", end: "" },
+    first ? valuesFromSubject(first) : EMPTY_VALUES,
+  )
+  const [fieldErrors, setFieldErrors] = React.useState<Record<MarksComponentKey, string>>(() =>
+    emptyErrors(),
   )
 
   const activeSubject =
     subjects.find((subject) => subject.subject_code === selectedCode) ?? first
 
-  // Pure, deterministic and synchronous — no network, no API, no persistence.
+  // The state is always either "" or a valid in-range integer (see handleChange
+  // below). simulateMarks still hard-validates as defense in depth.
   const result: MarksSimulationResult = simulateMarks({
-    internal_marks: parseValue(values.internal),
-    mid_sem_marks: parseValue(values.mid),
-    end_sem_marks: parseValue(values.end),
+    internal_marks: values.internal_marks === "" ? null : Number(values.internal_marks),
+    mid_sem_marks: values.mid_sem_marks === "" ? null : Number(values.mid_sem_marks),
+    end_sem_marks: values.end_sem_marks === "" ? null : Number(values.end_sem_marks),
   })
+
+  const hasFieldError =
+    fieldErrors.internal_marks !== "" ||
+    fieldErrors.mid_sem_marks !== "" ||
+    fieldErrors.end_sem_marks !== ""
+
+  const canShowResult = !hasFieldError && result.status === "complete"
+
+  const handleChange = (field: MarksComponentKey, raw: string) => {
+    const parsed = parseMarksField(raw, field)
+    if (parsed.valid) {
+      setValues((prev) => ({
+        ...prev,
+        [field]: parsed.value === null ? "" : String(parsed.value),
+      }))
+      setFieldErrors((prev) => ({ ...prev, [field]: "" }))
+    } else {
+      setFieldErrors((prev) => ({ ...prev, [field]: parsed.error ?? "" }))
+    }
+  }
 
   const changeSubject = (code: string | null) => {
     if (!code) return
@@ -81,6 +111,7 @@ export function MarksSimulator({ subjects }: { subjects: SimulatorSubject[] }) {
     if (!subject) return
     setSelectedCode(code)
     setValues(valuesFromSubject(subject))
+    setFieldErrors(emptyErrors())
   }
 
   if (subjects.length === 0) {
@@ -131,48 +162,47 @@ export function MarksSimulator({ subjects }: { subjects: SimulatorSubject[] }) {
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="sim-internal" className="text-xs font-medium text-muted-foreground">
-              Internal marks <span className="text-muted-foreground/70">/ {COMPONENT_MAX.internal}</span>
-            </label>
-            <Input
-              id="sim-internal"
-              type="number"
-              min={0}
-              max={COMPONENT_MAX.internal}
-              inputMode="numeric"
-              value={values.internal}
-              onChange={(event) => setValues({ ...values, internal: event.target.value })}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="sim-mid" className="text-xs font-medium text-muted-foreground">
-              Mid-sem marks <span className="text-muted-foreground/70">/ {COMPONENT_MAX.mid}</span>
-            </label>
-            <Input
-              id="sim-mid"
-              type="number"
-              min={0}
-              max={COMPONENT_MAX.mid}
-              inputMode="numeric"
-              value={values.mid}
-              onChange={(event) => setValues({ ...values, mid: event.target.value })}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="sim-end" className="text-xs font-medium text-muted-foreground">
-              End-sem marks <span className="text-muted-foreground/70">/ {COMPONENT_MAX.end}</span>
-            </label>
-            <Input
-              id="sim-end"
-              type="number"
-              min={0}
-              max={COMPONENT_MAX.end}
-              inputMode="numeric"
-              value={values.end}
-              onChange={(event) => setValues({ ...values, end: event.target.value })}
-            />
-          </div>
+          {FIELD_KEYS.map((field) => {
+            const range = MARKS_COMPONENT_RANGE[field]
+            const error = fieldErrors[field]
+            return (
+              <div key={field} className="flex flex-col gap-1.5">
+                <label
+                  htmlFor={`sim-${field}`}
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  {range.label} marks{" "}
+                  <span className="text-muted-foreground/70">/ {range.max}</span>
+                </label>
+                <Input
+                  id={`sim-${field}`}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="off"
+                  placeholder="Not entered"
+                  value={values[field]}
+                  onChange={(event) => handleChange(field, event.target.value)}
+                  onKeyDown={guardNumericKeyDown}
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? `sim-${field}-error` : undefined}
+                />
+                {error ? (
+                  <p id={`sim-${field}-error`} className="text-[11px] leading-tight text-destructive">
+                    {error}
+                  </p>
+                ) : field === "end_sem_marks" && result.end_sem_min_warning ? (
+                  <p
+                    id="sim-end_sem_marks-warning"
+                    className="flex items-start gap-1 text-[11px] leading-tight text-amber-600 dark:text-amber-400"
+                  >
+                    <TriangleAlert className="mt-px size-3 shrink-0" />
+                    End-Sem marks must be at least {result.status === "complete" ? "18 to pass." : "18."}
+                  </p>
+                ) : null}
+              </div>
+            )
+          })}
         </div>
 
         <div className="flex flex-col gap-3 rounded-lg bg-muted/40 p-4">
@@ -182,10 +212,9 @@ export function MarksSimulator({ subjects }: { subjects: SimulatorSubject[] }) {
             </p>
           </div>
 
-          {!result.complete ? (
+          {!canShowResult ? (
             <p className="text-sm text-muted-foreground">
-              Enter values for all three components (or adjust your end-sem marks) to see the
-              simulated outcome.
+              Enter valid marks for all three components to see the simulated result.
             </p>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -226,6 +255,12 @@ export function MarksSimulator({ subjects }: { subjects: SimulatorSubject[] }) {
             </div>
           )}
 
+          {result.end_sem_min_warning && result.status === "complete" ? (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              End-Sem marks must be at least 18 to pass. The simulated result cannot be Pass.
+            </p>
+          ) : null}
+
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
@@ -234,6 +269,7 @@ export function MarksSimulator({ subjects }: { subjects: SimulatorSubject[] }) {
               onClick={() => {
                 if (activeSubject) {
                   setValues(valuesFromSubject(activeSubject))
+                  setFieldErrors(emptyErrors())
                 }
               }}
             >

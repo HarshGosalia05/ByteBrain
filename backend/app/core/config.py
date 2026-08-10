@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     MARKS_END_SEM_MAX: int = 70
     MARKS_TOTAL_MAX: int = 140
     MARKS_PASS_PERCENTAGE: float = 40.0
+    MARKS_END_SEM_PASS_MIN: int = 18
     MARKS_REMARKS_MAX_LENGTH: int = 500
 
     # Attendance Entry (plan 15): locked V1 scope + Average/Good split point

@@ -202,6 +202,20 @@ MARKS_SORT_EXPRESSIONS: Dict[str, str] = {
 }
 
 
+def _validate_marks_component(value: Any, name: str, lo: int, hi: int) -> None:
+    """Reject any marks value that is not a whole integer in [lo, hi].
+
+    ``type(value) is int`` (not ``isinstance``) also rejects booleans, floats,
+    NaN, Infinity and any non-numeric type before a derivation can run.
+    """
+    if value is None:
+        return
+    if type(value) is not int or not (lo <= value <= hi):
+        raise ValueError(
+            f"{name} must be an integer between {lo} and {hi}"
+        )
+
+
 def derive_marks_fields(
     internal_marks: Optional[int],
     mid_sem_marks: Optional[int],
@@ -211,7 +225,15 @@ def derive_marks_fields(
 
     Derived values are only computed when all three components are present;
     a NULL component keeps the derived fields NULL (end-sem not entered yet).
+
+    Validation is authoritative: a non-NULL component that is outside the
+    canonical bounds (internal 0-20, mid-sem 0-50, end-sem 0-70), or is not a
+    whole integer, raises ValueError before anything is derived.
     """
+    _validate_marks_component(internal_marks, "internal_marks", 0, settings.MARKS_INTERNAL_MAX)
+    _validate_marks_component(mid_sem_marks, "mid_sem_marks", 0, settings.MARKS_MID_SEM_MAX)
+    _validate_marks_component(end_sem_marks, "end_sem_marks", 0, settings.MARKS_END_SEM_MAX)
+
     base = {
         "total_marks": None,
         "percentage": None,
@@ -250,7 +272,12 @@ def derive_marks_fields(
         "percentage": percentage,
         "grade": grade,
         "grade_point": grade_point,
-        "result_status": "Pass" if percentage >= settings.MARKS_PASS_PERCENTAGE else "Fail",
+        "result_status": (
+            "Pass"
+            if percentage >= settings.MARKS_PASS_PERCENTAGE
+            and end_sem_marks >= settings.MARKS_END_SEM_PASS_MIN
+            else "Fail"
+        ),
         "performance_category": category,
         "remarks": remark,
     }
@@ -4099,6 +4126,7 @@ class FacultyService:
             end_sem_max=settings.MARKS_END_SEM_MAX,
             total_max=settings.MARKS_TOTAL_MAX,
             pass_percentage=settings.MARKS_PASS_PERCENTAGE,
+            end_sem_pass_min=settings.MARKS_END_SEM_PASS_MIN,
             remarks_max_length=settings.MARKS_REMARKS_MAX_LENGTH,
             grade_bands=[
                 MarksBand(min_percentage=float(m), grade=g, grade_point=int(gp))
@@ -4226,7 +4254,9 @@ class FacultyService:
         for e in entries:
             for field, (lo, hi) in bounds.items():
                 val = e.get(field)
-                if val is not None and not (isinstance(val, int) and lo <= val <= hi):
+                # `type(val) is int` (not isinstance) also rejects booleans
+                # (bool is an int subclass) and float NaN/Infinity.
+                if val is not None and not (type(val) is int and lo <= val <= hi):
                     errors.append(
                         f"{field} for enrollment {e['enrollment_record_id']} must be an integer "
                         f"between {lo} and {hi}"

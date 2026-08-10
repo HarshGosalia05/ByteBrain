@@ -2479,6 +2479,7 @@ export type MarksConfig = {
   end_sem_max: number
   total_max: number
   pass_percentage: number
+  end_sem_pass_min: number
   remarks_max_length: number
   grade_bands: MarksBand[]
   category_bands: MarksCategoryBand[]

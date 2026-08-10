@@ -274,6 +274,93 @@ class SaveSubjectMarksValidationTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_boolean_marks_rejected(self):
+        # bool is an int subclass: true must never be silently accepted as 1.
+        # The request schema rejects it before the service is even reached.
+        from pydantic import ValidationError
+        with self.assertRaises(ValidationError):
+            MarksRowInput(
+                enrollment_record_id="ENR000050",
+                internal_marks=True,
+            )
+
+
+class DeriveMarksFieldsInputValidationTests(unittest.TestCase):
+    """Canonical derivation rejects any non-whole or out-of-range component."""
+
+    def assert_value_error(self, internal, mid, end):
+        with self.assertRaises(ValueError):
+            derive_marks_fields(internal, mid, end)
+
+    def test_internal_above_max_rejected(self):
+        self.assert_value_error(21, 0, 0)
+
+    def test_internal_negative_rejected(self):
+        self.assert_value_error(-1, 0, 0)
+
+    def test_mid_above_max_rejected(self):
+        self.assert_value_error(0, 51, 0)
+
+    def test_mid_negative_rejected(self):
+        self.assert_value_error(0, -1, 0)
+
+    def test_end_above_max_rejected(self):
+        self.assert_value_error(0, 0, 71)
+
+    def test_end_negative_rejected(self):
+        self.assert_value_error(0, 0, -1)
+
+    def test_decimal_marks_rejected(self):
+        self.assert_value_error(12.5, 0, 0)
+
+    def test_float_nan_rejected(self):
+        self.assert_value_error(float("nan"), 0, 0)
+
+    def test_float_infinity_rejected(self):
+        self.assert_value_error(float("inf"), 0, 0)
+
+    def test_float_negative_infinity_rejected(self):
+        self.assert_value_error(0, 0, float("-inf"))
+
+    def test_boolean_rejected(self):
+        self.assert_value_error(True, 0, 0)
+
+    def test_boundaries_are_valid(self):
+        result = derive_marks_fields(20, 50, 70)
+        self.assertEqual(result["total_marks"], 140)
+        self.assertEqual(result["percentage"], 100.0)
+        self.assertEqual(result["result_status"], "Pass")
+
+
+class DeriveMarksFieldsEndSemPassRuleTests(unittest.TestCase):
+    """End-Sem below 18/70 can never be treated as Pass (canonical rule)."""
+
+    def test_end_sem_17_cannot_pass_even_with_high_total(self):
+        # 20+50+17 = 87 -> 62.14% (well above the 40% pass line) but End-Sem is
+        # below the 18/70 minimum, so the result must NOT be Pass.
+        result = derive_marks_fields(20, 50, 17)
+        self.assertEqual(result["total_marks"], 87)
+        self.assertEqual(result["percentage"], 62.14)
+        self.assertEqual(result["grade"], "B+")
+        self.assertEqual(result["result_status"], "Fail")
+
+    def test_end_sem_0_cannot_pass(self):
+        result = derive_marks_fields(20, 50, 0)
+        self.assertEqual(result["percentage"], 50.0)
+        self.assertEqual(result["result_status"], "Fail")
+
+    def test_end_sem_18_is_eligible_for_pass(self):
+        result = derive_marks_fields(20, 50, 18)
+        self.assertEqual(result["total_marks"], 88)
+        self.assertEqual(result["percentage"], 62.86)
+        self.assertEqual(result["result_status"], "Pass")
+
+    def test_end_sem_70_is_valid_and_passes(self):
+        result = derive_marks_fields(0, 0, 70)
+        self.assertEqual(result["total_marks"], 70)
+        self.assertEqual(result["percentage"], 50.0)
+        self.assertEqual(result["result_status"], "Pass")
+
 
 if __name__ == "__main__":
     unittest.main()

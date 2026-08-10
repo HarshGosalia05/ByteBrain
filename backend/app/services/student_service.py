@@ -592,7 +592,24 @@ class StudentService:
 
         Purely a simulation â€” reuses the exact canonical derivation used by
         Faculty (``derive_marks_fields``) and never touches the database.
+
+        Defense in depth: the API layer already constrains the query params,
+        and each component is re-validated here so an invalid value can never
+        reach the canonical derivation.
         """
+        bounds = [
+            ("internal_marks", internal_marks, settings.MARKS_INTERNAL_MAX),
+            ("mid_sem_marks", mid_sem_marks, settings.MARKS_MID_SEM_MAX),
+            ("end_sem_marks", end_sem_marks, settings.MARKS_END_SEM_MAX),
+        ]
+        for name, value, hi in bounds:
+            if value is None:
+                continue
+            if type(value) is not int or not (0 <= value <= hi):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"{name} must be an integer between 0 and {hi}",
+                )
         derived = derive_marks_fields(internal_marks, mid_sem_marks, end_sem_marks)
         complete = all(
             value is not None for value in (internal_marks, mid_sem_marks, end_sem_marks)

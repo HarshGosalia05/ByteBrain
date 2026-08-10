@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Any, List, Literal, Optional
 from datetime import date, datetime, time
 
@@ -1006,6 +1006,7 @@ class MarksConfig(BaseModel):
     end_sem_max: int
     total_max: int
     pass_percentage: float
+    end_sem_pass_min: int
     remarks_max_length: int
     grade_bands: List[MarksBand]
     category_bands: List[MarksCategoryBand]
@@ -1047,6 +1048,15 @@ class MarksRowInput(BaseModel):
     internal_marks: Optional[int] = None
     mid_sem_marks: Optional[int] = None
     end_sem_marks: Optional[int] = None
+
+    @field_validator("internal_marks", "mid_sem_marks", "end_sem_marks", mode="before")
+    @classmethod
+    def _reject_boolean_marks(cls, value: Any) -> Any:
+        # bool is an int subclass, so Pydantic would otherwise silently coerce
+        # true/false into 1/0. Marks must be a real whole-number integer.
+        if isinstance(value, bool):
+            raise ValueError("marks must be a whole number")
+        return value
 
 class MarksBatchSaveRequest(BaseModel):
     semester_no: int

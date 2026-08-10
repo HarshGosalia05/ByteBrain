@@ -568,6 +568,39 @@ class StudentAnalyticsServiceTests(unittest.TestCase):
         service.simulate_marks(10, 20, 30)
         self.assertEqual(conn.executed, [])
 
+    def test_what_if_rejects_negative_marks(self):
+        service = StudentService(FakePool(FakeConn()))
+        with self.assertRaises(HTTPException) as cm:
+            service.simulate_marks(-25, 90, -2)
+        self.assertEqual(cm.exception.status_code, 422)
+
+    def test_what_if_rejects_over_max_marks(self):
+        service = StudentService(FakePool(FakeConn()))
+        with self.assertRaises(HTTPException) as cm:
+            service.simulate_marks(20, 90, 70)
+        self.assertEqual(cm.exception.status_code, 422)
+
+    def test_what_if_rejects_non_integer_marks(self):
+        service = StudentService(FakePool(FakeConn()))
+        with self.assertRaises(HTTPException) as cm:
+            service.simulate_marks(12.5, 50, 70)
+        self.assertEqual(cm.exception.status_code, 422)
+
+    def test_what_if_end_sem_below_min_cannot_pass(self):
+        service = StudentService(FakePool(FakeConn()))
+        result = service.simulate_marks(20, 50, 17)
+        self.assertTrue(result.complete)
+        self.assertEqual(result.total_marks, 87)
+        self.assertEqual(result.percentage, 62.14)
+        self.assertEqual(result.result_status, "Fail")
+
+    def test_what_if_end_sem_at_min_can_pass(self):
+        service = StudentService(FakePool(FakeConn()))
+        result = service.simulate_marks(20, 50, 18)
+        self.assertTrue(result.complete)
+        self.assertEqual(result.total_marks, 88)
+        self.assertEqual(result.result_status, "Pass")
+
     def test_student_router_is_read_only(self):
         from app.api.v1 import student
 
