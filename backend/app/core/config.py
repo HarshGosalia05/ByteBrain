@@ -106,6 +106,33 @@ class Settings(BaseSettings):
     # Trend stability tolerance: deltas within this range count as "flat".
     STUDENT_TREND_STABLE_TOLERANCE: float = 0.1
 
+    # MD-05 Academic Success Intelligence (deterministic product rules).
+    # Health score component weights (renormalized over the available
+    # components; weights sum to 1.0 when all four are available).
+    HEALTH_ATTENDANCE_WEIGHT: float = 0.30
+    HEALTH_PERFORMANCE_WEIGHT: float = 0.35
+    HEALTH_PROGRESS_WEIGHT: float = 0.20
+    HEALTH_CONSISTENCY_WEIGHT: float = 0.15
+    # Minimum number of components that must be available before a health
+    # score is shown; otherwise the feature reports insufficient data.
+    HEALTH_AVAILABLE_COMPONENT_MIN: int = 2
+    # Health score bands: >= Excellent | >= Good | >= Watch | below Needs Attention.
+    HEALTH_EXCELLENT_MIN: float = 80.0
+    HEALTH_GOOD_MIN: float = 65.0
+    HEALTH_WATCH_MIN: float = 50.0
+    # Consistency scoring: SD (in SGPA units) multiplier mapping SGPA spread
+    # to a 0-100 consistency score (100 - sd * scale).
+    HEALTH_CONSISTENCY_SD_SCALE: float = 10.0
+    # Personal goals (MD-05): type-specific target bounds enforced at the API.
+    GOAL_SGPA_MAX: float = 10.0
+    GOAL_PERCENTAGE_MAX: float = 100.0
+    GOAL_ATTENDANCE_MAX: float = 100.0
+    # Priorities ("What should I focus on?"): maximum items returned.
+    STUDENT_PRIORITY_MAX_ITEMS: int = 3
+    # Notifications center pagination defaults.
+    NOTIFICATIONS_PAGE_SIZE_DEFAULT: int = 20
+    NOTIFICATIONS_PAGE_SIZE_MAX: int = 50
+
     model_config = SettingsConfigDict(env_file="../.env.local", env_file_encoding="utf-8", extra="ignore")
 
     @property

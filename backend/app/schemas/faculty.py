@@ -1282,3 +1282,29 @@ class FullTimetableResponse(BaseModel):
     total_sessions: int
     slots: List[TimetableSlot]
     days: List[FacultyTimetableDay]
+
+class FacultyNotificationItem(BaseModel):
+    message_id: str
+    message_type: str
+    title: str
+    message_body: str
+    subject: Optional[str] = None
+    priority: str
+    status: str
+    created_at: datetime
+
+class FacultyNotificationsResponse(BaseModel):
+    faculty_id: str
+    items: List[FacultyNotificationItem]
+    total: int
+    page: int
+    page_size: int
+    unread_count: int
+
+class FacultyUnreadCountResponse(BaseModel):
+    faculty_id: str
+    unread_count: int
+
+class FacultyMarkAllReadResponse(BaseModel):
+    faculty_id: str
+    updated_count: int

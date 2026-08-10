@@ -2,6 +2,17 @@ import asyncpg
 import json
 from typing import List, Optional, Dict, Any, Callable
 
+from app.core.config import settings
+from app.repositories.student_repo import insert_student_messages
+from app.services.notification_rules import (
+    build_attendance_warnings,
+    build_eligibility_warnings,
+    build_faculty_attendance_warnings,
+    build_faculty_performance_notifications,
+    build_performance_change_notifications,
+    build_performance_notifications,
+)
+
 class FacultyScopeError(Exception):
     """Scope gate failure (subject/term/faculty mismatch or invalid lecture)."""
 
@@ -2539,6 +2550,10 @@ class FacultyRepository:
         results: List[Dict[str, Any]] = []
         async with self.pool.acquire() as conn:
             async with conn.transaction():
+                subject_name = await conn.fetchval(
+                    "SELECT subject_name FROM subjects WHERE subject_id = $1",
+                    subject_id,
+                )
                 enrolled = await conn.fetch(
                     """
                     SELECT enrollment_record_id, student_id, enrollment_no
@@ -2552,6 +2567,22 @@ class FacultyRepository:
                 enrolled_ids = [r["enrollment_record_id"] for r in enrolled]
                 if not enrolled_ids:
                     raise FacultyScopeError("No authorized enrollment for this subject/term")
+
+                # MD-05: student display names for faculty-facing fail alerts.
+                student_ids = [r["student_id"] for r in enrolled]
+                name_by_sid: Dict[str, str] = {}
+                if student_ids:
+                    name_rows = await conn.fetch(
+                        """
+                        SELECT student_id, first_name, last_name
+                        FROM students WHERE student_id = ANY($1::text[])
+                        """,
+                        student_ids,
+                    )
+                    name_by_sid = {
+                        r["student_id"]: (r["first_name"] + " " + r["last_name"]).strip()
+                        for r in name_rows
+                    }
 
                 existing_rows = await conn.fetch(
                     """
@@ -2569,6 +2600,11 @@ class FacultyRepository:
                     FROM student_subject_performance
                     """
                 )
+
+                # MD-05 notification events collected while auditing; materialized
+                # after the loop, inside the same transaction (event_id dedups).
+                publish_events: List[Dict[str, Any]] = []
+                field_events: List[Dict[str, Any]] = []
 
                 for entry in entries:
                     enr = entry["enrollment_record_id"]
@@ -2632,21 +2668,40 @@ class FacultyRepository:
                             derived["grade_point"], derived["result_status"],
                             derived["performance_category"], derived["remarks"], changed_by,
                         )
+                        publish_fields: List[Dict[str, Any]] = []
+                        first_change_id = None
                         for field in editable:
                             new_val = merged[field]
                             if new_val is None:
                                 continue
-                            await conn.execute(
+                            change_id = await conn.fetchval(
                                 """
                                 INSERT INTO performance_change_log (
                                     performance_id, enrollment_record_id, student_id, subject_id,
                                     field_name, old_value, new_value, operation_type,
                                     changed_by, changed_at
                                 ) VALUES ($1,$2,$3,$4,$5,NULL,$6,$7,$8,now())
+                                RETURNING change_id
                                 """,
                                 performance_id, enr, scope_row["student_id"], subject_id,
                                 field, self._jsonb(new_val), operation, changed_by,
                             )
+                            if first_change_id is None:
+                                first_change_id = change_id
+                            publish_fields.append({"name": field, "value": new_val})
+                        if publish_fields:
+                            publish_events.append({
+                                "kind": "publish",
+                                "student_id": scope_row["student_id"],
+                                "student_name": name_by_sid.get(scope_row["student_id"])
+                                or scope_row["student_id"],
+                                "subject_id": subject_id,
+                                "subject_name": subject_name,
+                                "change_id": first_change_id,
+                                "fields": publish_fields,
+                                "result_status": derived["result_status"],
+                                "percentage": derived["percentage"],
+                            })
                         results.append({
                             "enrollment_record_id": enr,
                             "student_id": scope_row["student_id"],
@@ -2670,24 +2725,47 @@ class FacultyRepository:
                         derived["performance_category"], derived["remarks"], changed_by, enr,
                     )
                     for field in changed:
-                        await conn.execute(
+                        change_id = await conn.fetchval(
                             """
                             INSERT INTO performance_change_log (
                                 performance_id, enrollment_record_id, student_id, subject_id,
                                 field_name, old_value, new_value, operation_type,
                                 changed_by, changed_at
                             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
+                            RETURNING change_id
                             """,
                             existing["performance_id"], enr, scope_row["student_id"], subject_id,
                             field, self._jsonb(existing[field]), self._jsonb(merged[field]),
                             "update", changed_by,
                         )
+                        field_events.append({
+                            "kind": "field",
+                            "student_id": scope_row["student_id"],
+                            "student_name": name_by_sid.get(scope_row["student_id"])
+                            or scope_row["student_id"],
+                            "subject_id": subject_id,
+                            "subject_name": subject_name,
+                            "field_name": field,
+                            "old_value": existing[field],
+                            "new_value": merged[field],
+                            "change_id": change_id,
+                            "result_status": derived["result_status"],
+                            "percentage": derived["percentage"],
+                        })
                     results.append({
                         "enrollment_record_id": enr,
                         "student_id": scope_row["student_id"],
                         "operation": "updated",
                         "fields_changed": changed,
                     })
+
+                if publish_events or field_events:
+                    events = publish_events + field_events
+                    notifications = build_performance_notifications(events)
+                    notifications += build_performance_change_notifications(events)
+                    notifications += build_faculty_performance_notifications(events, faculty_id)
+                    if notifications:
+                        await insert_student_messages(conn, notifications)
 
         summary = {
             "saved": sum(1 for r in results if r["operation"] in ("insert", "updated")),
@@ -3073,9 +3151,24 @@ class FacultyRepository:
                         })
 
                 affected_ids = process_ids
+                prev_by_sid = await self._capture_prev_attendance(
+                    conn, subject_id, semester_no, affected_ids
+                )
                 agg_by_sid, sem_by_sid, overall_by_sid = await self._recompute_attendance(
                     conn, subject_id, semester_no, academic_year,
                     affected_ids, enrolled_by_sid, aggregate_fields,
+                )
+
+                # MD-05: attendance warnings + eligibility flips (same transaction).
+                await self._insert_attendance_notifications(
+                    conn,
+                    prev_by_sid,
+                    agg_by_sid,
+                    subject_id,
+                    timetable["subject_name"],
+                    semester_no,
+                    affected_ids,
+                    faculty_id,
                 )
 
                 # Audit appends (inside the same transaction).
@@ -3117,6 +3210,134 @@ class FacultyRepository:
             "semester_attendance_percentage": round(sum(sem_means) / len(sem_means), 2) if sem_means else None,
             "overall_attendance_percentage": round(sum(overall_means) / len(overall_means), 2) if overall_means else None,
         }
+
+    async def _capture_prev_attendance(
+        self,
+        conn: asyncpg.Connection,
+        subject_id: str,
+        semester_no: int,
+        student_ids: List[str],
+    ) -> Dict[str, Dict[str, Any]]:
+        """Pre-write aggregate attendance state (baseline for MD-05 crossings)."""
+        if not student_ids:
+            return {}
+        rows = await conn.fetch(
+            """
+            SELECT a.student_id, a.attendance_percentage, a.eligibility_status
+            FROM attendance a
+            JOIN student_subject_enrollment e
+                ON e.enrollment_record_id = a.enrollment_record_id
+            WHERE e.subject_id = $1 AND e.semester_no = $2
+                AND e.student_id = ANY($3::text[])
+            """,
+            subject_id, semester_no, student_ids,
+        )
+        return {
+            r["student_id"]: {
+                "attendance_percentage": r["attendance_percentage"],
+                "eligibility_status": r["eligibility_status"],
+            }
+            for r in rows
+        }
+
+    async def _insert_attendance_notifications(
+        self,
+        conn: asyncpg.Connection,
+        prev_by_sid: Dict[str, Dict[str, Any]],
+        agg_by_sid: Dict[str, Dict[str, Any]],
+        subject_id: str,
+        subject_name: str,
+        semester_no: int,
+        affected_ids: List[str],
+        faculty_id: str,
+    ) -> None:
+        """Materialize attendance + eligibility notifications.
+
+        Students receive ATTENDANCE_WARNING / ELIGIBILITY_WARNING rows; the
+        owning faculty member receives STUDENT_ATTENDANCE_WARNING /
+        STUDENT_ELIGIBILITY_WARNING rows for the same events. Only students
+        with a pre-existing aggregate baseline are compared, so the first-ever
+        lecture recording never floods the inbox. A recovery above target then
+        a re-crossing is still deduplicated because the direction is part of
+        the event identity.
+        """
+        names: Dict[str, str] = {}
+        if affected_ids:
+            name_rows = await conn.fetch(
+                """
+                SELECT student_id, first_name, last_name
+                FROM students WHERE student_id = ANY($1::text[])
+                """,
+                affected_ids,
+            )
+            names = {
+                r["student_id"]: (r["first_name"] + " " + r["last_name"]).strip()
+                for r in name_rows
+            }
+        crossings: List[Dict[str, Any]] = []
+        flips: List[Dict[str, Any]] = []
+        for sid in affected_ids:
+            prev = prev_by_sid.get(sid)
+            new = agg_by_sid.get(sid)
+            if not prev or not new:
+                continue
+            old_pct = prev.get("attendance_percentage")
+            new_pct = new.get("attendance_percentage")
+            if old_pct is not None and new_pct is not None:
+                if (
+                    old_pct >= settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD
+                    and new_pct < settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD
+                ):
+                    crossings.append({
+                        "student_id": sid,
+                        "student_name": names.get(sid) or sid,
+                        "subject_id": subject_id,
+                        "subject_name": subject_name,
+                        "semester_no": semester_no,
+                        "old_pct": old_pct,
+                        "new_pct": new_pct,
+                        "direction": "below-critical",
+                    })
+                elif (
+                    old_pct >= settings.FACULTY_ATTENDANCE_THRESHOLD
+                    and new_pct < settings.FACULTY_ATTENDANCE_THRESHOLD
+                ):
+                    crossings.append({
+                        "student_id": sid,
+                        "student_name": names.get(sid) or sid,
+                        "subject_id": subject_id,
+                        "subject_name": subject_name,
+                        "semester_no": semester_no,
+                        "old_pct": old_pct,
+                        "new_pct": new_pct,
+                        "direction": "below-target",
+                    })
+            if (
+                prev.get("eligibility_status") != "Not Eligible"
+                and new.get("eligibility_status") == "Not Eligible"
+            ):
+                flips.append({
+                    "student_id": sid,
+                    "student_name": names.get(sid) or sid,
+                    "subject_id": subject_id,
+                    "subject_name": subject_name,
+                    "semester_no": semester_no,
+                })
+        notifications = build_attendance_warnings(
+            crossings,
+            below_target_threshold=settings.FACULTY_ATTENDANCE_THRESHOLD,
+            critical_threshold=settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD,
+        )
+        notifications += build_eligibility_warnings(flips)
+        notifications += build_faculty_attendance_warnings(
+            crossings,
+            flips,
+            faculty_id,
+            below_target_threshold=settings.FACULTY_ATTENDANCE_THRESHOLD,
+            critical_threshold=settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD,
+        )
+        if notifications:
+            await insert_student_messages(conn, notifications)
 
     async def _recompute_attendance(
         self,
@@ -3367,9 +3588,26 @@ class FacultyRepository:
                 if not enrolled:
                     raise FacultyScopeError("No authorized enrollment for this attendance record")
                 enrolled_by_sid = {r["student_id"]: r for r in enrolled}
+                prev_by_sid = await self._capture_prev_attendance(
+                    conn, row["subject_id"], row["semester_no"], [row["student_id"]]
+                )
                 agg_by_sid, sem_by_sid, overall_by_sid = await self._recompute_attendance(
                     conn, row["subject_id"], row["semester_no"], row["academic_year"],
                     [row["student_id"]], enrolled_by_sid, aggregate_fields,
+                )
+                subject_name = await conn.fetchval(
+                    "SELECT subject_name FROM subjects WHERE subject_id = $1",
+                    row["subject_id"],
+                )
+                await self._insert_attendance_notifications(
+                    conn,
+                    prev_by_sid,
+                    agg_by_sid,
+                    row["subject_id"],
+                    subject_name,
+                    row["semester_no"],
+                    [row["student_id"]],
+                    faculty_id,
                 )
 
         agg = agg_by_sid.get(row["student_id"], {})
@@ -3504,3 +3742,118 @@ class FacultyRepository:
                 "slots": [dict(row) for row in slots],
                 "academic_year": year,
             }
+
+    # ------------------------------------------------------------------
+    # MD-05 faculty notifications (student_messages, recipient_type='faculty')
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _faculty_notification(row: asyncpg.Record) -> Dict[str, Any]:
+        return {
+            "message_id": str(row["message_id"]),
+            "message_type": row["message_type"],
+            "title": row["title"],
+            "message_body": row["message_body"],
+            "subject": row["subject"],
+            "priority": row["priority"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+        }
+
+    async def get_faculty_notifications(
+        self,
+        faculty_id: str,
+        message_type: Optional[str] = None,
+        unread_only: bool = False,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Dict[str, Any]:
+        """Faculty-scoped notification feed (recipient_type='faculty')."""
+        params: List[Any] = [faculty_id]
+        filters = ["faculty_recipient_id = $1", "recipient_type = 'faculty'"]
+        if message_type:
+            params.append(message_type)
+            filters.append(f"message_type = ${len(params)}")
+        if unread_only:
+            filters.append("status = 'Unread'")
+        where = " AND ".join(filters)
+        params.append(page_size)
+        params.append((page - 1) * page_size)
+
+        async with self.pool.acquire() as conn:
+            total = await conn.fetchval(
+                f"SELECT count(*) FROM student_messages WHERE {where}",
+                *params[:-2],
+            )
+            rows = await conn.fetch(
+                f"""
+                SELECT message_id, message_type, title, message_body,
+                       subject, priority, status, created_at
+                FROM student_messages
+                WHERE {where}
+                ORDER BY created_at DESC
+                LIMIT ${len(params) - 1} OFFSET ${len(params)}
+                """,
+                *params,
+            )
+            unread_count = await conn.fetchval(
+                """
+                SELECT count(*) FROM student_messages
+                WHERE faculty_recipient_id = $1 AND recipient_type = 'faculty'
+                    AND status = 'Unread'
+                """,
+                faculty_id,
+            )
+        return {
+            "items": [self._faculty_notification(row) for row in rows],
+            "total": int(total),
+            "unread_count": int(unread_count),
+        }
+
+    async def get_faculty_unread_count(self, faculty_id: str) -> int:
+        async with self.pool.acquire() as conn:
+            value = await conn.fetchval(
+                """
+                SELECT count(*) FROM student_messages
+                WHERE faculty_recipient_id = $1 AND recipient_type = 'faculty'
+                    AND status = 'Unread'
+                """,
+                faculty_id,
+            )
+            return int(value)
+
+    async def mark_faculty_notification_read(
+        self, faculty_id: str, message_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Ownership-scoped read toggle. Returns None for unknown/foreign ids."""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                UPDATE student_messages
+                SET status = 'Read'
+                WHERE faculty_recipient_id = $1 AND recipient_type = 'faculty'
+                    AND message_id = $2::uuid
+                RETURNING message_id, message_type, title, message_body,
+                          subject, priority, status, created_at
+                """,
+                faculty_id, message_id,
+            )
+            return self._faculty_notification(row) if row else None
+
+    async def mark_all_faculty_notifications_read(self, faculty_id: str) -> int:
+        """Mark every unread faculty notification read; returns rows affected."""
+        async with self.pool.acquire() as conn:
+            value = await conn.fetchval(
+                """
+                WITH upd AS (
+                    UPDATE student_messages
+                    SET status = 'Read'
+                    WHERE faculty_recipient_id = $1 AND recipient_type = 'faculty'
+                        AND status = 'Unread'
+                    RETURNING 1
+                )
+                SELECT count(*) FROM upd
+                """,
+                faculty_id,
+            )
+            return int(value)

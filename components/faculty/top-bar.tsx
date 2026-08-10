@@ -6,6 +6,7 @@ import { useTheme } from "next-themes"
 
 import { Button } from "@/components/ui/button"
 import { UserMenu } from "@/components/faculty/user-menu"
+import { NotificationBell } from "@/components/faculty/notification-bell"
 import type { FacultyProfile } from "@/lib/faculty-api"
 
 export function TopBar({
@@ -41,6 +42,7 @@ export function TopBar({
         <p className="text-sm font-medium">Faculty Portal</p>
       </div>
       <div className="flex items-center gap-1">
+        <NotificationBell />
         <Button
           variant="ghost"
           size="icon"

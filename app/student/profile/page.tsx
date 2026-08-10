@@ -12,6 +12,7 @@ import {
   getAcademicSummary,
   getStudentPerformance,
   getStudentProfile,
+  getGoals,
 } from "@/lib/student-api"
 
 import { PageHeader } from "@/components/shared/layout/page-header"
@@ -21,6 +22,7 @@ import { ErrorState } from "@/components/shared/state/error-state"
 import { EmptyState } from "@/components/shared/state/empty-state"
 import { TrendChart } from "@/components/shared/charts/trend-chart"
 import { Badge } from "@/components/ui/badge"
+import { GoalsCard } from "@/components/student/goals/goals-card"
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -34,10 +36,11 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 export default async function ProfilePage() {
   await requireRole("Student")
 
-  const [profileResult, summaryResult, performanceResult] = await Promise.all([
+  const [profileResult, summaryResult, performanceResult, goalsResult] = await Promise.all([
     getStudentProfile(),
     getAcademicSummary(),
     getStudentPerformance(),
+    getGoals(),
   ])
 
   if (!profileResult.ok) {
@@ -156,8 +159,7 @@ export default async function ProfilePage() {
 
       <section className="grid gap-4 lg:grid-cols-2" aria-label="Academic summary">
         <div className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
-          <h3 className="mb-1 text-sm font-semibold">SGPA by semester</h3>
-          <p className="mb-4 text-xs text-muted-foreground">Grade point average per semester</p>
+          <h3 className="mb-1 text-sm font-semibold">SGPA by semester</h3>          <p className="mb-4 text-xs text-muted-foreground">Grade point average per semester</p>
           {summaries.length === 0 ? (
             <EmptyState
               icon={GraduationCap}
@@ -261,6 +263,15 @@ export default async function ProfilePage() {
             </table>
           </div>
         </section>
+      )}
+
+      {goalsResult.ok && (
+        <GoalsCard
+          initial={{
+            student_id: profile.student_id,
+            goals: goalsResult.data.goals,
+          }}
+        />
       )}
 
       <p className="flex items-center gap-2 text-sm text-muted-foreground">

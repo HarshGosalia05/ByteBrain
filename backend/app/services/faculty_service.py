@@ -161,6 +161,10 @@ from app.schemas.faculty import (
     FacultyTimetableResponse,
     FullTimetableResponse,
     TimetableSlot,
+    FacultyNotificationItem,
+    FacultyNotificationsResponse,
+    FacultyUnreadCountResponse,
+    FacultyMarkAllReadResponse,
 )
 from fastapi import HTTPException, status
 
@@ -4675,3 +4679,58 @@ class FacultyService:
                 for day, sessions in grouped.items()
             ],
         )
+
+    # ------------------------------------------------------------------
+    # MD-05 faculty notifications
+    # ------------------------------------------------------------------
+
+    async def get_notifications(
+        self,
+        faculty_id: str,
+        message_type: Optional[str] = None,
+        unread_only: bool = False,
+        page: int = 1,
+        page_size: int = settings.NOTIFICATIONS_PAGE_SIZE_DEFAULT,
+    ) -> FacultyNotificationsResponse:
+        await self._ensure_profile(faculty_id)
+        page_size = max(1, min(page_size, settings.NOTIFICATIONS_PAGE_SIZE_MAX))
+        data = await self.repo.get_faculty_notifications(
+            faculty_id,
+            message_type=message_type,
+            unread_only=unread_only,
+            page=page,
+            page_size=page_size,
+        )
+        return FacultyNotificationsResponse(
+            faculty_id=faculty_id,
+            items=[FacultyNotificationItem(**item) for item in data["items"]],
+            total=data["total"],
+            page=page,
+            page_size=page_size,
+            unread_count=data["unread_count"],
+        )
+
+    async def get_unread_notification_count(
+        self, faculty_id: str
+    ) -> FacultyUnreadCountResponse:
+        await self._ensure_profile(faculty_id)
+        return FacultyUnreadCountResponse(
+            faculty_id=faculty_id,
+            unread_count=await self.repo.get_faculty_unread_count(faculty_id),
+        )
+
+    async def mark_notification_read(
+        self, faculty_id: str, message_id: str
+    ) -> FacultyNotificationItem:
+        await self._ensure_profile(faculty_id)
+        item = await self.repo.mark_faculty_notification_read(faculty_id, message_id)
+        if item is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found"
+            )
+        return FacultyNotificationItem(**item)
+
+    async def mark_all_notifications_read(self, faculty_id: str) -> FacultyMarkAllReadResponse:
+        await self._ensure_profile(faculty_id)
+        updated = await self.repo.mark_all_faculty_notifications_read(faculty_id)
+        return FacultyMarkAllReadResponse(faculty_id=faculty_id, updated_count=updated)

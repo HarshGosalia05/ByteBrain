@@ -3,6 +3,73 @@ from datetime import date
 from typing import List, Optional, Dict, Any
 
 
+async def insert_student_messages(
+    conn: asyncpg.Connection, notifications: List[Dict[str, Any]]
+) -> int:
+    """Insert notification rows inside an existing transaction.
+
+    Deduplication contract (MD-05): ``event_id`` is a pure function of the
+    underlying event; the partial unique indexes on (student_id, event_id) and
+    (faculty_recipient_id, event_id) WHERE event_id IS NOT NULL guarantee
+    at-most-one row per event per recipient, enforced here with
+    ``ON CONFLICT DO NOTHING``. Rows without an event_id (e.g. human faculty
+    messages) are never deduplicated.
+
+    Each notification dict must carry exactly one recipient: ``student_id``
+    (recipient_type 'student', the default) or ``faculty_recipient_id``
+    (recipient_type 'faculty'). Faculty rows store no student id.
+    """
+    if not notifications:
+        return 0
+    inserted = 0
+    for n in notifications:
+        recipient_type = n.get("recipient_type", "student")
+        if recipient_type == "faculty":
+            result = await conn.execute(
+                """
+                INSERT INTO student_messages (
+                    student_id, faculty_recipient_id, recipient_type, faculty_id,
+                    subject, message_type, title, message_body, priority, status,
+                    event_id, created_at
+                ) VALUES (NULL,$1,'faculty',$2,$3,$4,$5,$6,$7,'Unread',$8,now())
+                ON CONFLICT (faculty_recipient_id, event_id)
+                WHERE event_id IS NOT NULL AND recipient_type = 'faculty'
+                DO NOTHING
+                """,
+                n["faculty_recipient_id"],
+                n.get("faculty_id"),
+                n.get("subject"),
+                n.get("message_type", "SYSTEM"),
+                n.get("title", ""),
+                n.get("message_body", ""),
+                n.get("priority", "Normal"),
+                n.get("event_id"),
+            )
+        else:
+            result = await conn.execute(
+                """
+                INSERT INTO student_messages (
+                    student_id, faculty_recipient_id, recipient_type, faculty_id,
+                    subject, message_type, title, message_body, priority, status,
+                    event_id, created_at
+                ) VALUES ($1,NULL,'student',$2,$3,$4,$5,$6,$7,'Unread',$8,now())
+                ON CONFLICT (student_id, event_id) WHERE event_id IS NOT NULL
+                DO NOTHING
+                """,
+                n["student_id"],
+                n.get("faculty_id"),
+                n.get("subject"),
+                n.get("message_type", "SYSTEM"),
+                n.get("title", ""),
+                n.get("message_body", ""),
+                n.get("priority", "Normal"),
+                n.get("event_id"),
+            )
+        if result.endswith(" 1"):
+            inserted += 1
+    return inserted
+
+
 class StudentRepository:
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
@@ -171,8 +238,9 @@ class StudentRepository:
                 s.enrollment_no, s.admission_year, s.current_semester,
                 s.department_name, s.department_code,
                 s.current_academic_year, s.latest_sgpa, s.overall_cgpa,
-                s.overall_percentage, s.total_credits_registered,
-                s.total_credits_earned, s.total_backlogs, s.academic_standing
+                s.overall_percentage, s.overall_attendance_percentage,
+                s.total_credits_registered, s.total_credits_earned,
+                s.total_backlogs, s.academic_standing
             FROM students s
             WHERE s.student_id = $1
         """
@@ -248,3 +316,216 @@ class StudentRepository:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, *params)
             return [dict(row) for row in rows]
+
+    # ------------------------------------------------------------------
+    # MD-05 personal goals
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _goal(row: asyncpg.Record) -> Dict[str, Any]:
+        return {
+            "goal_id": str(row["goal_id"]),
+            "student_id": row["student_id"],
+            "goal_type": row["goal_type"],
+            "target_value": float(row["target_value"]),
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    async def get_goals(self, student_id: str) -> List[Dict[str, Any]]:
+        query = """
+            SELECT goal_id, student_id, goal_type, target_value, status,
+                   created_at, updated_at
+            FROM student_goals
+            WHERE student_id = $1
+            ORDER BY created_at ASC, goal_type ASC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, student_id)
+            return [self._goal(row) for row in rows]
+
+    async def get_goal(self, student_id: str, goal_id: str) -> Optional[Dict[str, Any]]:
+        query = """
+            SELECT goal_id, student_id, goal_type, target_value, status,
+                   created_at, updated_at
+            FROM student_goals
+            WHERE student_id = $1 AND goal_id = $2::uuid
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, student_id, goal_id)
+            return self._goal(row) if row else None
+
+    async def create_goal(
+        self, student_id: str, goal_type: str, target_value: float
+    ) -> Optional[Dict[str, Any]]:
+        """Insert a goal. When an Active goal of the same type already exists
+        (partial unique index), the insert is a no-op and None is returned so
+        the service can surface a clear, typed error."""
+        query = """
+            INSERT INTO student_goals (student_id, goal_type, target_value, status)
+            VALUES ($1, $2, $3, 'Active')
+            ON CONFLICT (student_id, goal_type) WHERE status = 'Active'
+            DO NOTHING
+            RETURNING goal_id, student_id, goal_type, target_value, status,
+                      created_at, updated_at
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, student_id, goal_type, target_value)
+            return self._goal(row) if row else None
+
+    async def update_goal(
+        self,
+        student_id: str,
+        goal_id: str,
+        target_value: Optional[float] = None,
+        status: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Ownership-scoped update. Returns None when the goal does not belong
+        to the student or when activating a goal would collide with an already
+        Active goal of the same type."""
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                if status == "Active":
+                    existing = await conn.fetchval(
+                        """
+                        SELECT goal_id FROM student_goals
+                        WHERE student_id = $1 AND goal_type = (
+                            SELECT goal_type FROM student_goals WHERE goal_id = $2::uuid
+                        ) AND status = 'Active' AND goal_id <> $2::uuid
+                        """,
+                        student_id, goal_id,
+                    )
+                    if existing:
+                        return None
+                sets = ["updated_at = now()"]
+                params: List[Any] = []
+                if target_value is not None:
+                    params.append(target_value)
+                    sets.append(f"target_value = ${len(params)}")
+                if status is not None:
+                    params.append(status)
+                    sets.append(f"status = ${len(params)}")
+                params.extend([student_id, goal_id])
+                row = await conn.fetchrow(
+                    f"""
+                    UPDATE student_goals
+                    SET {", ".join(sets)}
+                    WHERE student_id = ${len(params) - 1}
+                        AND goal_id = ${len(params)}::uuid
+                    RETURNING goal_id, student_id, goal_type, target_value,
+                              status, created_at, updated_at
+                    """,
+                    *params,
+                )
+                return self._goal(row) if row else None
+
+    # ------------------------------------------------------------------
+    # MD-05 notifications
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _notification(row: asyncpg.Record) -> Dict[str, Any]:
+        return {
+            "message_id": str(row["message_id"]),
+            "message_type": row["message_type"],
+            "title": row["title"],
+            "message_body": row["message_body"],
+            "subject": row["subject"],
+            "priority": row["priority"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+        }
+
+    async def get_notifications(
+        self,
+        student_id: str,
+        message_type: Optional[str] = None,
+        unread_only: bool = False,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Dict[str, Any]:
+        params: List[Any] = [student_id]
+        filters = ["student_id = $1"]
+        if message_type:
+            params.append(message_type)
+            filters.append(f"message_type = ${len(params)}")
+        if unread_only:
+            filters.append("status = 'Unread'")
+        where = " AND ".join(filters)
+        params.append(page_size)
+        params.append((page - 1) * page_size)
+
+        async with self.pool.acquire() as conn:
+            total = await conn.fetchval(
+                f"SELECT count(*) FROM student_messages WHERE {where}",
+                *params[:-2],
+            )
+            rows = await conn.fetch(
+                f"""
+                SELECT message_id, message_type, title, message_body,
+                       subject, priority, status, created_at
+                FROM student_messages
+                WHERE {where}
+                ORDER BY created_at DESC
+                LIMIT ${len(params) - 1} OFFSET ${len(params)}
+                """,
+                *params,
+            )
+            unread_count = await conn.fetchval(
+                """
+                SELECT count(*) FROM student_messages
+                WHERE student_id = $1 AND status = 'Unread'
+                """,
+                student_id,
+            )
+        return {
+            "items": [self._notification(row) for row in rows],
+            "total": int(total),
+            "unread_count": int(unread_count),
+        }
+
+    async def get_unread_count(self, student_id: str) -> int:
+        async with self.pool.acquire() as conn:
+            value = await conn.fetchval(
+                """
+                SELECT count(*) FROM student_messages
+                WHERE student_id = $1 AND status = 'Unread'
+                """,
+                student_id,
+            )
+            return int(value)
+
+    async def mark_notification_read(
+        self, student_id: str, message_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Ownership-scoped read toggle. Returns None for unknown/foreign ids."""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                UPDATE student_messages
+                SET status = 'Read'
+                WHERE student_id = $1 AND message_id = $2::uuid
+                RETURNING message_id, message_type, title, message_body,
+                          subject, priority, status, created_at
+                """,
+                student_id, message_id,
+            )
+            return self._notification(row) if row else None
+
+    async def mark_all_notifications_read(self, student_id: str) -> int:
+        """Mark every unread student notification read; returns rows affected."""
+        async with self.pool.acquire() as conn:
+            value = await conn.fetchval(
+                """
+                WITH upd AS (
+                    UPDATE student_messages
+                    SET status = 'Read'
+                    WHERE student_id = $1 AND status = 'Unread'
+                    RETURNING 1
+                )
+                SELECT count(*) FROM upd
+                """,
+                student_id,
+            )
+            return int(value)

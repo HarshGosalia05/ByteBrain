@@ -1,6 +1,6 @@
 import math
 import asyncpg
-from datetime import date, datetime, timedelta, time
+from datetime import date, datetime, timedelta, time, timezone
 from typing import List, Optional
 from app.core.config import settings
 from app.repositories.student_repo import StudentRepository
@@ -9,6 +9,16 @@ from app.schemas.student import (
     AcademicOverview,
     SemesterSummaryResponse,
     SubjectPerformanceResponse,
+)
+from app.schemas.student_md05 import (
+    GoalsResponse,
+    HealthScoreResponse,
+    MarkAllReadResponse,
+    NotificationItem,
+    NotificationsResponse,
+    PrioritiesResponse,
+    StudentGoal,
+    UnreadCountResponse,
 )
 from app.schemas.student_analytics import (
     AttemptHistoryItem,
@@ -51,6 +61,12 @@ from app.services.student_analytics_rules import (
     compute_trends,
 )
 from app.services.faculty_service import derive_marks_fields
+from app.services.student_health_rules import (
+    compute_goal_current_value,
+    compute_health_score,
+    compute_priorities,
+    GOAL_LABELS,
+)
 from fastapi import HTTPException, status
 
 
@@ -145,6 +161,318 @@ class StudentService:
             attempt_history=[
                 AttemptHistoryItem(**item) for item in compute_attempt_history(performance)
             ],
+        )
+
+    # ------------------------------------------------------------------
+    # MD-05 Academic Success Intelligence (health score + priorities)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _attendance_mean(rows: List[dict]) -> Optional[float]:
+        values = [
+            float(r["attendance_percentage"])
+            for r in rows
+            if r.get("attendance_percentage") is not None
+        ]
+        return round(sum(values) / len(values), 1) if values else None
+
+    @staticmethod
+    def _completed_percentages(performance: List[dict]) -> List[float]:
+        latest: dict = {}
+        for row in performance:
+            current = latest.get(row["subject_id"])
+            if current is None or (row.get("attempt_number") or 0) > (current.get("attempt_number") or 0):
+                latest[row["subject_id"]] = row
+        return [
+            float(row["percentage"])
+            for row in latest.values()
+            if row.get("percentage") is not None
+        ]
+
+    @staticmethod
+    def _completed_summaries(summaries: List[dict]) -> List[dict]:
+        return [
+            s for s in summaries
+            if s.get("semester_result") is not None or s.get("semester_percentage") is not None
+        ]
+
+    @staticmethod
+    def _has_pending_result(performance: List[dict], current_semester: Optional[int]) -> bool:
+        if current_semester is None:
+            return False
+        return any(
+            row["semester"] == current_semester and row.get("end_sem_marks") is None
+            for row in performance
+        )
+
+    async def _health_context(self, student_id: str) -> Optional[dict]:
+        """Shared data assembly for health score / priorities / goals."""
+        profile_data = await self.repo.get_student_profile(student_id)
+        if not profile_data:
+            return None
+        summaries = await self.repo.get_semester_summaries(student_id)
+        performance = await self.repo.get_subject_performance(student_id)
+        current_semester = profile_data.get("current_semester")
+        attendance = (
+            await self.repo.get_semester_attendance(student_id, current_semester)
+            if current_semester
+            else []
+        )
+        completed = self._completed_summaries(summaries)
+        current_mean = self._attendance_mean(attendance)
+        return {
+            "profile": profile_data,
+            "summaries": summaries,
+            "performance": performance,
+            "attendance": attendance,
+            "current_semester": current_semester,
+            "completed_summaries": completed,
+            "latest_completed": completed[-1] if completed else None,
+            "current_attendance_mean": current_mean,
+        }
+
+    async def get_health_score(self, student_id: str) -> HealthScoreResponse:
+        ctx = await self._health_context(student_id)
+        if not ctx:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        attendance_pct = ctx["current_attendance_mean"]
+        if attendance_pct is None and ctx["latest_completed"] is not None:
+            attendance_pct = ctx["latest_completed"].get("attendance_percentage")
+        result = compute_health_score(
+            attendance_pct=attendance_pct,
+            completed_percentages=self._completed_percentages(ctx["performance"]),
+            completed_summaries=ctx["completed_summaries"],
+            total_backlogs=ctx["profile"].get("total_backlogs"),
+            has_pending_result=self._has_pending_result(
+                ctx["performance"], ctx["current_semester"]
+            ),
+            current_semester=ctx["current_semester"],
+        )
+        return HealthScoreResponse(
+            student_id=student_id,
+            generated_at=datetime.now(timezone.utc),
+            **result,
+        )
+
+    async def get_priorities(self, student_id: str) -> PrioritiesResponse:
+        ctx = await self._health_context(student_id)
+        if not ctx:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+
+        needs_attention = compute_needs_attention(ctx["performance"])
+        trends = compute_trends(ctx["summaries"])
+        goals = await self.repo.get_goals(student_id)
+        active_goals = [
+            g for g in goals if g["status"] == "Active"
+        ]
+        for goal in active_goals:
+            goal["current_value"] = compute_goal_current_value(
+                goal["goal_type"],
+                ctx["profile"],
+                ctx["latest_completed"],
+                ctx["current_attendance_mean"],
+            )
+        items = compute_priorities(
+            profile=ctx["profile"],
+            current_attendance_rows=ctx["attendance"],
+            needs_attention=needs_attention,
+            trends=trends,
+            active_goals=active_goals,
+            has_pending_result=self._has_pending_result(
+                ctx["performance"], ctx["current_semester"]
+            ),
+        )
+        return PrioritiesResponse(
+            student_id=student_id,
+            items=items,
+        )
+
+    # ------------------------------------------------------------------
+    # MD-05 personal goals
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _goal_max(goal_type: str) -> float:
+        if goal_type == "target_sgpa":
+            return settings.GOAL_SGPA_MAX
+        if goal_type == "target_percentage":
+            return settings.GOAL_PERCENTAGE_MAX
+        return settings.GOAL_ATTENDANCE_MAX
+
+    @staticmethod
+    def _validate_goal_target(goal_type: str, target_value: float) -> None:
+        max_value = StudentService._goal_max(goal_type)
+        if target_value < 0 or target_value > max_value:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"target_value for {goal_type} must be between 0 and {max_value}",
+            )
+
+    def _decorate_goal(
+        self,
+        goal: dict,
+        ctx: dict,
+    ) -> StudentGoal:
+        current = compute_goal_current_value(
+            goal["goal_type"],
+            ctx["profile"],
+            ctx["latest_completed"],
+            ctx["current_attendance_mean"],
+        )
+        achieved = (
+            current is not None and current >= goal["target_value"]
+        ) if goal["status"] == "Active" else None
+        return StudentGoal(
+            goal_id=goal["goal_id"],
+            goal_type=goal["goal_type"],
+            target_value=goal["target_value"],
+            current_value=current,
+            achieved=achieved,
+            status=goal["status"],
+            created_at=goal["created_at"],
+            updated_at=goal["updated_at"],
+        )
+
+    async def list_goals(self, student_id: str) -> GoalsResponse:
+        ctx = await self._health_context(student_id)
+        if not ctx:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        goals = await self.repo.get_goals(student_id)
+        return GoalsResponse(
+            student_id=student_id,
+            goals=[self._decorate_goal(g, ctx) for g in goals],
+        )
+
+    async def get_goal(self, student_id: str, goal_id: str) -> StudentGoal:
+        ctx = await self._health_context(student_id)
+        if not ctx:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        goal = await self.repo.get_goal(student_id, goal_id)
+        if not goal:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found"
+            )
+        return self._decorate_goal(goal, ctx)
+
+    async def create_goal(self, student_id: str, goal_type: str, target_value: float) -> StudentGoal:
+        ctx = await self._health_context(student_id)
+        if not ctx:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        self._validate_goal_target(goal_type, target_value)
+        goal = await self.repo.create_goal(student_id, goal_type, target_value)
+        if goal is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"An active {GOAL_LABELS.get(goal_type, goal_type)} goal already exists",
+            )
+        return self._decorate_goal(goal, ctx)
+
+    async def update_goal(
+        self,
+        student_id: str,
+        goal_id: str,
+        target_value: Optional[float] = None,
+        new_status: Optional[str] = None,
+    ) -> StudentGoal:
+        ctx = await self._health_context(student_id)
+        if not ctx:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        existing = await self.repo.get_goal(student_id, goal_id)
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found"
+            )
+        if target_value is not None:
+            self._validate_goal_target(existing["goal_type"], target_value)
+        goal = await self.repo.update_goal(
+            student_id, goal_id, target_value=target_value, status=new_status
+        )
+        if goal is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Cannot activate: an active "
+                    f"{GOAL_LABELS.get(existing['goal_type'], existing['goal_type'])} goal "
+                    "already exists"
+                ),
+            )
+        return self._decorate_goal(goal, ctx)
+
+    # ------------------------------------------------------------------
+    # MD-05 notifications
+    # ------------------------------------------------------------------
+
+    async def get_notifications(
+        self,
+        student_id: str,
+        message_type: Optional[str] = None,
+        unread_only: bool = False,
+        page: int = 1,
+        page_size: int = settings.NOTIFICATIONS_PAGE_SIZE_DEFAULT,
+    ) -> NotificationsResponse:
+        if not await self.repo.get_student_profile(student_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        page_size = max(1, min(page_size, settings.NOTIFICATIONS_PAGE_SIZE_MAX))
+        data = await self.repo.get_notifications(
+            student_id,
+            message_type=message_type,
+            unread_only=unread_only,
+            page=page,
+            page_size=page_size,
+        )
+        return NotificationsResponse(
+            student_id=student_id,
+            items=[NotificationItem(**item) for item in data["items"]],
+            total=data["total"],
+            page=page,
+            page_size=page_size,
+            unread_count=data["unread_count"],
+        )
+
+    async def get_unread_notification_count(self, student_id: str) -> UnreadCountResponse:
+        if not await self.repo.get_student_profile(student_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        return UnreadCountResponse(
+            student_id=student_id,
+            unread_count=await self.repo.get_unread_count(student_id),
+        )
+
+    async def mark_notification_read(self, student_id: str, message_id: str) -> NotificationItem:
+        if not await self.repo.get_student_profile(student_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        item = await self.repo.mark_notification_read(student_id, message_id)
+        if item is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found"
+            )
+        return NotificationItem(**item)
+
+    async def mark_all_notifications_read(self, student_id: str) -> MarkAllReadResponse:
+        if not await self.repo.get_student_profile(student_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        return MarkAllReadResponse(
+            student_id=student_id,
+            updated_count=await self.repo.mark_all_notifications_read(student_id),
         )
 
     @staticmethod

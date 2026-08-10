@@ -18,6 +18,18 @@ from app.schemas.student_daily import (
     DailyAssistantResponse,
     StudentTimetableResponse,
 )
+from app.schemas.student_md05 import (
+    GoalCreate,
+    GoalUpdate,
+    GoalsResponse,
+    HealthScoreResponse,
+    MarkAllReadResponse,
+    NotificationItem,
+    NotificationsResponse,
+    PrioritiesResponse,
+    StudentGoal,
+    UnreadCountResponse,
+)
 
 router = APIRouter()
 
@@ -151,6 +163,173 @@ async def get_my_timetable(
             detail="No student_id found in user token",
         )
     return await service.get_timetable(student_id)
+
+
+@router.get("/me/health-score", response_model=HealthScoreResponse)
+async def get_my_health_score(
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.get_health_score(student_id)
+
+
+@router.get("/me/priorities", response_model=PrioritiesResponse)
+async def get_my_priorities(
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.get_priorities(student_id)
+
+
+@router.get("/me/goals", response_model=GoalsResponse)
+async def get_my_goals(
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.list_goals(student_id)
+
+
+@router.get("/me/goals/{goal_id}", response_model=StudentGoal)
+async def get_my_goal(
+    goal_id: str,
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.get_goal(student_id, goal_id)
+
+
+@router.post("/me/goals", response_model=StudentGoal, status_code=status.HTTP_201_CREATED)
+async def create_my_goal(
+    payload: GoalCreate,
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.create_goal(student_id, payload.goal_type, payload.target_value)
+
+
+@router.patch("/me/goals/{goal_id}", response_model=StudentGoal)
+async def update_my_goal(
+    goal_id: str,
+    payload: GoalUpdate,
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.update_goal(
+        student_id,
+        goal_id,
+        target_value=payload.target_value,
+        new_status=payload.status,
+    )
+
+
+@router.get("/me/notifications", response_model=NotificationsResponse)
+async def get_my_notifications(
+    message_type: Optional[str] = Query(
+        None, description="Filter by notification type (e.g. ATTENDANCE_WARNING)"
+    ),
+    unread_only: bool = Query(False, description="Show only unread notifications"),
+    page: int = Query(1, ge=1, description="1-based page number"),
+    page_size: int = Query(
+        settings.NOTIFICATIONS_PAGE_SIZE_DEFAULT,
+        ge=1,
+        le=settings.NOTIFICATIONS_PAGE_SIZE_MAX,
+        description="Items per page",
+    ),
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.get_notifications(
+        student_id,
+        message_type=message_type,
+        unread_only=unread_only,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/me/notifications/unread-count", response_model=UnreadCountResponse)
+async def get_my_notifications_unread_count(
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.get_unread_notification_count(student_id)
+
+
+@router.patch("/me/notifications/{message_id}/read", response_model=NotificationItem)
+async def mark_my_notification_read(
+    message_id: str,
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.mark_notification_read(student_id, message_id)
+
+
+@router.post("/me/notifications/read-all", response_model=MarkAllReadResponse)
+async def mark_my_notifications_read_all(
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.mark_all_notifications_read(student_id)
 
 
 @router.get("/me/daily-assistant", response_model=DailyAssistantResponse)

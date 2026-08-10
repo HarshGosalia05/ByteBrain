@@ -604,13 +604,33 @@ class StudentAnalyticsServiceTests(unittest.TestCase):
     def test_student_router_is_read_only(self):
         from app.api.v1 import student
 
-        for route in student.router.routes:
-            if not hasattr(route, "methods"):
-                continue
-            self.assertTrue(
-                route.methods <= {"GET"},
-                f"Route {route.path} must be GET-only, got {route.methods}",
+        # MD-05 permits exactly these student-managed mutations (goals + read
+        # toggle); every other student route must stay GET-only. Route paths
+        # are router-relative (the /students prefix is applied at mount time),
+        # and GET/POST for the same path live on separate route objects.
+        def is_allowed_mutation(path: str) -> bool:
+            return (
+                path in {"/me/goals", "/me/goals/{goal_id}"}
+                or path == "/me/notifications/{message_id}/read"
+                or path == "/me/notifications/read-all"
             )
+
+        methods_by_path: dict = {}
+        for route in student.router.routes:
+            if hasattr(route, "methods"):
+                methods_by_path.setdefault(route.path, set()).update(route.methods)
+
+        for path, methods in methods_by_path.items():
+            if methods - {"GET"}:
+                self.assertTrue(
+                    is_allowed_mutation(path),
+                    f"Route {path} must be GET-only, got {methods}",
+                )
+            if is_allowed_mutation(path):
+                self.assertTrue(
+                    {"POST", "PATCH"} & methods,
+                    f"Route {path} is an allowed mutation but registered without POST/PATCH",
+                )
 
     def test_benchmark_schema_exposes_no_peer_identity(self):
         fields = set(BenchmarkItem.model_fields.keys())

@@ -2973,3 +2973,87 @@ export function getFullTimetable(
   const path = query ? `timetable/full?${query}` : "timetable/full"
   return callFastapi<FullTimetableResponse>(path, BFF_TTL_MS)
 }
+
+export type FacultyNotificationTypeFilter =
+  | "STUDENT_ATTENDANCE_WARNING"
+  | "STUDENT_ELIGIBILITY_WARNING"
+  | "STUDENT_PERFORMANCE_CHANGE"
+  | "SYSTEM"
+
+export type FacultyNotificationItem = {
+  message_id: string
+  student_id?: string | null
+  student_name?: string | null
+  message_type: string
+  title: string
+  message: string
+  ref_id?: string | null
+  ref_type?: string | null
+  is_read: boolean
+  created_at: string
+}
+
+export type FacultyNotificationsResponse = {
+  faculty_id: string
+  items: FacultyNotificationItem[]
+  total: number
+  page: number
+  page_size: number
+  unread_count: number
+}
+
+export type FacultyUnreadCountResponse = {
+  faculty_id: string
+  unread_count: number
+}
+
+export type FacultyMarkAllReadResponse = {
+  faculty_id: string
+  updated_count: number
+}
+
+export function getFacultyNotifications(
+  options?: {
+    messageType?: FacultyNotificationTypeFilter
+    unreadOnly?: boolean
+    page?: number
+    pageSize?: number
+  },
+): Promise<BffResult<FacultyNotificationsResponse>> {
+  const searchParams = new URLSearchParams()
+  if (options?.messageType) searchParams.set("message_type", options.messageType)
+  if (options?.unreadOnly) searchParams.set("unread_only", "true")
+  if (options?.page) searchParams.set("page", String(options.page))
+  if (options?.pageSize) searchParams.set("page_size", String(options.pageSize))
+  const query = searchParams.toString()
+  const path = query ? `me/notifications?${query}` : "me/notifications"
+  return callFastapi<FacultyNotificationsResponse>(path, BFF_TTL_MS, true)
+}
+
+export function getFacultyUnreadNotificationCount(): Promise<
+  BffResult<FacultyUnreadCountResponse>
+> {
+  return callFastapi<FacultyUnreadCountResponse>("me/notifications/unread-count", BFF_TTL_MS, true)
+}
+
+export function markFacultyNotificationRead(
+  messageId: string,
+): Promise<BffResult<FacultyNotificationItem>> {
+  return mutateFastapi<FacultyNotificationItem>(
+    `me/notifications/${messageId}/read`,
+    "PATCH",
+    {},
+    ["notifications"],
+  )
+}
+
+export function markAllFacultyNotificationsRead(): Promise<
+  BffResult<FacultyMarkAllReadResponse>
+> {
+  return mutateFastapi<FacultyMarkAllReadResponse>(
+    "me/notifications/read-all",
+    "POST",
+    {},
+    ["notifications"],
+  )
+}

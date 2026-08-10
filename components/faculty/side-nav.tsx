@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   BarChart3,
+  Bell,
   BookOpen,
   Briefcase,
   CalendarCheck,
@@ -26,6 +27,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/faculty/attendance", label: "Attendance Analytics", icon: CalendarCheck },
   { href: "/faculty/timetable", label: "Time Table", icon: CalendarRange },
   { href: "/faculty/workload", label: "Teaching Workload", icon: Briefcase },
+  { href: "/faculty/notifications", label: "Notifications", icon: Bell },
   { href: "/faculty/settings", label: "Settings", icon: Settings },
 ]
 

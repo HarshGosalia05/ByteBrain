@@ -1,6 +1,7 @@
 import Link from "next/link"
 import {
   ArrowRight,
+  Bell,
   BookOpen,
   CalendarCheck,
   Gauge,
@@ -9,7 +10,7 @@ import {
   TriangleAlert,
 } from "lucide-react"
 
-import type { DashboardData } from "@/lib/student-api"
+import type { DashboardData, StudentHealthData } from "@/lib/student-api"
 
 import { AvatarInitials } from "@/components/shared/data/avatar-initials"
 import { FreshnessBadge } from "@/components/shared/data/freshness-badge"
@@ -17,13 +18,17 @@ import { GradeBadge } from "@/components/shared/data/grade-badge"
 import { StatCard } from "@/components/shared/data/stat-card"
 import { EmptyState } from "@/components/shared/state/empty-state"
 import { TrendChart } from "@/components/shared/charts/trend-chart"
+import { HealthScoreCard } from "@/components/student/health/health-score-card"
+import { PrioritiesPanel } from "@/components/student/health/priorities-panel"
 
 export function DashboardView({
   data,
   fetchedAt,
+  health,
 }: {
   data: DashboardData
   fetchedAt: string | null
+  health: StudentHealthData | null
 }) {
   const { profile, summaries, latestSummary, currentSemesterSubjects } = data
 
@@ -77,6 +82,42 @@ export function DashboardView({
           hint="Latest semester"
         />
       </section>
+
+      {health && (
+        <section
+          className="grid gap-4 lg:grid-cols-3"
+          aria-label="Academic success insights"
+        >
+          <HealthScoreCard health={health.health} />
+          <PrioritiesPanel priorities={health.priorities} />
+          <Link
+            href="/student/notifications"
+            className="group flex flex-col justify-between rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition-colors outline-none hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold">Notifications</h2>
+                <p className="text-xs text-muted-foreground">
+                  Marks published, attendance warnings and eligibility alerts.
+                </p>
+              </div>
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Bell className="size-4" />
+              </span>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-2">
+              {health.unreadCount > 0 ? (
+                <span className="rounded-full bg-destructive/15 px-2.5 py-0.5 text-xs font-medium text-destructive">
+                  {health.unreadCount} unread
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">You are all caught up</span>
+              )}
+              <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+            </div>
+          </Link>
+        </section>
+      )}
 
       <section className="grid gap-4 lg:grid-cols-2" aria-label="Academic trends">
         <div className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">

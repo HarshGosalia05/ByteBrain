@@ -4,6 +4,7 @@ import asyncpg
 from datetime import date
 from typing import Any, Dict, List, Optional
 from app.api.dependencies import get_db_pool, require_faculty_role
+from app.core.config import settings
 from app.services.faculty_service import FacultyService
 from app.services.settings_service import SettingsService, PreferenceValidationError
 from app.schemas.faculty import (
@@ -57,6 +58,10 @@ from app.schemas.faculty import (
     AttendanceChangeLogResponse,
     FacultyTimetableResponse,
     FullTimetableResponse,
+    FacultyNotificationItem,
+    FacultyNotificationsResponse,
+    FacultyUnreadCountResponse,
+    FacultyMarkAllReadResponse,
 )
 from app.schemas.settings import (
     SettingsResponse,
@@ -1035,3 +1040,53 @@ async def get_attendance_change_log(
         _faculty_id_or_error(user), subject_id, semester, academic_year, page, page_size,
         lecture_date=lecture_date, slot_no=slot_no,
     )
+
+
+@router.get("/me/notifications", response_model=FacultyNotificationsResponse)
+async def get_my_notifications(
+    message_type: Optional[str] = Query(
+        None, description="Filter by notification type (e.g. STUDENT_ATTENDANCE_WARNING)"
+    ),
+    unread_only: bool = Query(False, description="Show only unread notifications"),
+    page: int = Query(1, ge=1, description="1-based page number"),
+    page_size: int = Query(
+        settings.NOTIFICATIONS_PAGE_SIZE_DEFAULT,
+        ge=1,
+        le=settings.NOTIFICATIONS_PAGE_SIZE_MAX,
+        description="Items per page",
+    ),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service),
+):
+    return await service.get_notifications(
+        _faculty_id_or_error(user),
+        message_type=message_type,
+        unread_only=unread_only,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/me/notifications/unread-count", response_model=FacultyUnreadCountResponse)
+async def get_my_notifications_unread_count(
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service),
+):
+    return await service.get_unread_notification_count(_faculty_id_or_error(user))
+
+
+@router.patch("/me/notifications/{message_id}/read", response_model=FacultyNotificationItem)
+async def mark_my_notification_read(
+    message_id: str,
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service),
+):
+    return await service.mark_notification_read(_faculty_id_or_error(user), message_id)
+
+
+@router.post("/me/notifications/read-all", response_model=FacultyMarkAllReadResponse)
+async def mark_my_notifications_read_all(
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service),
+):
+    return await service.mark_all_notifications_read(_faculty_id_or_error(user))

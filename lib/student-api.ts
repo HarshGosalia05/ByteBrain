@@ -1,16 +1,9 @@
-import { cookies } from "next/headers"
+import { getSessionUser } from "./student-session.ts"
+
+export type { SessionUser } from "./student-session.ts"
 
 const FASTAPI_URL = (process.env.FASTAPI_URL ?? "http://localhost:8000").replace(/\/+$/, "")
 const BFF_TTL_MS = 60_000
-
-export type SessionUser = {
-  user_id: string
-  username: string
-  role: string
-  department?: string | null
-  student_id?: string | null
-  faculty_id?: string | null
-}
 
 export type StudentProfile = {
   student_id: string
@@ -196,6 +189,8 @@ export type BffErrorCode =
   | "unlinked"
   | "unavailable"
   | "not_found"
+  | "conflict"
+  | "invalid"
   | "server_error"
 
 export type BffError = {
@@ -211,18 +206,6 @@ export type BffResult<T> =
 type CacheEntry = { value: unknown; expiresAt: number }
 
 const bffCache = new Map<string, CacheEntry>()
-
-async function getSessionUser(): Promise<SessionUser | null> {
-  const cookieStore = await cookies()
-  const raw = cookieStore.get("session")?.value
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as SessionUser
-    return parsed && typeof parsed === "object" ? parsed : null
-  } catch {
-    return null
-  }
-}
 
 function toBffError(status: number): BffError {
   switch (status) {
@@ -249,6 +232,18 @@ function toBffError(status: number): BffError {
         status,
         code: "not_found",
         message: "No academic records were found for this account.",
+      }
+    case 409:
+      return {
+        status,
+        code: "conflict",
+        message: "A goal of this type is already active.",
+      }
+    case 422:
+      return {
+        status,
+        code: "invalid",
+        message: "The submitted value is not valid.",
       }
     case 503:
       return {
@@ -640,4 +635,273 @@ export function getDailyAssistant(
 ): Promise<BffResult<DailyAssistantResponse>> {
   const path = date ? `daily-assistant?date=${date}` : "daily-assistant"
   return callFastapi<DailyAssistantResponse>(path, BFF_TTL_MS)
+}
+
+// MD-05 health score / priorities / goals / notifications --------------------
+
+export type HealthComponent = {
+  available: boolean
+  score: number | null
+  weight: number
+  reason: string
+}
+
+export type HealthScoreResponse = {
+  student_id: string
+  available: boolean
+  score: number | null
+  band: string | null
+  components: Record<string, HealthComponent>
+  reasons: string[]
+  generated_at: string
+}
+
+export type PriorityItem = {
+  rank: number
+  signal: string
+  severity: number
+  title: string
+  reason: string
+  action: string
+  subject: string | null
+  metric: string | null
+}
+
+export type PrioritiesResponse = {
+  student_id: string
+  items: PriorityItem[]
+}
+
+export type GoalType = "target_sgpa" | "target_percentage" | "target_attendance"
+
+export type StudentGoal = {
+  goal_id: string
+  goal_type: string
+  target_value: number
+  current_value: number | null
+  achieved: boolean | null
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export type GoalsResponse = {
+  student_id: string
+  goals: StudentGoal[]
+}
+
+export type GoalCreateInput = {
+  goal_type: GoalType
+  target_value: number
+}
+
+export type GoalUpdateInput = {
+  target_value?: number | null
+  status?: "Active" | "Inactive" | null
+}
+
+export type NotificationTypeFilter =
+  | "ATTENDANCE_WARNING"
+  | "ELIGIBILITY_WARNING"
+  | "MARKS_PUBLISHED"
+  | "MARKS_UPDATED"
+  | "PERFORMANCE_CHANGE"
+  | "RISK_ALERT"
+  | "TIMETABLE_CHANGE"
+  | "SYSTEM"
+
+export type NotificationItem = {
+  message_id: string
+  message_type: string
+  title: string
+  message_body: string
+  subject: string | null
+  priority: string
+  status: string
+  created_at: string
+}
+
+export type NotificationsResponse = {
+  student_id: string
+  items: NotificationItem[]
+  total: number
+  page: number
+  page_size: number
+  unread_count: number
+}
+
+export type UnreadCountResponse = {
+  student_id: string
+  unread_count: number
+}
+
+export type MarkAllReadResponse = {
+  student_id: string
+  updated_count: number
+}
+
+export function invalidateBffKeys(studentId: string, prefixes: string[]) {
+  const base = `${studentId}:`
+  for (const key of Array.from(bffCache.keys())) {
+    if (prefixes.some((p) => key.startsWith(`${base}${p}`))) {
+      bffCache.delete(key)
+    }
+  }
+}
+
+async function mutateStudent<T>(
+  path: string,
+  method: "POST" | "PATCH",
+  body: unknown,
+  invalidatePrefixes: string[],
+): Promise<BffResult<T>> {
+  const user = await getSessionUser()
+  if (!user) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to make changes.",
+      },
+    }
+  }
+  if (user.role !== "Student" || !user.student_id) {
+    return {
+      ok: false,
+      error: {
+        status: 403,
+        code: "unauthorized",
+        message: "This account is not allowed to make changes.",
+      },
+    }
+  }
+  try {
+    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const res = await fetch(`${FASTAPI_URL}/api/v1/students/me/${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      return { ok: false, error: toBffError(res.status) }
+    }
+    const data = (await res.json()) as T
+    invalidateBffKeys(user.student_id, invalidatePrefixes)
+    return { ok: true, data, fetchedAt: new Date().toISOString() }
+  } catch {
+    return {
+      ok: false,
+      error: {
+        status: 503,
+        code: "unavailable",
+        message: "The academic service is temporarily unavailable. Please try again later.",
+      },
+    }
+  }
+}
+
+export function getHealthScore(): Promise<BffResult<HealthScoreResponse>> {
+  return callFastapi<HealthScoreResponse>("health-score", BFF_TTL_MS)
+}
+
+export function getPriorities(): Promise<BffResult<PrioritiesResponse>> {
+  return callFastapi<PrioritiesResponse>("priorities", BFF_TTL_MS)
+}
+
+export function getGoals(): Promise<BffResult<GoalsResponse>> {
+  return callFastapi<GoalsResponse>("goals", BFF_TTL_MS)
+}
+
+export function getGoal(goalId: string): Promise<BffResult<StudentGoal>> {
+  return callFastapi<StudentGoal>(`goals/${goalId}`, BFF_TTL_MS)
+}
+
+export function createGoal(input: GoalCreateInput): Promise<BffResult<StudentGoal>> {
+  return mutateStudent<StudentGoal>("goals", "POST", input, ["goals"])
+}
+
+export function updateGoal(
+  goalId: string,
+  input: GoalUpdateInput,
+): Promise<BffResult<StudentGoal>> {
+  return mutateStudent<StudentGoal>(`goals/${goalId}`, "PATCH", input, ["goals"])
+}
+
+export function getNotifications(
+  options?: {
+    messageType?: NotificationTypeFilter
+    unreadOnly?: boolean
+    page?: number
+    pageSize?: number
+  },
+): Promise<BffResult<NotificationsResponse>> {
+  return callFastapi<NotificationsResponse>("notifications", BFF_TTL_MS, {
+    useCache: false,
+    query: {
+      message_type: options?.messageType,
+      unread_only: options?.unreadOnly === true ? "true" : undefined,
+      page: options?.page,
+      page_size: options?.pageSize,
+    },
+  })
+}
+
+export function getUnreadNotificationCount(): Promise<BffResult<UnreadCountResponse>> {
+  return callFastapi<UnreadCountResponse>("notifications/unread-count", BFF_TTL_MS, {
+    useCache: false,
+  })
+}
+
+export function markNotificationRead(
+  messageId: string,
+): Promise<BffResult<NotificationItem>> {
+  return mutateStudent<NotificationItem>(
+    `notifications/${messageId}/read`,
+    "PATCH",
+    {},
+    ["notifications"],
+  )
+}
+
+export function markAllNotificationsRead(): Promise<BffResult<MarkAllReadResponse>> {
+  return mutateStudent<MarkAllReadResponse>("notifications/read-all", "POST", {}, ["notifications"])
+}
+
+export type StudentHealthData = {
+  profile: StudentProfile
+  health: HealthScoreResponse
+  priorities: PrioritiesResponse
+  goals: GoalsResponse
+  unreadCount: number
+}
+
+export async function getStudentHealthData(): Promise<BffResult<StudentHealthData>> {
+  const [profile, health, priorities, goals, unread] = await Promise.all([
+    getStudentProfile(),
+    getHealthScore(),
+    getPriorities(),
+    getGoals(),
+    getUnreadNotificationCount(),
+  ])
+  if (!profile.ok) return profile
+  if (!health.ok) return health
+  if (!priorities.ok) return priorities
+  if (!goals.ok) return goals
+  if (!unread.ok) return unread
+  return {
+    ok: true,
+    data: {
+      profile: profile.data,
+      health: health.data,
+      priorities: priorities.data,
+      goals: goals.data,
+      unreadCount: unread.data.unread_count,
+    },
+    fetchedAt: health.fetchedAt,
+  }
 }
