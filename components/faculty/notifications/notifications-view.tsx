@@ -108,7 +108,9 @@ export function NotificationsView({
 
   async function markRead(messageId: string) {
     setItems((current) =>
-      current.map((item) => (item.message_id === messageId ? { ...item, is_read: true } : item)),
+      current.map((item) =>
+        item.message_id === messageId ? { ...item, status: "Read" } : item,
+      ),
     )
     setUnreadCount((count) => Math.max(0, count - 1))
     try {
@@ -119,7 +121,7 @@ export function NotificationsView({
   }
 
   async function markAllRead() {
-    setItems((current) => current.map((item) => ({ ...item, is_read: true })))
+    setItems((current) => current.map((item) => ({ ...item, status: "Read" })))
     setUnreadCount(0)
     try {
       await fetch("/api/faculty/notifications/read-all", { method: "POST" })
@@ -184,7 +186,7 @@ export function NotificationsView({
           {items.map((item) => {
             const meta = typeMeta[item.message_type] ?? { label: item.message_type, icon: Bell }
             const Icon = meta.icon
-            const unread = !item.is_read
+            const unread = item.status !== "Read"
             return (
               <li
                 key={item.message_id}
@@ -206,11 +208,9 @@ export function NotificationsView({
                         <span className="size-1.5 rounded-full bg-primary" aria-label="Unread" />
                       )}
                       <p className="text-sm font-medium">{item.title}</p>
-                      {item.student_name && (
-                        <Badge variant="outline">{item.student_name}</Badge>
-                      )}
+                      {item.subject && <Badge variant="outline">{item.subject}</Badge>}
                     </div>
-                    <p className="mt-1 text-sm text-muted-foreground">{item.message}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{item.message_body}</p>
                     <div className="mt-2 flex items-center gap-3">
                       <span className="text-xs text-muted-foreground">
                         {formatDate(item.created_at)}

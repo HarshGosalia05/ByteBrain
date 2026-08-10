@@ -2982,14 +2982,12 @@ export type FacultyNotificationTypeFilter =
 
 export type FacultyNotificationItem = {
   message_id: string
-  student_id?: string | null
-  student_name?: string | null
   message_type: string
   title: string
-  message: string
-  ref_id?: string | null
-  ref_type?: string | null
-  is_read: boolean
+  message_body: string
+  subject?: string | null
+  priority: string
+  status: string
   created_at: string
 }
 

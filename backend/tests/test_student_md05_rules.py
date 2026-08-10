@@ -13,6 +13,7 @@ No database access is required — these functions are pure transforms.
 """
 
 import unittest
+from decimal import Decimal
 
 from app.core.config import settings
 from app.services.notification_rules import (
@@ -375,6 +376,61 @@ class HealthScoreRuleTests(unittest.TestCase):
         self.assertIn("consistency", result["components"])
         self.assertFalse(result["components"]["consistency"]["available"])
 
+    def test_decimal_numeric_inputs_do_not_crash(self):
+        """asyncpg returns NUMERIC columns as Decimal; Decimal/float math must not raise.
+
+        Regression for the health-score 500: pstdev of Decimals times the float
+        HEALTH_CONSISTENCY_SD_SCALE raised ``Decimal * float`` TypeError.
+        """
+        decimal_result = compute_health_score(
+            attendance_pct=Decimal("90.0"),
+            completed_percentages=[Decimal("85.0"), Decimal("88.0")],
+            completed_summaries=[
+                {"sgpa": Decimal("8.5"), "semester_percentage": Decimal("82.0")},
+                {"sgpa": Decimal("8.7"), "semester_percentage": Decimal("84.0")},
+            ],
+            total_backlogs=0,
+            has_pending_result=False,
+            current_semester=7,
+        )
+        self.assertTrue(decimal_result["available"])
+        self.assertIsInstance(decimal_result["score"], float)
+        self.assertGreaterEqual(decimal_result["score"], 80.0)
+        self.assertEqual(decimal_result["band"], "Excellent")
+        # Decimal inputs must produce the same score as the equivalent floats.
+        self.assertEqual(
+            decimal_result["score"],
+            compute_health_score(
+                attendance_pct=90.0,
+                completed_percentages=[85.0, 88.0],
+                completed_summaries=[
+                    {"sgpa": 8.5, "semester_percentage": 82.0},
+                    {"sgpa": 8.7, "semester_percentage": 84.0},
+                ],
+                total_backlogs=0,
+                has_pending_result=False,
+                current_semester=7,
+            )["score"],
+        )
+
+    def test_decimal_sgpa_only_progress_and_consistency(self):
+        """Progress derived from sgpa*10 (no stored percentage) stays float-safe."""
+        result = compute_health_score(
+            attendance_pct=Decimal("75.0"),
+            completed_percentages=[],
+            completed_summaries=[
+                {"sgpa": Decimal("6.0")},
+                {"sgpa": Decimal("7.0")},
+            ],
+            total_backlogs=0,
+            has_pending_result=False,
+            current_semester=7,
+        )
+        self.assertTrue(result["available"])
+        self.assertIsInstance(result["score"], float)
+        self.assertTrue(result["components"]["progress"]["available"])
+        self.assertTrue(result["components"]["consistency"]["available"])
+
     def test_goal_current_value(self):
         profile = profile_row(latest_sgpa=8.2, overall_percentage=70.5)
         latest = {"semester_percentage": 72.0}
@@ -396,6 +452,18 @@ class HealthScoreRuleTests(unittest.TestCase):
         with_attendance = profile_row(overall_attendance_percentage=81.0)
         self.assertEqual(
             compute_goal_current_value("target_attendance", with_attendance, latest, 65.5), 81.0
+        )
+
+    def test_goal_current_value_with_decimal_profile(self):
+        profile = profile_row(
+            latest_sgpa=Decimal("8.2"), overall_percentage=Decimal("70.5")
+        )
+        latest = {"semester_percentage": Decimal("72.0")}
+        self.assertEqual(
+            compute_goal_current_value("target_sgpa", profile, latest, None), 8.2
+        )
+        self.assertEqual(
+            compute_goal_current_value("target_percentage", profile, latest, None), 70.5
         )
 
 

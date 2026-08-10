@@ -8,6 +8,7 @@ validation (422), idempotent read marking, and response schema shaping.
 import asyncio
 import unittest
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from fastapi import HTTPException
 
@@ -245,6 +246,26 @@ class StudentHealthServiceTests(unittest.TestCase):
         # ctx queries scoped by student id
         self.assertEqual(conn.executed[0][2], ("STU-A",))
         self.assertEqual(conn.executed[3][2], ("STU-A", 7))
+
+    def test_health_score_with_decimal_sgpa_from_db(self):
+        """asyncpg returns NUMERIC sgpa as Decimal; the live health-score 500 path."""
+        conn = ctx_conn(
+            summaries=[
+                summary_row(semester=5, semester_percentage=Decimal("78.0"), sgpa=Decimal("8.1")),
+                summary_row(semester=6, semester_percentage=Decimal("82.0"), sgpa=Decimal("8.5")),
+            ],
+            performance=[
+                perf_row(semester=6, subject_id="SUBJ-1", percentage=85.0),
+                perf_row(semester=7, subject_id="SUBJ-2", end_sem_marks=None),
+            ],
+            attendance=[attendance_row(attendance_percentage=Decimal("90.0"))],
+        )
+        conn.fetchrow_sequence = [profile_row(latest_sgpa=Decimal("8.5"))]
+        response = run(self._service(conn).get_health_score("STU-A"))
+        self.assertIsInstance(response, HealthScoreResponse)
+        self.assertTrue(response.available)
+        self.assertIsInstance(response.score, float)
+        self.assertGreaterEqual(response.score, 80.0)
 
     def test_priorities_response(self):
         summaries = [

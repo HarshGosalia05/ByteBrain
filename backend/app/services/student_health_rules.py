@@ -49,6 +49,11 @@ def _round(value: Optional[float], ndigits: int = 1) -> Optional[float]:
     return None if value is None else round(value, ndigits)
 
 
+def _float_or_none(value: Any) -> Optional[float]:
+    """Normalize DB numeric types (asyncpg returns NUMERIC as Decimal) to float."""
+    return None if value is None else float(value)
+
+
 # ---------------------------------------------------------------------------
 # Health score
 # ---------------------------------------------------------------------------
@@ -173,6 +178,19 @@ def compute_health_score(
     current_semester: Optional[int],
 ) -> Dict[str, Any]:
     """Deterministic academic health score (0-100) + components + reasons."""
+    attendance_pct = _float_or_none(attendance_pct)
+    completed_percentages = [
+        float(value) for value in completed_percentages if value is not None
+    ]
+    completed_summaries = [
+        {
+            **summary,
+            "sgpa": _float_or_none(summary.get("sgpa")),
+            "semester_percentage": _float_or_none(summary.get("semester_percentage")),
+            "attendance_percentage": _float_or_none(summary.get("attendance_percentage")),
+        }
+        for summary in completed_summaries
+    ]
     components = {
         "attendance": _attendance_component(attendance_pct),
         "performance": _performance_component(completed_percentages),
@@ -262,15 +280,15 @@ def compute_goal_current_value(
 ) -> Optional[float]:
     """Current progress value for a goal type (deterministic, NULL-safe)."""
     if goal_type == "target_sgpa":
-        return profile.get("latest_sgpa")
+        return _float_or_none(profile.get("latest_sgpa"))
     if goal_type == "target_percentage":
         pct = profile.get("overall_percentage")
         if pct is None and latest_completed_summary is not None:
             pct = latest_completed_summary.get("semester_percentage")
-        return pct
+        return _float_or_none(pct)
     if goal_type == "target_attendance":
         overall = profile.get("overall_attendance_percentage")
-        return overall if overall is not None else current_attendance_mean
+        return _float_or_none(overall if overall is not None else current_attendance_mean)
     return None
 
 
