@@ -13,6 +13,10 @@ from app.schemas.student_analytics import (
     StudentAnalyticsResponse,
     WhatIfResponse,
 )
+from app.schemas.student_daily import (
+    DailyAssistantResponse,
+    StudentTimetableResponse,
+)
 
 router = APIRouter()
 
@@ -96,3 +100,36 @@ async def get_marks_what_if(
 ):
     """Pure marks simulator. Read-only — never writes to the database."""
     return service.simulate_marks(internal_marks, mid_sem_marks, end_sem_marks)
+
+
+@router.get("/me/timetable", response_model=StudentTimetableResponse)
+async def get_my_timetable(
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.get_timetable(student_id)
+
+
+@router.get("/me/daily-assistant", response_model=DailyAssistantResponse)
+async def get_my_daily_assistant(
+    date: Optional[str] = Query(
+        None,
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
+        description="Focus date in YYYY-MM-DD (defaults to today; test hook)",
+    ),
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.get_daily_assistant(student_id, date)

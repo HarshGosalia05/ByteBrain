@@ -436,3 +436,157 @@ export async function getAttendanceData(): Promise<BffResult<AttendanceData>> {
     fetchedAt: performance.fetchedAt,
   }
 }
+
+// MD-04 daily assistant + timetable types ------------------------------------
+
+export type StudentTimetableSession = {
+  timetable_id: number
+  day_name: string
+  slot_no: number
+  start_time: string
+  end_time: string
+  subject_id: string
+  subject_code: string | null
+  subject_name: string
+  credits: number | null
+  lecture_type: string | null
+  faculty_id: string | null
+  faculty_name: string | null
+}
+
+export type StudentTimetableDay = {
+  day_name: string
+  sessions: StudentTimetableSession[]
+}
+
+export type StudentTimetableSlot = {
+  slot_no: number
+  start_time: string
+  end_time: string
+}
+
+export type StudentTimetableResponse = {
+  student_id: string
+  semester_no: number
+  academic_year: string
+  department_name: string | null
+  total_sessions: number
+  slots: StudentTimetableSlot[]
+  days: StudentTimetableDay[]
+}
+
+export type DailyClass = {
+  subject_id: string
+  subject_code: string | null
+  subject_name: string
+  slot_no: number
+  start_time: string
+  end_time: string
+  lecture_type: string | null
+  credits: number | null
+  faculty_name: string | null
+  attendance_percentage: number | null
+  attendance_status: string | null
+  eligibility_status: string | null
+  shortage_flag: string | null
+  performance_percentage: number | null
+  recorded_statuses: string[]
+  recorded: boolean
+}
+
+export type FreeSlot = {
+  slot_no: number
+  start_time: string
+  end_time: string
+}
+
+export type NextClass = {
+  day_name: string
+  is_tomorrow: boolean
+  subject_id: string
+  subject_code: string | null
+  subject_name: string
+  slot_no: number
+  start_time: string
+  end_time: string
+  attendance_percentage: number | null
+}
+
+export type ClassCountByDay = {
+  day_name: string
+  count: number
+}
+
+export type StudyPriority = {
+  priority: number
+  priority_label: string
+  subject_id: string
+  subject_code: string | null
+  subject_name: string
+  attendance_percentage: number | null
+  performance_percentage: number | null
+  shortage_flag: string | null
+  eligibility_status: string | null
+  reasons: string[]
+  required_classes_to_reach_target: number | null
+  target_attendance: number
+}
+
+export type DailyPriority = {
+  priority: number
+  text: string
+}
+
+export type UpcomingDay = {
+  day_name: string
+  is_tomorrow: boolean
+  sessions: StudentTimetableSession[]
+}
+
+export type TermContext = {
+  semester_no: number
+  academic_year: string
+  department_name: string | null
+  timetable_available: boolean
+}
+
+export type AttendanceContext = {
+  semester_overall_attendance: number | null
+  stored_overall_attendance: number | null
+  note: string
+}
+
+export type Deferral = {
+  feature: string
+  status: string
+  note: string
+}
+
+export type DailyAssistantResponse = {
+  student_id: string
+  date: string
+  day_name: string
+  day_source: string
+  is_focus_today: boolean
+  term: TermContext | null
+  today_classes: DailyClass[]
+  next_class: NextClass | null
+  free_slots: FreeSlot[]
+  classes_per_day: ClassCountByDay[]
+  study_priorities: StudyPriority[]
+  daily_priorities: DailyPriority[]
+  upcoming_classes: UpcomingDay[]
+  attendance_context: AttendanceContext
+  deferrals: Deferral[]
+}
+
+export function getStudentTimetable(): Promise<BffResult<StudentTimetableResponse>> {
+  return callFastapi<StudentTimetableResponse>("timetable", BFF_TTL_MS)
+}
+
+export function getDailyAssistant(
+  date?: string,
+): Promise<BffResult<DailyAssistantResponse>> {
+  const path = date ? `daily-assistant?date=${date}` : "daily-assistant"
+  return callFastapi<DailyAssistantResponse>(path, BFF_TTL_MS)
+}
