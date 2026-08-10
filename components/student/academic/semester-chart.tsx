@@ -16,17 +16,24 @@ type SemesterChartData = {
   semester: string
   sgpa: number
   attendance: number
+  percentage: number | null
 }
 
 type ChartTooltipProps = {
   active?: boolean
   label?: string | number
-  payload?: Array<{ name?: string; value?: number | string; color?: string }>
+  payload?: Array<{ name?: string; value?: number | string | null; color?: string }>
 }
 
-function formatValue(item: { name?: string; value?: number | string }) {
+function formatValue(item: { name?: string; value?: number | string | null }) {
+  if (item.value === null || item.value === undefined) {
+    return "Not entered"
+  }
   if (item.name === "SGPA") {
     return Number(item.value).toFixed(2)
+  }
+  if (item.name === "Semester %") {
+    return `${Number(item.value).toFixed(2)}%`
   }
   return `${Number(item.value).toFixed(1)}%`
 }
@@ -57,6 +64,7 @@ function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
 const LEGEND_ITEMS = [
   { key: "sgpa", label: "SGPA", color: "var(--chart-1)" },
   { key: "attendance", label: "Attendance %", color: "var(--chart-2)" },
+  { key: "percentage", label: "Semester %", color: "var(--chart-3)" },
 ]
 
 export function SemesterChart({
@@ -95,6 +103,10 @@ export function SemesterChart({
               <linearGradient id={`${uid}-attendance`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="var(--chart-2)" stopOpacity={0.25} />
                 <stop offset="95%" stopColor="var(--chart-2)" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id={`${uid}-percentage`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--chart-3)" stopOpacity={0.25} />
+                <stop offset="95%" stopColor="var(--chart-3)" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -158,6 +170,21 @@ export function SemesterChart({
               strokeWidth={2}
               strokeLinecap="round"
               fill={`url(#${uid}-attendance)`}
+              dot={false}
+              activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--background)" }}
+              isAnimationActive
+              animationDuration={600}
+              animationEasing="ease-out"
+            />
+            <Area
+              yAxisId="right"
+              type="monotone"
+              dataKey="percentage"
+              name="Semester %"
+              stroke="var(--chart-3)"
+              strokeWidth={2}
+              strokeLinecap="round"
+              fill={`url(#${uid}-percentage)`}
               dot={false}
               activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--background)" }}
               isAnimationActive

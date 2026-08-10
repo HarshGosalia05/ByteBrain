@@ -35,10 +35,12 @@ export default async function SubjectsPage({
   const activeSemester = selected ?? current
 
   const visible = performance.filter((item) => item.semester === activeSemester)
-  const barData = visible.map((item) => ({
-    subject: item.subject_name,
-    total: item.total_marks ?? 0,
-  }))
+  const barData = visible
+    .filter((item) => item.total_marks !== null)
+    .map((item) => ({
+      subject: item.subject_name,
+      total: item.total_marks as number,
+    }))
 
   return (
     <div className="flex flex-col gap-6">

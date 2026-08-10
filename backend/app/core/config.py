@@ -90,6 +90,21 @@ class Settings(BaseSettings):
     ATTENDANCE_SCOPE_ACADEMIC_YEAR: str = "2026-27"
     ATTENDANCE_STATUS_GOOD_SPLIT: float = 80.0
 
+    # MD-03 Student Performance Analytics (deterministic product rules, not ML)
+    # Subject strength bands (percentage): Strong >= 75 | Good 60-74.99 |
+    # Needs Attention 45-59.99 | Critical < 45.
+    STUDENT_STRENGTH_STRONG_MIN: float = 75.0
+    STUDENT_STRENGTH_GOOD_MIN: float = 60.0
+    STUDENT_NEEDS_ATTENTION_MAX: float = 45.0
+    # Minimum drop (percentage points) between consecutive assessment components
+    # (internal -> mid-sem -> end-sem) that flags a learning-gap signal.
+    STUDENT_ASSESSMENT_GAP_DROP: float = 20.0
+    # Privacy-safe class benchmark: minimum completed peer records required
+    # before a class average is shown. Peer-only (excludes the student).
+    STUDENT_CLASS_BENCHMARK_MIN_COHORT: int = 5
+    # Trend stability tolerance: deltas within this range count as "flat".
+    STUDENT_TREND_STABLE_TOLERANCE: float = 0.1
+
     model_config = SettingsConfigDict(env_file="../.env.local", env_file_encoding="utf-8", extra="ignore")
 
     @property
