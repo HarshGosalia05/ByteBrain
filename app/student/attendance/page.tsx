@@ -1,7 +1,7 @@
 import { CalendarCheck } from "lucide-react"
 
 import { requireRole } from "@/lib/session"
-import { getAttendanceData } from "@/lib/student-api"
+import { getAttendanceData, getAttendanceWhatIf } from "@/lib/student-api"
 
 import { PageHeader } from "@/components/shared/layout/page-header"
 import { EmptyState } from "@/components/shared/state/empty-state"
@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/shared/state/error-state"
 import { TrendChart } from "@/components/shared/charts/trend-chart"
 import { Badge } from "@/components/ui/badge"
 import { SemesterSelect } from "@/components/student/semester-select"
+import { AttendanceSimulator } from "@/components/student/attendance/attendance-simulator"
 
 export default async function AttendancePage({
   searchParams,
@@ -17,9 +18,10 @@ export default async function AttendancePage({
 }) {
   await requireRole("Student")
 
-  const [{ semester: semesterParam }, result] = await Promise.all([
+  const [{ semester: semesterParam }, result, whatIf] = await Promise.all([
     searchParams,
     getAttendanceData(),
+    getAttendanceWhatIf(),
   ])
 
   if (!result.ok) {
@@ -41,6 +43,9 @@ export default async function AttendancePage({
   const subjectsWithAttendance = visibleSubjects.filter(
     (item) => item.attendance_percentage !== null,
   )
+
+  const attendanceTarget = whatIf.ok ? whatIf.data.context.target_attendance : 75
+  const simulatorSubjects = whatIf.ok ? whatIf.data.context.subjects : []
 
   return (
     <div className="flex flex-col gap-6">
@@ -130,10 +135,10 @@ export default async function AttendancePage({
                           {attendance.toFixed(1)}%
                         </td>
                         <td className="py-3 pr-4">
-                          {attendance >= 75 ? (
+                          {attendance >= attendanceTarget ? (
                             <Badge variant="success">On track</Badge>
                           ) : (
-                            <Badge variant="warning">Below 75%</Badge>
+                            <Badge variant="warning">Below {attendanceTarget}%</Badge>
                           )}
                         </td>
                       </tr>
@@ -143,6 +148,10 @@ export default async function AttendancePage({
               </table>
             )}
           </section>
+
+          {simulatorSubjects.length > 0 && (
+            <AttendanceSimulator subjects={simulatorSubjects} target={attendanceTarget} />
+          )}
         </>
       )}
     </div>

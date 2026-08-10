@@ -10,6 +10,7 @@ from app.schemas.student import (
     SubjectPerformanceResponse,
 )
 from app.schemas.student_analytics import (
+    AttendanceWhatIfResponse,
     StudentAnalyticsResponse,
     WhatIfResponse,
 )
@@ -100,6 +101,42 @@ async def get_marks_what_if(
 ):
     """Pure marks simulator. Read-only — never writes to the database."""
     return service.simulate_marks(internal_marks, mid_sem_marks, end_sem_marks)
+
+
+@router.get(
+    "/me/analytics/attendance-what-if",
+    response_model=AttendanceWhatIfResponse,
+)
+async def get_attendance_what_if(
+    subject_id: Optional[str] = Query(
+        None, description="Subject to project (defaults to context only)"
+    ),
+    present: Optional[int] = Query(
+        None, ge=0, le=500, description="Hypothetical classes attended"
+    ),
+    absent: Optional[int] = Query(
+        None, ge=0, le=500, description="Hypothetical classes missed"
+    ),
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    """Pure attendance simulator. Read-only — never writes to the database.
+
+    Without a ``subject_id`` the payload is the current-semester baseline
+    context used to drive the client-side simulator.
+    """
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.simulate_attendance(
+        student_id,
+        subject_id,
+        int(present or 0),
+        int(absent or 0),
+    )
 
 
 @router.get("/me/timetable", response_model=StudentTimetableResponse)

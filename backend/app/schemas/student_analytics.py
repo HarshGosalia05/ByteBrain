@@ -112,3 +112,56 @@ class WhatIfResponse(BaseModel):
     grade_point: Optional[int] = None
     result_status: Optional[str] = None
     performance_category: Optional[str] = None
+
+
+class AttendanceWhatIfSubject(BaseModel):
+    """Authoritative per-subject attendance baseline (MD-04 what-if)."""
+
+    subject_id: str
+    subject_code: Optional[str] = None
+    subject_name: str
+    credits: Optional[int] = None
+    total_classes: Optional[int] = None
+    attended_classes: Optional[int] = None
+    attendance_percentage: Optional[float] = None
+    attendance_status: Optional[str] = None
+    eligibility_status: Optional[str] = None
+    shortage_flag: Optional[str] = None
+
+
+class AttendanceWhatIfSimulation(BaseModel):
+    """Projected attendance for one subject under the hypothetical inputs."""
+
+    subject_id: str
+    subject_code: Optional[str] = None
+    subject_name: str
+    total_classes: int
+    attended_classes: int
+    hypothetical_present: int = 0
+    hypothetical_absent: int = 0
+    current_attendance: Optional[float] = None
+    resulting_attendance: Optional[float] = None
+    delta: Optional[float] = None
+    attendance_status: Optional[str] = None
+    eligibility_status: Optional[str] = None
+    shortage_flag: Optional[str] = None
+    target_attendance: float
+    at_target: bool = False
+    classes_to_reach_target: Optional[int] = None
+    classes_to_skip_below_target: Optional[int] = None
+    complete: bool = False
+    message: Optional[str] = None
+
+
+class AttendanceWhatIfContext(BaseModel):
+    """Baseline feed for the client-side simulator (no projection)."""
+
+    student_id: str
+    target_attendance: float
+    subjects: List[AttendanceWhatIfSubject] = []
+
+
+class AttendanceWhatIfResponse(BaseModel):
+    student_id: str
+    context: AttendanceWhatIfContext
+    simulation: Optional[AttendanceWhatIfSimulation] = None

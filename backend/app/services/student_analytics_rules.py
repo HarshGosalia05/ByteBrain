@@ -14,9 +14,11 @@ The rules are intentionally transparent product logic:
   * NULL is never treated as zero.
 """
 
+import math
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.config import settings
+from app.services.faculty_service import attendance_aggregate_fields
 
 # ---------------------------------------------------------------------------
 # Subject strength classification (product rule, NOT an ML prediction)
@@ -463,3 +465,119 @@ def compute_attempt_history(
         )
     history.sort(key=lambda h: h["subject_code"])
     return history
+
+
+# ---------------------------------------------------------------------------
+# Attendance what-if simulation (MD-04, read-only)
+# ---------------------------------------------------------------------------
+
+
+def compute_attendance_what_if(
+    total_classes: int,
+    attended_classes: int,
+    hypothetical_present: int = 0,
+    hypothetical_absent: int = 0,
+    target_attendance: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Pure attendance projection for the what-if simulator.
+
+    Baseline counts come from the authoritative attendance table. The
+    simulation assumes the next ``hypothetical_present`` classes are attended
+    and the next ``hypothetical_absent`` are missed:
+
+        new_total    = total + present + absent
+        new_attended = attended + present
+
+    Status/eligibility/shortage reuse the canonical ``attendance_aggregate_fields``
+    derivation so the simulator always matches the published record logic.
+    A missing baseline (NULL counts) keeps every projected field NULL.
+    """
+    target = (
+        target_attendance
+        if target_attendance is not None
+        else settings.FACULTY_ATTENDANCE_THRESHOLD
+    )
+    base = {
+        "total_classes": total_classes,
+        "attended_classes": attended_classes,
+        "hypothetical_present": hypothetical_present,
+        "hypothetical_absent": hypothetical_absent,
+        "current_attendance": None,
+        "resulting_attendance": None,
+        "delta": None,
+        "attendance_status": None,
+        "eligibility_status": None,
+        "shortage_flag": None,
+        "target_attendance": target,
+        "at_target": False,
+        "classes_to_reach_target": None,
+        "classes_to_skip_below_target": None,
+        "complete": False,
+        "message": None,
+    }
+    if (
+        total_classes <= 0
+        or attended_classes < 0
+        or attended_classes > total_classes
+    ):
+        return base
+
+    current = round(attended_classes / total_classes * 100, 2)
+    new_total = total_classes + hypothetical_present + hypothetical_absent
+    new_attended = attended_classes + hypothetical_present
+    resulting = round(new_attended / new_total * 100, 2) if new_total > 0 else current
+
+    derived = attendance_aggregate_fields(resulting)
+
+    # Consecutive classes to attend (present only) to reach the target.
+    target_fraction = target / 100.0
+    if current < target:
+        classes_to_reach_target = max(
+            1,
+            math.ceil(
+                (target_fraction * total_classes - attended_classes)
+                / (1 - target_fraction)
+            ),
+        )
+    else:
+        classes_to_reach_target = 0
+
+    # Consecutive classes that can be missed (absent only) before dropping
+    # below the target.
+    if current >= target:
+        classes_to_skip_below_target = max(
+            0, math.floor(attended_classes / target_fraction - total_classes)
+        )
+    else:
+        classes_to_skip_below_target = 0
+
+    at_target = resulting >= target
+    if at_target:
+        message = (
+            f"Attendance holds at {resulting:.1f}% — at or above the "
+            f"{target:.0f}% target."
+        )
+    else:
+        message = (
+            f"Attendance drops to {resulting:.1f}% — below the "
+            f"{target:.0f}% target."
+        )
+
+    return {
+        "total_classes": total_classes,
+        "attended_classes": attended_classes,
+        "hypothetical_present": hypothetical_present,
+        "hypothetical_absent": hypothetical_absent,
+        "current_attendance": current,
+        "resulting_attendance": resulting,
+        "delta": round(resulting - current, 2),
+        "attendance_status": derived["attendance_status"],
+        "eligibility_status": derived["eligibility_status"],
+        "shortage_flag": derived["shortage_flag"],
+        "target_attendance": target,
+        "at_target": at_target,
+        "classes_to_reach_target": classes_to_reach_target,
+        "classes_to_skip_below_target": classes_to_skip_below_target,
+        "complete": True,
+        "message": message,
+    }

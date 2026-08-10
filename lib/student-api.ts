@@ -437,6 +437,57 @@ export async function getAttendanceData(): Promise<BffResult<AttendanceData>> {
   }
 }
 
+// MD-04 attendance what-if simulator -----------------------------------------
+
+export type AttendanceSimulatorSubject = {
+  subject_id: string
+  subject_code: string | null
+  subject_name: string
+  credits: number | null
+  total_classes: number | null
+  attended_classes: number | null
+  attendance_percentage: number | null
+  attendance_status: string | null
+  eligibility_status: string | null
+  shortage_flag: string | null
+}
+
+export type AttendanceWhatIfSimulation = {
+  subject_id: string
+  subject_code: string | null
+  subject_name: string
+  total_classes: number
+  attended_classes: number
+  hypothetical_present: number
+  hypothetical_absent: number
+  current_attendance: number | null
+  resulting_attendance: number | null
+  delta: number | null
+  attendance_status: string | null
+  eligibility_status: string | null
+  shortage_flag: string | null
+  target_attendance: number
+  at_target: boolean
+  classes_to_reach_target: number | null
+  classes_to_skip_below_target: number | null
+  complete: boolean
+  message: string | null
+}
+
+export type AttendanceWhatIfData = {
+  student_id: string
+  context: {
+    student_id: string
+    target_attendance: number
+    subjects: AttendanceSimulatorSubject[]
+  }
+  simulation: AttendanceWhatIfSimulation | null
+}
+
+export function getAttendanceWhatIf(): Promise<BffResult<AttendanceWhatIfData>> {
+  return callFastapi<AttendanceWhatIfData>("analytics/attendance-what-if", BFF_TTL_MS)
+}
+
 // MD-04 daily assistant + timetable types ------------------------------------
 
 export type StudentTimetableSession = {

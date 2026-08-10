@@ -1,4 +1,4 @@
-﻿import math
+import math
 import asyncpg
 from datetime import date, datetime, timedelta, time
 from typing import List, Optional
@@ -12,6 +12,10 @@ from app.schemas.student import (
 )
 from app.schemas.student_analytics import (
     AttemptHistoryItem,
+    AttendanceWhatIfContext,
+    AttendanceWhatIfResponse,
+    AttendanceWhatIfSimulation,
+    AttendanceWhatIfSubject,
     BenchmarkItem,
     LearningGapItem,
     NeedsAttentionItem,
@@ -38,6 +42,7 @@ from app.schemas.student_daily import (
     UpcomingDay,
 )
 from app.services.student_analytics_rules import (
+    compute_attendance_what_if,
     compute_attempt_history,
     compute_benchmark,
     compute_learning_gaps,
@@ -603,4 +608,92 @@ class StudentService:
             grade_point=derived["grade_point"],
             result_status=derived["result_status"],
             performance_category=derived["performance_category"],
+        )
+
+    async def simulate_attendance(
+        self,
+        student_id: str,
+        subject_id: Optional[str] = None,
+        hypothetical_present: int = 0,
+        hypothetical_absent: int = 0,
+    ) -> AttendanceWhatIfResponse:
+        """MD-04 attendance what-if simulator (read-only, never writes).
+
+        Loads the authoritative per-subject attendance baseline for the
+        student's current semester and projects an attendance percentage from
+        the pure ``compute_attendance_what_if`` rule. When no ``subject_id`` is
+        given the response carries just the baseline context that powers the
+        client-side simulator.
+        """
+        profile_data = await self.repo.get_student_profile(student_id)
+        if not profile_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+
+        current_semester = profile_data.get("current_semester")
+        attendance = (
+            await self.repo.get_semester_attendance(student_id, current_semester)
+            if current_semester
+            else []
+        )
+
+        target = settings.FACULTY_ATTENDANCE_THRESHOLD
+
+        subjects = []
+        for row in attendance:
+            total = row.get("total_classes")
+            attended = row.get("attended_classes")
+            pct = row.get("attendance_percentage")
+            if total is not None and attended is not None and total > 0:
+                pct = round(attended / total * 100, 2)
+            subjects.append(
+                AttendanceWhatIfSubject(
+                    subject_id=row["subject_id"],
+                    subject_code=row.get("subject_code"),
+                    subject_name=row["subject_name"],
+                    credits=row.get("credits"),
+                    total_classes=total,
+                    attended_classes=attended,
+                    attendance_percentage=pct,
+                    attendance_status=row.get("attendance_status"),
+                    eligibility_status=row.get("eligibility_status"),
+                    shortage_flag=row.get("shortage_flag"),
+                )
+            )
+        subjects.sort(key=lambda s: s.subject_name)
+
+        simulation = None
+        if subject_id:
+            baseline = next(
+                (row for row in attendance if row["subject_id"] == subject_id),
+                None,
+            )
+            if baseline is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Subject not found in your current semester",
+                )
+            derived = compute_attendance_what_if(
+                int(baseline.get("total_classes") or 0),
+                int(baseline.get("attended_classes") or 0),
+                hypothetical_present,
+                hypothetical_absent,
+                target,
+            )
+            simulation = AttendanceWhatIfSimulation(
+                subject_id=baseline["subject_id"],
+                subject_code=baseline.get("subject_code"),
+                subject_name=baseline["subject_name"],
+                **derived,
+            )
+
+        return AttendanceWhatIfResponse(
+            student_id=student_id,
+            context=AttendanceWhatIfContext(
+                student_id=student_id,
+                target_attendance=target,
+                subjects=subjects,
+            ),
+            simulation=simulation,
         )
