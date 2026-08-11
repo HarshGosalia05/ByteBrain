@@ -8,6 +8,7 @@ from app.schemas.student import (
     StudentProfile,
     SemesterSummaryResponse,
     SubjectPerformanceResponse,
+    ReportCardResponse,
 )
 from app.schemas.student_analytics import (
     AttendanceWhatIfResponse,
@@ -86,6 +87,21 @@ async def get_my_performance(
             detail="No student_id found in user token",
         )
     return await service.get_performance(student_id, semester)
+
+
+@router.get("/me/report-card", response_model=ReportCardResponse)
+async def get_my_report_card(
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    """Consolidated academic report card. Read-only."""
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.get_report_card(student_id)
 
 
 @router.get("/me/analytics", response_model=StudentAnalyticsResponse)

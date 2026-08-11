@@ -1,0 +1,271 @@
+.print-report-card {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-report-card {
+    display: block;
+    margin: 0;
+  }
+
+  .screen-report-card {
+    display: none !important;
+  }
+}
+
+.prc-document {
+  color: #111827;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  font-size: 10px;
+  line-height: 1.4;
+  max-width: 100%;
+}
+
+.prc-header {
+  margin-bottom: 10px;
+}
+
+.prc-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 3px solid #111827;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+}
+
+.prc-brand {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.prc-document-title {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #374151;
+}
+
+.prc-student-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.prc-student-field {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.prc-student-field dt,
+.prc-summary-field dt,
+.prc-semester-field dt {
+  margin: 0;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+}
+
+.prc-student-field dd,
+.prc-summary-field dd,
+.prc-semester-field dd {
+  margin: 0 0 0 5px;
+  font-weight: 600;
+  color: #111827;
+  overflow-wrap: anywhere;
+}
+
+.prc-summary {
+  border: 1px solid #d1d5db;
+  border-top: 3px solid #111827;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+}
+
+.prc-summary h2,
+.prc-semester-title h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.prc-summary h2 {
+  margin-bottom: 6px;
+}
+
+.prc-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.prc-summary-field {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.prc-semester {
+  break-inside: avoid;
+  margin-bottom: 12px;
+}
+
+.prc-semester-head {
+  break-after: avoid;
+  border-bottom: 1.5px solid #111827;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+
+.prc-semester-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.prc-semester-year {
+  font-size: 10px;
+  color: #6b7280;
+}
+
+.prc-semester-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 14px;
+  margin: 0;
+}
+
+.prc-semester-field {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.prc-empty {
+  margin: 4px 0;
+  font-size: 10px;
+  color: #4b5563;
+  font-style: italic;
+}
+
+.prc-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border: 1px solid #9ca3af;
+}
+
+.prc-table thead {
+  display: table-header-group;
+}
+
+.prc-table th,
+.prc-table td {
+  border: 1px solid #d1d5db;
+  padding: 3px 5px;
+  overflow-wrap: anywhere;
+}
+
+.prc-table th {
+  background-color: #e5e7eb;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #111827;
+}
+
+.prc-table tbody tr {
+  break-inside: avoid;
+}
+
+.prc-col-subject {
+  width: 36%;
+}
+
+.prc-col-credits {
+  width: 6%;
+}
+
+.prc-col-marks {
+  width: 7%;
+}
+
+.prc-col-percent {
+  width: 7%;
+}
+
+.prc-col-grade {
+  width: 7%;
+}
+
+.prc-col-result {
+  width: 9%;
+}
+
+.prc-col-attendance {
+  width: 7%;
+}
+
+.prc-subject-cell {
+  min-width: 0;
+  display: block;
+}
+
+.prc-subject-name {
+  display: block;
+  font-weight: 600;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.prc-subject-code {
+  display: block;
+  font-size: 8px;
+  color: #6b7280;
+  overflow-wrap: anywhere;
+}
+
+.prc-num,
+.prc-grade,
+.prc-result {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.prc-result {
+  font-weight: 700;
+}

@@ -84,3 +84,45 @@ class SubjectPerformanceItem(BaseModel):
 class SubjectPerformanceResponse(BaseModel):
     student_id: str
     performance: List[SubjectPerformanceItem]
+
+
+class ReportCardSubject(BaseModel):
+    subject_code: str
+    subject_name: str
+    semester: int
+    credits: Optional[int] = None
+    internal_marks: Optional[float] = None
+    mid_sem_marks: Optional[float] = None
+    end_sem_marks: Optional[float] = None
+    total_marks: Optional[float] = None
+    percentage: Optional[float] = None
+    grade: Optional[str] = None
+    grade_point: Optional[float] = None
+    result_status: Optional[str] = None
+    attempt_number: Optional[int] = None
+    attendance_percentage: Optional[float] = None
+
+
+class ReportCardSemester(BaseModel):
+    """One semester block on the report card. All rollup fields are NULL-safe."""
+
+    semester: int
+    academic_year: Optional[str] = None
+    sgpa: Optional[float] = None
+    semester_percentage: Optional[float] = None
+    semester_grade: Optional[str] = None
+    semester_result: Optional[str] = None
+    total_credits_earned: Optional[int] = None
+    credits_registered: Optional[int] = None
+    active_backlogs: Optional[int] = None
+    attendance_percentage: Optional[float] = None
+    subjects_registered: Optional[int] = None
+    academic_standing: Optional[str] = None
+    subjects: List[ReportCardSubject] = []
+
+
+class ReportCardResponse(BaseModel):
+    student_id: str
+    generated_at: str
+    profile: StudentProfile
+    semesters: List[ReportCardSemester]

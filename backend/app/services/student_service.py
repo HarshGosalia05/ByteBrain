@@ -7,6 +7,9 @@ from app.repositories.student_repo import StudentRepository
 from app.schemas.student import (
     StudentProfile,
     AcademicOverview,
+    ReportCardResponse,
+    ReportCardSemester,
+    ReportCardSubject,
     SemesterSummaryResponse,
     SubjectPerformanceResponse,
 )
@@ -132,6 +135,83 @@ class StudentService:
         return SubjectPerformanceResponse(
             student_id=student_id,
             performance=performance,
+        )
+
+    async def get_report_card(self, student_id: str) -> ReportCardResponse:
+        """Read-only consolidated report card. Never writes to the database."""
+        profile_data = await self.repo.get_student_profile(student_id)
+        if not profile_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+
+        summaries = await self.repo.get_semester_summaries(student_id)
+        performance = await self.repo.get_subject_performance(student_id)
+
+        semesters: dict = {}
+        for summary in summaries:
+            semester_no = summary["semester"]
+            semesters[semester_no] = {
+                "semester": semester_no,
+                "academic_year": summary.get("academic_year"),
+                "sgpa": summary.get("sgpa"),
+                "semester_percentage": summary.get("semester_percentage"),
+                "semester_grade": summary.get("semester_grade"),
+                "semester_result": summary.get("semester_result"),
+                "total_credits_earned": summary.get("total_credits_earned"),
+                "credits_registered": summary.get("credits_registered"),
+                "active_backlogs": summary.get("active_backlogs"),
+                "attendance_percentage": summary.get("attendance_percentage"),
+                "subjects_registered": summary.get("subjects_registered"),
+                "academic_standing": summary.get("academic_standing"),
+                "subjects": [],
+            }
+
+        for row in performance:
+            semester_no = row["semester"]
+            entry = semesters.get(semester_no)
+            if entry is None:
+                entry = {
+                    "semester": semester_no,
+                    "academic_year": row.get("academic_year"),
+                    "sgpa": None,
+                    "semester_percentage": None,
+                    "semester_grade": None,
+                    "semester_result": None,
+                    "total_credits_earned": None,
+                    "credits_registered": None,
+                    "active_backlogs": None,
+                    "attendance_percentage": None,
+                    "subjects_registered": None,
+                    "academic_standing": None,
+                    "subjects": [],
+                }
+                semesters[semester_no] = entry
+            entry["subjects"].append(
+                ReportCardSubject(
+                    subject_code=row["subject_code"],
+                    subject_name=row["subject_name"],
+                    semester=semester_no,
+                    credits=row.get("credits"),
+                    internal_marks=row.get("internal_marks"),
+                    mid_sem_marks=row.get("mid_sem_marks"),
+                    end_sem_marks=row.get("end_sem_marks"),
+                    total_marks=row.get("total_marks"),
+                    percentage=row.get("percentage"),
+                    grade=row.get("grade"),
+                    grade_point=row.get("grade_point"),
+                    result_status=row.get("result_status"),
+                    attempt_number=row.get("attempt_number"),
+                    attendance_percentage=row.get("attendance_percentage"),
+                )
+            )
+
+        ordered = [semesters[key] for key in sorted(semesters)]
+        return ReportCardResponse(
+            student_id=student_id,
+            generated_at=datetime.now(timezone.utc).date().isoformat(),
+            profile=StudentProfile(**profile_data),
+            semesters=[ReportCardSemester(**entry) for entry in ordered],
         )
 
     async def get_analytics(self, student_id: str) -> StudentAnalyticsResponse:

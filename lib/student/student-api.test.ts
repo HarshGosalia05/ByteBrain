@@ -348,6 +348,117 @@ test("getGoals is cached until a goal write invalidates it", async () => {
 })
 
 // ---------------------------------------------------------------------------
+// Report card
+// ---------------------------------------------------------------------------
+
+const REPORT_CARD_BODY = {
+  student_id: "STU-A",
+  generated_at: "2026-08-11",
+  profile: {
+    student_id: "STU-A",
+    first_name: "Alice",
+    last_name: "Appleton",
+    enrollment_no: 1001,
+    admission_year: 2023,
+    current_semester: 3,
+    department_name: "CSE",
+    current_academic_year: "2024-25",
+    latest_sgpa: 8.4,
+    overall_cgpa: 8.1,
+    overall_percentage: 72.5,
+    total_credits_registered: 60,
+    total_credits_earned: 45,
+    total_backlogs: 1,
+    academic_standing: "Good",
+  },
+  semesters: [
+    {
+      semester: 1,
+      academic_year: "2023-24",
+      sgpa: 8.2,
+      semester_percentage: 72.0,
+      semester_grade: "B+",
+      semester_result: "Pass",
+      total_credits_earned: 22,
+      credits_registered: 25,
+      active_backlogs: 0,
+      attendance_percentage: 85.0,
+      subjects_registered: 5,
+      academic_standing: "Good",
+      subjects: [
+        {
+          subject_code: "CS101",
+          subject_name: "Programming",
+          semester: 1,
+          credits: 5,
+          internal_marks: 18.0,
+          mid_sem_marks: 36.0,
+          end_sem_marks: 42.0,
+          total_marks: 96.0,
+          percentage: 80.0,
+          grade: "A",
+          grade_point: 9.0,
+          result_status: "Pass",
+          attempt_number: 1,
+          attendance_percentage: 86.0,
+        },
+      ],
+    },
+  ],
+}
+
+test("getReportCard fetches report-card with bearer token and returns data", async () => {
+  route("report-card", 200, REPORT_CARD_BODY)
+
+  const result = await studentApi.getReportCard()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.profile.first_name, "Alice")
+  assert.equal(result.data.semesters[0].subjects[0].subject_code, "CS101")
+
+  const hit = getCalls("report-card")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, `${baseUrl}/report-card`)
+  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const headers = hit[0].init?.headers as Record<string, string>
+  assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
+})
+
+test("getReportCard is cached across reads and maps 404", async () => {
+  route("report-card", 200, REPORT_CARD_BODY)
+
+  const first = await studentApi.getReportCard()
+  const second = await studentApi.getReportCard()
+  assert.equal(first.ok && second.ok, true)
+  const gets = getCalls("report-card").filter((c) => c.init?.method === undefined)
+  assert.equal(gets.length, 1, "second read must hit the cache")
+
+  routes.clear()
+  route("report-card", 404, { detail: "no records" })
+  await studentApi.invalidateBffKeys(DEFAULT_SESSION.student_id, ["report-card"])
+  const missing = await studentApi.getReportCard()
+  assert.equal(missing.ok, false)
+  if (!missing.ok) assert.equal(missing.error.code, "not_found")
+})
+
+test("getReportCard auth gating (401 / 403 / 400) applies", async () => {
+  activeSession = null
+  const noSession = await studentApi.getReportCard()
+  assert.equal(noSession.ok, false)
+  if (!noSession.ok) assert.equal(noSession.error.status, 401)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Faculty" }
+  const wrongRole = await studentApi.getReportCard()
+  assert.equal(wrongRole.ok, false)
+  if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
+
+  activeSession = { ...DEFAULT_SESSION, student_id: null }
+  const unlinked = await studentApi.getReportCard()
+  assert.equal(unlinked.ok, false)
+  if (!unlinked.ok) assert.equal(unlinked.error.status, 400)
+})
+
+// ---------------------------------------------------------------------------
 // Aggregation
 // ---------------------------------------------------------------------------
 

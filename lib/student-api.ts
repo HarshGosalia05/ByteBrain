@@ -83,6 +83,46 @@ export type SubjectPerformanceResponse = {
   performance: SubjectPerformanceItem[]
 }
 
+export type ReportCardSubject = {
+  subject_code: string
+  subject_name: string
+  semester: number
+  credits: number | null
+  internal_marks: number | null
+  mid_sem_marks: number | null
+  end_sem_marks: number | null
+  total_marks: number | null
+  percentage: number | null
+  grade: string | null
+  grade_point: number | null
+  result_status: string | null
+  attempt_number: number | null
+  attendance_percentage: number | null
+}
+
+export type ReportCardSemester = {
+  semester: number
+  academic_year: string | null
+  sgpa: number | null
+  semester_percentage: number | null
+  semester_grade: string | null
+  semester_result: string | null
+  total_credits_earned: number | null
+  credits_registered: number | null
+  active_backlogs: number | null
+  attendance_percentage: number | null
+  subjects_registered: number | null
+  academic_standing: string | null
+  subjects: ReportCardSubject[]
+}
+
+export type ReportCardResponse = {
+  student_id: string
+  generated_at: string
+  profile: StudentProfile
+  semesters: ReportCardSemester[]
+}
+
 // MD-03 analytics response types -------------------------------------------
 
 export type TrendPoint = {
@@ -356,6 +396,10 @@ export function getStudentProfile(): Promise<BffResult<StudentProfile>> {
 
 export function getAcademicSummary(): Promise<BffResult<SemesterSummaryResponse>> {
   return callFastapi<SemesterSummaryResponse>("academic-summary", BFF_TTL_MS)
+}
+
+export function getReportCard(): Promise<BffResult<ReportCardResponse>> {
+  return callFastapi<ReportCardResponse>("report-card", BFF_TTL_MS)
 }
 
 export function getStudentPerformance(

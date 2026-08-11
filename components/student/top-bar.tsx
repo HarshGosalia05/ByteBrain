@@ -27,7 +27,7 @@ export function TopBar({
   }, [])
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border/60 bg-background/80 px-4 backdrop-blur lg:px-8">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border/60 bg-background/80 px-4 backdrop-blur lg:px-8 print:hidden">
       <div className="flex items-center gap-2">
         <Button
           variant="ghost"

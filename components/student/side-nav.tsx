@@ -7,6 +7,7 @@ import {
   BookOpen,
   CalendarCheck,
   CalendarDays,
+  FileText,
   GraduationCap,
   LayoutDashboard,
   Settings,
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils"
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/student/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/student/academic", label: "Academic", icon: GraduationCap },
+  { href: "/student/report-card", label: "Report Card", icon: FileText },
   { href: "/student/subjects", label: "Subjects", icon: BookOpen },
   { href: "/student/attendance", label: "Attendance", icon: CalendarCheck },
   { href: "/student/timetable", label: "Timetable", icon: CalendarDays },

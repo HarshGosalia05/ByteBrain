@@ -50,19 +50,23 @@ export function StudentShell({
 
   return (
     <div className="flex min-h-svh">
-      <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-svh lg:w-64 lg:shrink-0 lg:flex-col lg:gap-6 lg:border-r lg:border-sidebar-border lg:bg-sidebar lg:px-4 lg:py-6">
+      <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-svh lg:w-64 lg:shrink-0 lg:flex-col lg:gap-6 lg:border-r lg:border-sidebar-border lg:bg-sidebar lg:px-4 lg:py-6 print:hidden">
         <Brand />
         <SideNav />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar menuOpen={open} onMenu={() => setOpen(true)} profile={profile} />
-        <main className="flex-1 px-4 py-6 lg:px-8">{children}</main>
+        <TopBar
+          menuOpen={open}
+          onMenu={() => setOpen(true)}
+          profile={profile}
+        />
+        <main className="flex-1 px-4 py-6 lg:px-8 print:p-0">{children}</main>
       </div>
 
       {open && (
         <div
-          className="fixed inset-0 z-50 lg:hidden"
+          className="fixed inset-0 z-50 lg:hidden print:hidden"
           role="dialog"
           aria-modal="true"
           aria-label="Navigation menu"
