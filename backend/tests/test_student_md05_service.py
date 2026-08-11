@@ -13,6 +13,7 @@ from decimal import Decimal
 from fastapi import HTTPException
 
 from app.schemas.student_md05 import (
+    ClearAllResponse,
     GoalsResponse,
     HealthScoreResponse,
     NotificationItem,
@@ -447,6 +448,39 @@ class NotificationServiceTests(unittest.TestCase):
                 )
             )
         self.assertEqual(ctx.exception.status_code, 404)
+
+    def test_clear_notification_returns_item(self):
+        conn = FakeConn()
+        conn.fetchrow_sequence = [profile_row(), notification_row()]
+        response = run(
+            self._service(conn).clear_notification(
+                "STU-A", notification_row()["message_id"]
+            )
+        )
+        self.assertIsInstance(response, NotificationItem)
+        self.assertEqual(response.status, "Unread")
+        deletes = [entry for entry in conn.executed if entry[0] == "fetchrow"]
+        self.assertIn("DELETE FROM student_messages", deletes[1][1])
+        self.assertEqual(deletes[1][2], ("STU-A", notification_row()["message_id"]))
+
+    def test_clear_notification_404_for_unknown_or_foreign(self):
+        conn = FakeConn()
+        conn.fetchrow_sequence = [profile_row(), None]
+        with self.assertRaises(HTTPException) as ctx:
+            run(
+                self._service(conn).clear_notification(
+                    "STU-A", "00000000-0000-0000-0000-000000000000"
+                )
+            )
+        self.assertEqual(ctx.exception.status_code, 404)
+
+    def test_clear_all_notifications_response(self):
+        conn = FakeConn(fetchval_sequence=[7])
+        conn.fetchrow_sequence = [profile_row()]
+        response = run(self._service(conn).clear_all_notifications("STU-A"))
+        self.assertIsInstance(response, ClearAllResponse)
+        self.assertEqual(response.cleared_count, 7)
+        self.assertEqual(response.student_id, "STU-A")
 
 
 if __name__ == "__main__":

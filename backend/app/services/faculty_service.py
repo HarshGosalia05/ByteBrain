@@ -165,6 +165,7 @@ from app.schemas.faculty import (
     FacultyNotificationsResponse,
     FacultyUnreadCountResponse,
     FacultyMarkAllReadResponse,
+    FacultyClearAllResponse,
 )
 from fastapi import HTTPException, status
 
@@ -4734,3 +4735,19 @@ class FacultyService:
         await self._ensure_profile(faculty_id)
         updated = await self.repo.mark_all_faculty_notifications_read(faculty_id)
         return FacultyMarkAllReadResponse(faculty_id=faculty_id, updated_count=updated)
+
+    async def clear_notification(
+        self, faculty_id: str, message_id: str
+    ) -> FacultyNotificationItem:
+        await self._ensure_profile(faculty_id)
+        item = await self.repo.delete_faculty_notification(faculty_id, message_id)
+        if item is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found"
+            )
+        return FacultyNotificationItem(**item)
+
+    async def clear_all_notifications(self, faculty_id: str) -> FacultyClearAllResponse:
+        await self._ensure_profile(faculty_id)
+        cleared = await self.repo.delete_all_faculty_notifications(faculty_id)
+        return FacultyClearAllResponse(faculty_id=faculty_id, cleared_count=cleared)

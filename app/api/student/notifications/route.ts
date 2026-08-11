@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import {
+  clearAllNotifications,
   getNotifications,
   type NotificationTypeFilter,
 } from "@/lib/student-api"
@@ -9,6 +10,7 @@ const VALID_TYPES: NotificationTypeFilter[] = [
   "ELIGIBILITY_WARNING",
   "MARKS_PUBLISHED",
   "MARKS_UPDATED",
+  "MARKS_CLEARED",
   "PERFORMANCE_CHANGE",
   "RISK_ALERT",
   "TIMETABLE_CHANGE",
@@ -40,5 +42,10 @@ export async function GET(request: Request) {
       ? Number(url.searchParams.get("page_size"))
       : undefined,
   })
+  return NextResponse.json(result, { status: result.ok ? 200 : result.error.status })
+}
+
+export async function DELETE() {
+  const result = await clearAllNotifications()
   return NextResponse.json(result, { status: result.ok ? 200 : result.error.status })
 }

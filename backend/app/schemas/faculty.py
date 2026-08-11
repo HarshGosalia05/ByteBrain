@@ -1308,3 +1308,7 @@ class FacultyUnreadCountResponse(BaseModel):
 class FacultyMarkAllReadResponse(BaseModel):
     faculty_id: str
     updated_count: int
+
+class FacultyClearAllResponse(BaseModel):
+    faculty_id: str
+    cleared_count: int

@@ -2423,7 +2423,7 @@ function invalidateBffKeys(facultyId: string, prefixes: string[]) {
 
 async function mutateFastapi<T>(
   path: string,
-  method: "POST" | "PUT" | "PATCH",
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
   body: unknown,
   invalidatePrefixes: string[],
 ): Promise<BffResult<T>> {
@@ -3010,6 +3010,11 @@ export type FacultyMarkAllReadResponse = {
   updated_count: number
 }
 
+export type FacultyClearAllResponse = {
+  faculty_id: string
+  cleared_count: number
+}
+
 export function getFacultyNotifications(
   options?: {
     messageType?: FacultyNotificationTypeFilter
@@ -3051,6 +3056,28 @@ export function markAllFacultyNotificationsRead(): Promise<
   return mutateFastapi<FacultyMarkAllReadResponse>(
     "me/notifications/read-all",
     "POST",
+    {},
+    ["notifications"],
+  )
+}
+
+export function clearFacultyNotification(
+  messageId: string,
+): Promise<BffResult<FacultyNotificationItem>> {
+  return mutateFastapi<FacultyNotificationItem>(
+    `me/notifications/${messageId}`,
+    "DELETE",
+    {},
+    ["notifications"],
+  )
+}
+
+export function clearAllFacultyNotifications(): Promise<
+  BffResult<FacultyClearAllResponse>
+> {
+  return mutateFastapi<FacultyClearAllResponse>(
+    "me/notifications",
+    "DELETE",
     {},
     ["notifications"],
   )

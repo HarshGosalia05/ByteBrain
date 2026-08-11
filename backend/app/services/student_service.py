@@ -11,6 +11,7 @@ from app.schemas.student import (
     SubjectPerformanceResponse,
 )
 from app.schemas.student_md05 import (
+    ClearAllResponse,
     GoalsResponse,
     HealthScoreResponse,
     MarkAllReadResponse,
@@ -473,6 +474,28 @@ class StudentService:
         return MarkAllReadResponse(
             student_id=student_id,
             updated_count=await self.repo.mark_all_notifications_read(student_id),
+        )
+
+    async def clear_notification(self, student_id: str, message_id: str) -> NotificationItem:
+        if not await self.repo.get_student_profile(student_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        item = await self.repo.delete_notification(student_id, message_id)
+        if item is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found"
+            )
+        return NotificationItem(**item)
+
+    async def clear_all_notifications(self, student_id: str) -> ClearAllResponse:
+        if not await self.repo.get_student_profile(student_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        return ClearAllResponse(
+            student_id=student_id,
+            cleared_count=await self.repo.delete_all_notifications(student_id),
         )
 
     @staticmethod

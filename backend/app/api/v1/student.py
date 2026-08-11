@@ -19,6 +19,7 @@ from app.schemas.student_daily import (
     StudentTimetableResponse,
 )
 from app.schemas.student_md05 import (
+    ClearAllResponse,
     GoalCreate,
     GoalUpdate,
     GoalsResponse,
@@ -330,6 +331,35 @@ async def mark_my_notifications_read_all(
             detail="No student_id found in user token",
         )
     return await service.mark_all_notifications_read(student_id)
+
+
+@router.delete("/me/notifications/{message_id}", response_model=NotificationItem)
+async def clear_my_notification(
+    message_id: str,
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.clear_notification(student_id, message_id)
+
+
+@router.delete("/me/notifications", response_model=ClearAllResponse)
+async def clear_my_notifications_all(
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.clear_all_notifications(student_id)
 
 
 @router.get("/me/daily-assistant", response_model=DailyAssistantResponse)

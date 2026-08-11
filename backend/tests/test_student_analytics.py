@@ -604,15 +604,18 @@ class StudentAnalyticsServiceTests(unittest.TestCase):
     def test_student_router_is_read_only(self):
         from app.api.v1 import student
 
-        # MD-05 permits exactly these student-managed mutations (goals + read
-        # toggle); every other student route must stay GET-only. Route paths
-        # are router-relative (the /students prefix is applied at mount time),
-        # and GET/POST for the same path live on separate route objects.
+        # MD-05 permits exactly these student-managed mutations (goals, the read
+        # toggle, and clearing/dismissing notifications); every other student
+        # route must stay GET-only. Route paths are router-relative (the
+        # /students prefix is applied at mount time), and GET/POST/DELETE for
+        # the same path live on separate route objects.
         def is_allowed_mutation(path: str) -> bool:
             return (
                 path in {"/me/goals", "/me/goals/{goal_id}"}
                 or path == "/me/notifications/{message_id}/read"
                 or path == "/me/notifications/read-all"
+                or path == "/me/notifications"
+                or path == "/me/notifications/{message_id}"
             )
 
         methods_by_path: dict = {}
@@ -628,8 +631,8 @@ class StudentAnalyticsServiceTests(unittest.TestCase):
                 )
             if is_allowed_mutation(path):
                 self.assertTrue(
-                    {"POST", "PATCH"} & methods,
-                    f"Route {path} is an allowed mutation but registered without POST/PATCH",
+                    {"POST", "PATCH", "DELETE"} & methods,
+                    f"Route {path} is an allowed mutation but registered without POST/PATCH/DELETE",
                 )
 
     def test_benchmark_schema_exposes_no_peer_identity(self):

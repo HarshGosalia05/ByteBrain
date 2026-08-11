@@ -10,6 +10,7 @@ Notification categories (planned MD-05 categories; each maps to
     MARKS_PUBLISHED      first time marks are published for a subject /
                          end-semester final result published.
     MARKS_UPDATED        an already-published mark is changed.
+    MARKS_CLEARED        an already-published mark is cleared (removed).
     ATTENDANCE_WARNING   aggregate attendance crosses below the target or
                          critical threshold for a subject.
     ELIGIBILITY_WARNING  attendance drops so the student becomes not eligible
@@ -53,6 +54,7 @@ NOTIFICATION_TYPE_FACULTY_MESSAGE = "FACULTY_MESSAGE"
 NOTIFICATION_TYPES_MD05 = [
     "MARKS_PUBLISHED",
     "MARKS_UPDATED",
+    "MARKS_CLEARED",
     "ATTENDANCE_WARNING",
     "ELIGIBILITY_WARNING",
     "RISK_ALERT",
@@ -121,22 +123,31 @@ def build_performance_notifications(events: List[Dict[str, Any]]) -> List[Dict[s
       fully-entered row does not spam the student.
         keys: kind='publish', student_id, subject_id, subject_name,
               change_id, fields=[{name, value}, ...]
-    * ``field`` — a single component changed on an existing row.
+    * ``field`` — components changed on an existing row.
         keys: kind='field', student_id, subject_id, subject_name,
               field_name, old_value, new_value, change_id
-      Rules: end-semester NULL -> value is a MARKS_PUBLISHED (final result);
-      any other non-NULL change is a MARKS_UPDATED; clearing (new_value is
-      None) is skipped as it is a correction, not a student-facing event.
+      All ``field`` changes for one student in a single save are consolidated
+      into one notification (at most one per student per save):
+
+        - a lone end-semester NULL -> value is a MARKS_PUBLISHED (final result);
+        - changes that only clear populated values are a MARKS_CLEARED;
+        - any other change set is a MARKS_UPDATED.
+
+      Clearing an already-empty field (old None, new None) is skipped as it is
+      a no-op, not a student-facing event.
     """
     notifications: List[Dict[str, Any]] = []
+    field_groups: Dict[str, List[Dict[str, Any]]] = {}
     for event in events:
         if event.get("kind") == "publish":
             notifications.append(_publish_event(event))
             continue
         if event.get("kind") == "field":
-            entry = _field_event(event)
-            if entry is not None:
-                notifications.append(entry)
+            descriptor = _field_descriptor(event)
+            if descriptor is not None:
+                field_groups.setdefault(event["student_id"], []).append(descriptor)
+    for group in field_groups.values():
+        notifications.append(_consolidate_field_notification(group))
     return notifications
 
 
@@ -165,41 +176,111 @@ def _publish_event(event: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _field_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    field = event.get("field_name")
+def _field_descriptor(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Normalize a single field change; None when nothing student-facing changed."""
     old_value = event.get("old_value")
     new_value = event.get("new_value")
-    subject = event["subject_name"]
-
-    if new_value is None:
+    if old_value is None and new_value is None:
         return None
-    if field == "end_sem_marks" and old_value is None:
+    return {
+        "student_id": event["student_id"],
+        "subject_name": event["subject_name"],
+        "field_name": event["field_name"],
+        "old_value": old_value,
+        "new_value": new_value,
+        "change_id": event["change_id"],
+    }
+
+
+def _field_label(field_name: str) -> str:
+    return _FIELD_LABELS.get(field_name, field_name)
+
+
+def _is_final_result_publish(group: List[Dict[str, Any]]) -> bool:
+    return (
+        len(group) == 1
+        and group[0]["field_name"] == "end_sem_marks"
+        and group[0]["old_value"] is None
+        and group[0]["new_value"] is not None
+    )
+
+
+def _is_clear_only(group: List[Dict[str, Any]]) -> bool:
+    return all(
+        change["new_value"] is None and change["old_value"] is not None
+        for change in group
+    )
+
+
+def _describe_change(change: Dict[str, Any]) -> str:
+    """A compact fragment for a consolidated MARKS_UPDATED body."""
+    label = _field_label(change["field_name"])
+    if change["new_value"] is None:
+        return f"{label} cleared"
+    if change["old_value"] is None:
+        return f"{label} published ({change['new_value']})"
+    return f"{label} updated from {change['old_value']} to {change['new_value']}"
+
+
+def _consolidate_field_notification(group: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """One notification per student per save, typed by the change set."""
+    student_id = group[0]["student_id"]
+    subject = group[0]["subject_name"]
+    event_id = perf_change_event_id(group[0]["change_id"])
+
+    if _is_final_result_publish(group):
+        value = group[0]["new_value"]
         return {
-            "student_id": event["student_id"],
+            "student_id": student_id,
             "faculty_id": None,
             "subject": subject,
             "message_type": "MARKS_PUBLISHED",
             "title": f"Final result published for {subject}",
             "message_body": (
-                f"Your end-semester marks in {subject} have been published ({new_value})."
+                f"Your end-semester marks in {subject} have been published ({value})."
             ),
             "priority": DEFAULT_PRIORITY,
-            "event_id": perf_change_event_id(event["change_id"]),
+            "event_id": event_id,
         }
 
-    label = _FIELD_LABELS.get(field, field)
+    if _is_clear_only(group):
+        labels = " and ".join(_field_label(c["field_name"]) for c in group)
+        body = f"Your {labels} marks in {subject} were cleared."
+        if any(c["field_name"] == "end_sem_marks" for c in group):
+            body += " Your final result is now pending."
+        return {
+            "student_id": student_id,
+            "faculty_id": None,
+            "subject": subject,
+            "message_type": "MARKS_CLEARED",
+            "title": f"{subject} marks cleared",
+            "message_body": body,
+            "priority": DEFAULT_PRIORITY,
+            "event_id": event_id,
+        }
+
+    if len(group) == 1:
+        change = group[0]
+        label = _field_label(change["field_name"])
+        if change["old_value"] is None:
+            body = f"Your {label} marks in {subject} were set to {change['new_value']}."
+        else:
+            body = (
+                f"Your {label} marks in {subject} were updated "
+                f"from {change['old_value']} to {change['new_value']}."
+            )
+    else:
+        detail = ", ".join(_describe_change(c) for c in group)
+        body = f"Your marks in {subject} were updated: {detail}."
     return {
-        "student_id": event["student_id"],
+        "student_id": student_id,
         "faculty_id": None,
         "subject": subject,
         "message_type": "MARKS_UPDATED",
         "title": f"{subject} marks updated",
-        "message_body": (
-            f"Your {label} marks in {subject} were updated "
-            f"from {old_value} to {new_value}."
-        ),
+        "message_body": body,
         "priority": DEFAULT_PRIORITY,
-        "event_id": perf_change_event_id(event["change_id"]),
+        "event_id": event_id,
     }
 
 

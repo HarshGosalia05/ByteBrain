@@ -529,3 +529,35 @@ class StudentRepository:
                 student_id,
             )
             return int(value)
+
+    async def delete_notification(
+        self, student_id: str, message_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Ownership-scoped clear (hard delete). Returns None for unknown ids."""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                DELETE FROM student_messages
+                WHERE student_id = $1 AND message_id = $2::uuid
+                RETURNING message_id, message_type, title, message_body,
+                          subject, priority, status, created_at
+                """,
+                student_id, message_id,
+            )
+            return self._notification(row) if row else None
+
+    async def delete_all_notifications(self, student_id: str) -> int:
+        """Clear every notification for the student; returns rows deleted."""
+        async with self.pool.acquire() as conn:
+            value = await conn.fetchval(
+                """
+                WITH del AS (
+                    DELETE FROM student_messages
+                    WHERE student_id = $1
+                    RETURNING 1
+                )
+                SELECT count(*) FROM del
+                """,
+                student_id,
+            )
+            return int(value)

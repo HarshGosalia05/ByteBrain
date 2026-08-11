@@ -26,10 +26,13 @@ export function NotificationBell() {
       }
     }
     void refresh()
+    const handleChanged = () => void refresh()
+    window.addEventListener("notifications-changed", handleChanged)
     const timer = window.setInterval(refresh, 60_000)
     return () => {
       cancelled = true
       window.clearInterval(timer)
+      window.removeEventListener("notifications-changed", handleChanged)
     }
   }, [])
 

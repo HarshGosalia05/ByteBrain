@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import {
+  clearAllFacultyNotifications,
   getFacultyNotifications,
   type FacultyNotificationTypeFilter,
 } from "@/lib/faculty-api"
@@ -36,5 +37,10 @@ export async function GET(request: Request) {
       ? Number(url.searchParams.get("page_size"))
       : undefined,
   })
+  return NextResponse.json(result, { status: result.ok ? 200 : result.error.status })
+}
+
+export async function DELETE() {
+  const result = await clearAllFacultyNotifications()
   return NextResponse.json(result, { status: result.ok ? 200 : result.error.status })
 }

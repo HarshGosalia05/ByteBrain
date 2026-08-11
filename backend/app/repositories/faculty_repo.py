@@ -3857,3 +3857,36 @@ class FacultyRepository:
                 faculty_id,
             )
             return int(value)
+
+    async def delete_faculty_notification(
+        self, faculty_id: str, message_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Ownership-scoped clear (hard delete). Returns None for unknown ids."""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                DELETE FROM student_messages
+                WHERE faculty_recipient_id = $1 AND recipient_type = 'faculty'
+                    AND message_id = $2::uuid
+                RETURNING message_id, message_type, title, message_body,
+                          subject, priority, status, created_at
+                """,
+                faculty_id, message_id,
+            )
+            return self._faculty_notification(row) if row else None
+
+    async def delete_all_faculty_notifications(self, faculty_id: str) -> int:
+        """Clear every faculty notification; returns rows deleted."""
+        async with self.pool.acquire() as conn:
+            value = await conn.fetchval(
+                """
+                WITH del AS (
+                    DELETE FROM student_messages
+                    WHERE faculty_recipient_id = $1 AND recipient_type = 'faculty'
+                    RETURNING 1
+                )
+                SELECT count(*) FROM del
+                """,
+                faculty_id,
+            )
+            return int(value)

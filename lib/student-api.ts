@@ -705,6 +705,7 @@ export type NotificationTypeFilter =
   | "ELIGIBILITY_WARNING"
   | "MARKS_PUBLISHED"
   | "MARKS_UPDATED"
+  | "MARKS_CLEARED"
   | "PERFORMANCE_CHANGE"
   | "RISK_ALERT"
   | "TIMETABLE_CHANGE"
@@ -740,6 +741,11 @@ export type MarkAllReadResponse = {
   updated_count: number
 }
 
+export type ClearAllResponse = {
+  student_id: string
+  cleared_count: number
+}
+
 export function invalidateBffKeys(studentId: string, prefixes: string[]) {
   const base = `${studentId}:`
   for (const key of Array.from(bffCache.keys())) {
@@ -751,7 +757,7 @@ export function invalidateBffKeys(studentId: string, prefixes: string[]) {
 
 async function mutateStudent<T>(
   path: string,
-  method: "POST" | "PATCH",
+  method: "POST" | "PATCH" | "DELETE",
   body: unknown,
   invalidatePrefixes: string[],
 ): Promise<BffResult<T>> {
@@ -870,6 +876,21 @@ export function markNotificationRead(
 
 export function markAllNotificationsRead(): Promise<BffResult<MarkAllReadResponse>> {
   return mutateStudent<MarkAllReadResponse>("notifications/read-all", "POST", {}, ["notifications"])
+}
+
+export function clearNotification(
+  messageId: string,
+): Promise<BffResult<NotificationItem>> {
+  return mutateStudent<NotificationItem>(
+    `notifications/${messageId}`,
+    "DELETE",
+    {},
+    ["notifications"],
+  )
+}
+
+export function clearAllNotifications(): Promise<BffResult<ClearAllResponse>> {
+  return mutateStudent<ClearAllResponse>("notifications", "DELETE", {}, ["notifications"])
 }
 
 export type StudentHealthData = {

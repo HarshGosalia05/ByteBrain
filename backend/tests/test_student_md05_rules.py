@@ -153,7 +153,7 @@ class NotificationRuleTests(unittest.TestCase):
         self.assertEqual(notifications[0]["message_type"], "MARKS_PUBLISHED")
         self.assertIn("Final result published", notifications[0]["title"])
 
-    def test_clearing_a_mark_is_skipped(self):
+    def test_clearing_a_published_mark_notifies(self):
         notifications = build_performance_notifications(
             [
                 {
@@ -168,7 +168,155 @@ class NotificationRuleTests(unittest.TestCase):
                 }
             ]
         )
+        self.assertEqual(len(notifications), 1)
+        item = notifications[0]
+        self.assertEqual(item["message_type"], "MARKS_CLEARED")
+        self.assertEqual(item["title"], "NLP marks cleared")
+        self.assertIn("end-semester", item["message_body"])
+        self.assertIn("final result is now pending", item["message_body"])
+        self.assertEqual(item["event_id"], "perf-change:104")
+
+    def test_clearing_an_empty_mark_is_skipped(self):
+        notifications = build_performance_notifications(
+            [
+                {
+                    "kind": "field",
+                    "student_id": "STU-A",
+                    "subject_id": "SUBJ-1",
+                    "subject_name": "NLP",
+                    "field_name": "end_sem_marks",
+                    "old_value": None,
+                    "new_value": None,
+                    "change_id": 105,
+                }
+            ]
+        )
         self.assertEqual(notifications, [])
+
+    def test_multi_field_changes_consolidate_to_one_notification(self):
+        notifications = build_performance_notifications(
+            [
+                {
+                    "kind": "field",
+                    "student_id": "STU-A",
+                    "subject_id": "SUBJ-1",
+                    "subject_name": "Deep Learning",
+                    "field_name": "internal_marks",
+                    "old_value": 15,
+                    "new_value": 17,
+                    "change_id": 201,
+                },
+                {
+                    "kind": "field",
+                    "student_id": "STU-A",
+                    "subject_id": "SUBJ-1",
+                    "subject_name": "Deep Learning",
+                    "field_name": "mid_sem_marks",
+                    "old_value": 38,
+                    "new_value": 41,
+                    "change_id": 202,
+                },
+            ]
+        )
+        self.assertEqual(len(notifications), 1)
+        item = notifications[0]
+        self.assertEqual(item["message_type"], "MARKS_UPDATED")
+        self.assertIn("internal updated from 15 to 17", item["message_body"])
+        self.assertIn("mid-semester updated from 38 to 41", item["message_body"])
+        self.assertEqual(item["event_id"], "perf-change:201")
+
+    def test_multi_field_clear_consolidates_to_single_cleared(self):
+        notifications = build_performance_notifications(
+            [
+                {
+                    "kind": "field",
+                    "student_id": "STU-A",
+                    "subject_id": "SUBJ-1",
+                    "subject_name": "NLP",
+                    "field_name": "internal_marks",
+                    "old_value": 16,
+                    "new_value": None,
+                    "change_id": 301,
+                },
+                {
+                    "kind": "field",
+                    "student_id": "STU-A",
+                    "subject_id": "SUBJ-1",
+                    "subject_name": "NLP",
+                    "field_name": "mid_sem_marks",
+                    "old_value": 40,
+                    "new_value": None,
+                    "change_id": 302,
+                },
+            ]
+        )
+        self.assertEqual(len(notifications), 1)
+        item = notifications[0]
+        self.assertEqual(item["message_type"], "MARKS_CLEARED")
+        self.assertIn("internal", item["message_body"])
+        self.assertIn("mid-semester", item["message_body"])
+        self.assertEqual(item["event_id"], "perf-change:301")
+
+    def test_mixed_update_and_clear_consolidates_as_updated(self):
+        notifications = build_performance_notifications(
+            [
+                {
+                    "kind": "field",
+                    "student_id": "STU-A",
+                    "subject_id": "SUBJ-1",
+                    "subject_name": "NLP",
+                    "field_name": "internal_marks",
+                    "old_value": 16,
+                    "new_value": None,
+                    "change_id": 401,
+                },
+                {
+                    "kind": "field",
+                    "student_id": "STU-A",
+                    "subject_id": "SUBJ-1",
+                    "subject_name": "NLP",
+                    "field_name": "end_sem_marks",
+                    "old_value": 55,
+                    "new_value": 60,
+                    "change_id": 402,
+                },
+            ]
+        )
+        self.assertEqual(len(notifications), 1)
+        item = notifications[0]
+        self.assertEqual(item["message_type"], "MARKS_UPDATED")
+        self.assertIn("internal cleared", item["message_body"])
+        self.assertIn("end-semester updated from 55 to 60", item["message_body"])
+
+    def test_distinct_students_stay_separate(self):
+        notifications = build_performance_notifications(
+            [
+                {
+                    "kind": "field",
+                    "student_id": "STU-A",
+                    "subject_id": "SUBJ-1",
+                    "subject_name": "NLP",
+                    "field_name": "end_sem_marks",
+                    "old_value": 55,
+                    "new_value": None,
+                    "change_id": 501,
+                },
+                {
+                    "kind": "field",
+                    "student_id": "STU-B",
+                    "subject_id": "SUBJ-1",
+                    "subject_name": "NLP",
+                    "field_name": "end_sem_marks",
+                    "old_value": 58,
+                    "new_value": None,
+                    "change_id": 502,
+                },
+            ]
+        )
+        self.assertEqual(len(notifications), 2)
+        self.assertEqual(
+            {item["student_id"] for item in notifications}, {"STU-A", "STU-B"}
+        )
 
     def test_attendance_crossing_below_target(self):
         notifications = build_attendance_warnings(

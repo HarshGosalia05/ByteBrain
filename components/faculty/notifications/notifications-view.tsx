@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldAlert,
+  Trash2,
   TrendingUp,
 } from "lucide-react"
 
@@ -37,15 +38,20 @@ const typeMeta: Record<string, { label: string; icon: typeof Bell }> = {
   SYSTEM: { label: "System", icon: Bell },
 }
 
+const MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+]
+
 function formatDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  const hours = date.getHours()
+  const period = hours >= 12 ? "PM" : "AM"
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12
+  const hourText = String(hour12).padStart(2, "0")
+  const minuteText = String(date.getMinutes()).padStart(2, "0")
+  return `${MONTH_LABELS[date.getMonth()]} ${date.getDate()}, ${hourText}:${minuteText} ${period}`
 }
 
 export function NotificationsView({
@@ -106,6 +112,10 @@ export function NotificationsView({
     void load(filter, nextPage)
   }
 
+  function notifyChanged() {
+    window.dispatchEvent(new Event("notifications-changed"))
+  }
+
   async function markRead(messageId: string) {
     setItems((current) =>
       current.map((item) =>
@@ -118,6 +128,7 @@ export function NotificationsView({
     } catch {
       // keep optimistic state
     }
+    notifyChanged()
   }
 
   async function markAllRead() {
@@ -128,6 +139,34 @@ export function NotificationsView({
     } catch {
       // keep optimistic state
     }
+    notifyChanged()
+  }
+
+  async function clearNotification(messageId: string) {
+    const target = items.find((item) => item.message_id === messageId)
+    setItems((current) => current.filter((item) => item.message_id !== messageId))
+    setTotal((total) => Math.max(0, total - 1))
+    if (target && target.status !== "Read") {
+      setUnreadCount((count) => Math.max(0, count - 1))
+    }
+    try {
+      await fetch(`/api/faculty/notifications/${messageId}`, { method: "DELETE" })
+    } catch {
+      await load(filter, page) // refresh authoritative state on failure
+    }
+    notifyChanged()
+  }
+
+  async function clearAll() {
+    setItems([])
+    setTotal(0)
+    setUnreadCount(0)
+    try {
+      await fetch("/api/faculty/notifications", { method: "DELETE" })
+    } catch {
+      await load(filter, page) // refresh authoritative state on failure
+    }
+    notifyChanged()
   }
 
   return (
@@ -162,6 +201,12 @@ export function NotificationsView({
             <Button variant="outline" size="sm" onClick={() => void markAllRead()}>
               <CheckCheck className="size-3" />
               Mark all as read
+            </Button>
+          )}
+          {items.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => void clearAll()}>
+              <Trash2 className="size-3" />
+              Clear all
             </Button>
           )}
         </div>
@@ -216,17 +261,26 @@ export function NotificationsView({
                         {formatDate(item.created_at)}
                       </span>
                       <span className="text-xs text-muted-foreground">{meta.label}</span>
-                      {unread && (
+                      <div className="ml-auto flex items-center gap-1">
+                        {unread && (
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => markRead(item.message_id)}
+                          >
+                            <CheckCheck className="size-3" />
+                            Mark as read
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="xs"
-                          className="ml-auto"
-                          onClick={() => markRead(item.message_id)}
+                          onClick={() => clearNotification(item.message_id)}
                         >
-                          <CheckCheck className="size-3" />
-                          Mark as read
+                          <Trash2 className="size-3" />
+                          Clear
                         </Button>
-                      )}
+                      </div>
                     </div>
                   </div>
                 </div>

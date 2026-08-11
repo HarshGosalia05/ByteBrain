@@ -62,6 +62,7 @@ from app.schemas.faculty import (
     FacultyNotificationsResponse,
     FacultyUnreadCountResponse,
     FacultyMarkAllReadResponse,
+    FacultyClearAllResponse,
 )
 from app.schemas.settings import (
     SettingsResponse,
@@ -1090,3 +1091,20 @@ async def mark_my_notifications_read_all(
     service: FacultyService = Depends(get_faculty_service),
 ):
     return await service.mark_all_notifications_read(_faculty_id_or_error(user))
+
+
+@router.delete("/me/notifications/{message_id}", response_model=FacultyNotificationItem)
+async def clear_my_notification(
+    message_id: str,
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service),
+):
+    return await service.clear_notification(_faculty_id_or_error(user), message_id)
+
+
+@router.delete("/me/notifications", response_model=FacultyClearAllResponse)
+async def clear_my_notifications_all(
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service),
+):
+    return await service.clear_all_notifications(_faculty_id_or_error(user))

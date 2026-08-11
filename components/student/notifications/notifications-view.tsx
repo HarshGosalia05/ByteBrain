@@ -8,8 +8,10 @@ import {
   CheckCheck,
   ChevronLeft,
   ChevronRight,
+  Eraser,
   PenLine,
   ShieldAlert,
+  Trash2,
 } from "lucide-react"
 
 import type {
@@ -29,6 +31,7 @@ const FILTERS: { value: NotificationTypeFilter | "ALL"; label: string }[] = [
   { value: "ELIGIBILITY_WARNING", label: "Eligibility" },
   { value: "MARKS_PUBLISHED", label: "Marks published" },
   { value: "MARKS_UPDATED", label: "Marks updated" },
+  { value: "MARKS_CLEARED", label: "Marks cleared" },
 ]
 
 const typeMeta: Record<string, { label: string; icon: typeof Bell }> = {
@@ -36,6 +39,7 @@ const typeMeta: Record<string, { label: string; icon: typeof Bell }> = {
   ELIGIBILITY_WARNING: { label: "Eligibility", icon: ShieldAlert },
   MARKS_PUBLISHED: { label: "Marks", icon: BookOpen },
   MARKS_UPDATED: { label: "Marks", icon: PenLine },
+  MARKS_CLEARED: { label: "Marks", icon: Eraser },
   RISK_ALERT: { label: "Risk", icon: ShieldAlert },
   TIMETABLE_CHANGE: { label: "Timetable", icon: CalendarCheck },
 }
@@ -45,15 +49,20 @@ const priorityBadge = {
   Normal: "muted",
 } as const
 
+const MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+]
+
 function formatDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  const hours = date.getHours()
+  const period = hours >= 12 ? "PM" : "AM"
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12
+  const hourText = String(hour12).padStart(2, "0")
+  const minuteText = String(date.getMinutes()).padStart(2, "0")
+  return `${MONTH_LABELS[date.getMonth()]} ${date.getDate()}, ${hourText}:${minuteText} ${period}`
 }
 
 export function NotificationsView({
@@ -111,6 +120,10 @@ export function NotificationsView({
     void load(filter, nextPage)
   }
 
+  function notifyChanged() {
+    window.dispatchEvent(new Event("notifications-changed"))
+  }
+
   async function markRead(messageId: string) {
     setItems((current) =>
       current.map((item) => (item.message_id === messageId ? { ...item, status: "Read" } : item)),
@@ -119,8 +132,9 @@ export function NotificationsView({
     try {
       await fetch(`/api/student/notifications/${messageId}/read`, { method: "PATCH" })
     } catch {
-      setItems((current) => current.map((item) => item)) // keep optimistic state
+      // keep optimistic state
     }
+    notifyChanged()
   }
 
   async function markAllRead() {
@@ -131,6 +145,34 @@ export function NotificationsView({
     } catch {
       // keep optimistic state
     }
+    notifyChanged()
+  }
+
+  async function clearNotification(messageId: string) {
+    const target = items.find((item) => item.message_id === messageId)
+    setItems((current) => current.filter((item) => item.message_id !== messageId))
+    setTotal((total) => Math.max(0, total - 1))
+    if (target && target.status !== "Read") {
+      setUnreadCount((count) => Math.max(0, count - 1))
+    }
+    try {
+      await fetch(`/api/student/notifications/${messageId}`, { method: "DELETE" })
+    } catch {
+      await load(filter, page) // refresh authoritative state on failure
+    }
+    notifyChanged()
+  }
+
+  async function clearAll() {
+    setItems([])
+    setTotal(0)
+    setUnreadCount(0)
+    try {
+      await fetch("/api/student/notifications", { method: "DELETE" })
+    } catch {
+      await load(filter, page) // refresh authoritative state on failure
+    }
+    notifyChanged()
   }
 
   return (
@@ -161,6 +203,12 @@ export function NotificationsView({
             <Button variant="outline" size="sm" onClick={() => void markAllRead()}>
               <CheckCheck className="size-3" />
               Mark all as read
+            </Button>
+          )}
+          {items.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => void clearAll()}>
+              <Trash2 className="size-3" />
+              Clear all
             </Button>
           )}
         </div>
@@ -216,12 +264,22 @@ export function NotificationsView({
                     <div className="mt-2 flex items-center gap-3">
                       <span className="text-xs text-muted-foreground">{formatDate(item.created_at)}</span>
                       <span className="text-xs text-muted-foreground">{meta.label}</span>
-                      {unread && (
-                        <Button variant="ghost" size="xs" className="ml-auto" onClick={() => markRead(item.message_id)}>
-                          <CheckCheck className="size-3" />
-                          Mark as read
+                      <div className="ml-auto flex items-center gap-1">
+                        {unread && (
+                          <Button variant="ghost" size="xs" onClick={() => markRead(item.message_id)}>
+                            <CheckCheck className="size-3" />
+                            Mark as read
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => clearNotification(item.message_id)}
+                        >
+                          <Trash2 className="size-3" />
+                          Clear
                         </Button>
-                      )}
+                      </div>
                     </div>
                   </div>
                 </div>

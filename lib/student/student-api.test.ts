@@ -252,6 +252,52 @@ test("updateGoal PATCHes and markNotificationRead PATCHes read endpoint", async 
   assert.equal(read.url, `${baseUrl}/notifications/m1/read`)
 })
 
+test("clearNotification DELETEs own notification with bearer token", async () => {
+  const cleared = {
+    message_id: "m1",
+    message_type: "MARKS_CLEARED",
+    title: "NLP marks cleared",
+    message_body: "Your end-semester marks in NLP were cleared.",
+    subject: "NLP",
+    priority: "Normal",
+    status: "Unread",
+    created_at: "2026-08-10T00:00:00Z",
+  }
+  route("notifications/m1", 200, cleared)
+
+  const result = await studentApi.clearNotification("m1")
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.message_id, "m1")
+
+  const hit = getCalls("notifications/m1").find((c) => c.init?.method === "DELETE")
+  assert.ok(hit)
+  assert.equal(hit.url, `${baseUrl}/notifications/m1`)
+  const headers = hit.init?.headers as Record<string, string>
+  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
+})
+
+test("clearNotification maps 404 and clearAllNotifications returns count", async () => {
+  route("notifications/m1", 404, { detail: "Notification not found" })
+  const missing = await studentApi.clearNotification("m1")
+  assert.equal(missing.ok, false)
+  if (!missing.ok) assert.equal(missing.error.code, "not_found")
+
+  routes.clear()
+  route("notifications", 200, { student_id: "STU-A", cleared_count: 2 })
+  const clearedAll = await studentApi.clearAllNotifications()
+  assert.equal(clearedAll.ok, true)
+  if (!clearedAll.ok) return
+  assert.equal(clearedAll.data.cleared_count, 2)
+
+  const hit = getCalls("notifications").find(
+    (c) => c.init?.method === "DELETE" && !c.url.includes("/m1"),
+  )
+  assert.ok(hit)
+  assert.equal(hit.url, `${baseUrl}/notifications`)
+})
+
 test("createGoal maps 409 conflict and 422 invalid", async () => {
   route("goals", 409, { detail: "already active" })
   const conflict = await studentApi.createGoal({ goal_type: "target_sgpa", target_value: 9.0 })

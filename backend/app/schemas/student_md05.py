@@ -91,3 +91,8 @@ class UnreadCountResponse(BaseModel):
 class MarkAllReadResponse(BaseModel):
     student_id: str
     updated_count: int
+
+
+class ClearAllResponse(BaseModel):
+    student_id: str
+    cleared_count: int
