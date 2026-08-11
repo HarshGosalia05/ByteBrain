@@ -18,6 +18,10 @@ from app.schemas.student_daily import (
     DailyAssistantResponse,
     StudentTimetableResponse,
 )
+from app.schemas.student_md06 import (
+    CareerAlignmentResponse,
+    CareerReadinessResponse,
+)
 from app.schemas.student_md05 import (
     ClearAllResponse,
     GoalCreate,
@@ -379,3 +383,34 @@ async def get_my_daily_assistant(
             detail="No student_id found in user token",
         )
     return await service.get_daily_assistant(student_id, date)
+
+
+@router.get("/me/career/readiness", response_model=CareerReadinessResponse)
+async def get_my_career_readiness(
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    """MD-06 deterministic career readiness score. Read-only."""
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.get_career_readiness(student_id)
+
+
+@router.get("/me/career/alignment", response_model=CareerAlignmentResponse)
+async def get_my_career_alignment(
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    """MD-06 domain alignment (share of completed subjects relevant to the
+    student's preferred domain). Read-only."""
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    return await service.get_career_alignment(student_id)

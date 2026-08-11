@@ -561,3 +561,30 @@ class StudentRepository:
                 student_id,
             )
             return int(value)
+
+    # ------------------------------------------------------------------
+    # MD-06 career intelligence
+    # ------------------------------------------------------------------
+
+    async def get_career_preferences(
+        self, student_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Most recent career survey response for the student, if any.
+
+        Survey data is student-scoped and read-only; the most recent response
+        wins when multiple surveys exist (``survey_date`` descending).
+        """
+        query = """
+            SELECT preferred_domain, dream_job_role, preferred_industry,
+                   preferred_work_mode, target_package_lpa,
+                   higher_studies_interest, entrepreneurship_interest,
+                   certification_interest, internship_completed,
+                   placement_readiness_level, survey_date
+            FROM career_preferences
+            WHERE student_id = $1
+            ORDER BY survey_date DESC NULLS LAST
+            LIMIT 1
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, student_id)
+            return dict(row) if row else None

@@ -133,6 +133,31 @@ class Settings(BaseSettings):
     NOTIFICATIONS_PAGE_SIZE_DEFAULT: int = 20
     NOTIFICATIONS_PAGE_SIZE_MAX: int = 50
 
+    # MD-06 Career Intelligence (deterministic product rules, no ML/GenAI).
+    # Career Readiness = weighted mean of the available 0-100 components,
+    # renormalized over the components that are actually available. Weights sum
+    # to 1.0 when every component is available.
+    CAREER_ACADEMIC_WEIGHT: float = 0.30
+    CAREER_CONSISTENCY_WEIGHT: float = 0.15
+    CAREER_ALIGNMENT_WEIGHT: float = 0.20
+    CAREER_ATTENDANCE_WEIGHT: float = 0.15
+    CAREER_INTERNSHIP_WEIGHT: float = 0.10
+    CAREER_READINESS_WEIGHT: float = 0.10
+    # Minimum number of components that must be available before a Career
+    # Readiness score is shown; otherwise the feature reports insufficient data.
+    CAREER_READINESS_AVAILABLE_COMPONENT_MIN: int = 2
+    # Career Readiness score bands (0-100).
+    CAREER_READINESS_STRONG_MIN: float = 80.0
+    CAREER_READINESS_GOOD_MIN: float = 60.0
+    CAREER_READINESS_DEVELOPING_MIN: float = 40.0
+    # Consistency scoring: SD (in SGPA units) multiplier mapping SGPA spread
+    # across completed semesters to a 0-100 consistency score (100 - sd * scale).
+    CAREER_CONSISTENCY_SD_SCALE: float = 10.0
+    # Domain alignment bands (mean % of completed domain-relevant subjects).
+    CAREER_ALIGNMENT_STRONG_MIN: float = 75.0
+    CAREER_ALIGNMENT_GOOD_MIN: float = 60.0
+    CAREER_ALIGNMENT_DEVELOPING_MIN: float = 40.0
+
     model_config = SettingsConfigDict(env_file="../.env.local", env_file_encoding="utf-8", extra="ignore")
 
     @property

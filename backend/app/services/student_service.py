@@ -52,6 +52,15 @@ from app.schemas.student_daily import (
     TermContext,
     UpcomingDay,
 )
+from app.schemas.student_md06 import (
+    CareerAlignmentResponse,
+    CareerAlignmentSubject,
+    CareerReadinessResponse,
+)
+from app.services.student_career_rules import (
+    compute_career_readiness,
+    compute_domain_alignment,
+)
 from app.services.student_analytics_rules import (
     compute_attendance_what_if,
     compute_attempt_history,
@@ -178,16 +187,24 @@ class StudentService:
         return round(sum(values) / len(values), 1) if values else None
 
     @staticmethod
-    def _completed_percentages(performance: List[dict]) -> List[float]:
+    def _latest_completed_subjects(performance: List[dict]) -> List[dict]:
+        """Latest-attempt completed subject rows (percentage not NULL)."""
         latest: dict = {}
         for row in performance:
             current = latest.get(row["subject_id"])
             if current is None or (row.get("attempt_number") or 0) > (current.get("attempt_number") or 0):
                 latest[row["subject_id"]] = row
         return [
-            float(row["percentage"])
+            row
             for row in latest.values()
             if row.get("percentage") is not None
+        ]
+
+    @staticmethod
+    def _completed_percentages(performance: List[dict]) -> List[float]:
+        return [
+            float(row["percentage"])
+            for row in StudentService._latest_completed_subjects(performance)
         ]
 
     @staticmethod
@@ -496,6 +513,104 @@ class StudentService:
         return ClearAllResponse(
             student_id=student_id,
             cleared_count=await self.repo.delete_all_notifications(student_id),
+        )
+
+    # ------------------------------------------------------------------
+    # MD-06 Career Intelligence (read-only, deterministic)
+    # ------------------------------------------------------------------
+
+    async def _career_context(self, student_id: str) -> Optional[dict]:
+        """Shared data assembly for career readiness / alignment."""
+        profile_data = await self.repo.get_student_profile(student_id)
+        if not profile_data:
+            return None
+        summaries = await self.repo.get_semester_summaries(student_id)
+        performance = await self.repo.get_subject_performance(student_id)
+        preferences = await self.repo.get_career_preferences(student_id)
+        current_semester = profile_data.get("current_semester")
+        attendance = (
+            await self.repo.get_semester_attendance(student_id, current_semester)
+            if current_semester
+            else []
+        )
+        completed = self._completed_summaries(summaries)
+        current_mean = self._attendance_mean(attendance)
+        return {
+            "profile": profile_data,
+            "summaries": summaries,
+            "performance": performance,
+            "preferences": preferences,
+            "attendance": attendance,
+            "current_semester": current_semester,
+            "completed_summaries": completed,
+            "latest_completed": completed[-1] if completed else None,
+            "current_attendance_mean": current_mean,
+        }
+
+    def _career_attendance_pct(self, ctx: dict) -> Optional[float]:
+        """Attendance component value: current semester, then latest completed
+        semester, then the stored overall attendance percentage."""
+        pct = ctx["current_attendance_mean"]
+        if pct is None and ctx["latest_completed"] is not None:
+            pct = ctx["latest_completed"].get("attendance_percentage")
+        if pct is None:
+            pct = ctx["profile"].get("overall_attendance_percentage")
+        return pct
+
+    async def get_career_readiness(self, student_id: str) -> CareerReadinessResponse:
+        ctx = await self._career_context(student_id)
+        if not ctx:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        preferences = ctx["preferences"] or {}
+        alignment = compute_domain_alignment(
+            preferences.get("preferred_domain"),
+            self._latest_completed_subjects(ctx["performance"]),
+        )
+        result = compute_career_readiness(
+            completed_percentages=self._completed_percentages(ctx["performance"]),
+            completed_summaries=ctx["completed_summaries"],
+            alignment_score=alignment["score"],
+            attendance_pct=self._career_attendance_pct(ctx),
+            internship_completed=preferences.get("internship_completed"),
+            placement_readiness_level=preferences.get("placement_readiness_level"),
+        )
+        return CareerReadinessResponse(
+            student_id=student_id,
+            preferred_domain=preferences.get("preferred_domain"),
+            dream_job_role=preferences.get("dream_job_role"),
+            generated_at=datetime.now(timezone.utc),
+            **result,
+        )
+
+    async def get_career_alignment(self, student_id: str) -> CareerAlignmentResponse:
+        ctx = await self._career_context(student_id)
+        if not ctx:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        preferences = ctx["preferences"] or {}
+        result = compute_domain_alignment(
+            preferences.get("preferred_domain"),
+            self._latest_completed_subjects(ctx["performance"]),
+        )
+        return CareerAlignmentResponse(
+            student_id=student_id,
+            preferred_domain=preferences.get("preferred_domain"),
+            dream_job_role=preferences.get("dream_job_role"),
+            aligned_subjects=[
+                CareerAlignmentSubject(**item) for item in result["aligned_subjects"]
+            ],
+            other_subjects=[
+                CareerAlignmentSubject(**item) for item in result["other_subjects"]
+            ],
+            aligned_count=result["aligned_count"],
+            total_completed=result["total_completed"],
+            available=result["available"],
+            score=result["score"],
+            band=result["band"],
+            generated_at=datetime.now(timezone.utc),
         )
 
     @staticmethod
