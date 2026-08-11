@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import student, faculty
+from app.api.v1 import admin, student, faculty
 from app.api.dependencies import get_db_pool
 from fastapi import Depends
 import asyncpg
@@ -30,3 +30,4 @@ async def root_v1():
 
 api_router.include_router(student.router, prefix="/students", tags=["students"])
 api_router.include_router(faculty.router, prefix="/faculty", tags=["faculty"])
+api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

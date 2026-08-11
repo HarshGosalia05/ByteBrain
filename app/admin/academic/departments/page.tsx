@@ -1,10 +1,10 @@
 import { requireRole } from "@/lib/session"
-import { getAdminDashboard, type AdminDashboardFilters } from "@/lib/admin-api"
+import { getDepartmentAnalytics, type AdminDashboardFilters } from "@/lib/admin-api"
 
 import { ErrorState } from "@/components/shared/state/error-state"
-import { AdminDashboardView } from "@/components/admin/dashboard/admin-dashboard-view"
+import { AcademicDepartmentsView } from "@/components/admin/academic/academic-departments-view"
 
-export default async function AdminDashboardPage(props: {
+export default async function AcademicDepartmentsPage(props: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   await requireRole("Admin")
@@ -23,10 +23,10 @@ export default async function AdminDashboardPage(props: {
         : null,
   }
 
-  const res = await getAdminDashboard(filters)
+  const res = await getDepartmentAnalytics(filters)
   if (!res.ok) {
-    return <ErrorState title="Failed to load institution analytics" description={res.error.message} />
+    return <ErrorState title="Failed to load department analytics" description={res.error.message} />
   }
 
-  return <AdminDashboardView data={res.data} fetchedAt={res.fetchedAt} />
+  return <AcademicDepartmentsView data={res.data} fetchedAt={res.fetchedAt} />
 }

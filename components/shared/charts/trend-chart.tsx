@@ -63,7 +63,7 @@ export function TrendChart({
   yTickSuffix,
   referenceLines,
 }: {
-  data: Array<Record<string, string | number>>
+  data: Array<Record<string, string | number | null>>
   xKey: string
   series: ChartSeries[]
   height?: number

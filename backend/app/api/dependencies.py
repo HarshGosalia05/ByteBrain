@@ -25,3 +25,12 @@ def require_faculty_role(user: dict = Depends(get_current_user)) -> dict:
             detail="Not authorized to access faculty resources"
         )
     return user
+
+def require_admin_role(user: dict = Depends(get_current_user)) -> dict:
+    """Dependency that ensures the current user has the Admin role"""
+    if user.get("role") != "Admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access admin resources"
+        )
+    return user

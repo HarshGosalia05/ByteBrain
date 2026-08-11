@@ -66,7 +66,7 @@ export function SubjectBarChart({
   bars,
   referenceLines,
 }: {
-  data: Array<Record<string, string | number>>
+  data: Array<Record<string, string | number | null>>
   xKey: string
   dataKey?: string
   color?: string
