@@ -5,6 +5,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ReferenceLine,
   Tooltip,
   XAxis,
@@ -92,6 +93,8 @@ export function SubjectBarChart({
   const maxChars = width >= 900 ? 20 : width >= 560 ? 14 : 10
   const series: ChartBar[] =
     bars ?? (dataKey && color ? [{ dataKey, name: "Count", color }] : [])
+  const perCategoryColors =
+    !!bars && bars.length > 1 && bars.every((b) => b.dataKey === bars[0].dataKey)
 
   function formatTick(value: string | number): string {
     const text = String(value)
@@ -106,9 +109,9 @@ export function SubjectBarChart({
     <div ref={frameRef} className="w-full">
       {bars && (
         <div className="mb-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
-          {bars.map((b) => (
+          {bars.map((b, i) => (
             <span
-              key={b.dataKey}
+              key={`${b.dataKey}-${b.name}-${i}`}
               className="flex items-center gap-1.5 text-xs text-muted-foreground"
             >
               <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
@@ -175,7 +178,7 @@ export function SubjectBarChart({
           ))}
           {series.map((s) => (
             <Bar
-              key={s.dataKey}
+              key={`${s.dataKey}-${s.name}`}
               dataKey={s.dataKey}
               name={s.name}
               fill={bars ? s.color : `url(#${uid}-bar)`}
@@ -191,7 +194,15 @@ export function SubjectBarChart({
                     className: "cursor-pointer",
                   }
                 : {})}
-            />
+            >
+              {perCategoryColors &&
+                data.map((entry, i) => (
+                  <Cell
+                    key={`${uid}-cell-${i}`}
+                    fill={bars?.[i]?.color ?? series[0].color}
+                  />
+                ))}
+            </Bar>
           ))}
         </BarChart>
       </ChartContainer>
