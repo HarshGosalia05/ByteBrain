@@ -38,6 +38,15 @@ from app.schemas.admin_attendance_risk import (
     RiskStudentRow,
     EarlyWarningRow,
 )
+from app.schemas.admin_notifications import (
+    CreateAnnouncementRequest,
+    CreateAnnouncementResponse,
+    AdminAnnouncementItem,
+    AdminAnnouncementsResponse,
+    ExecutiveSummaryResponse,
+    ExecutiveDepartmentPerformance,
+    ExecutiveSubjectPerformance,
+)
 from app.schemas.admin_dashboard import (
     AcademicTrendPoint as DashboardTrendPoint,
     AdminDashboardResponse,
@@ -1043,7 +1052,26 @@ class AdminService:
                 backlogs=row.get("backlogs"),
                 risk=RISK_BAND_MAP.get(str(row.get("risk") or "").upper())
                 or (row.get("risk") if row.get("risk") else None),
-                academic_standing=row.get("academic_standing"),
+                preferred_domain=row.get("preferred_domain"),
+                dream_job_role=row.get("dream_job_role"),
+                preferred_industry=row.get("preferred_industry"),
+                preferred_work_mode=row.get("preferred_work_mode"),
+                target_package_lpa=_to_float(row.get("target_package_lpa")),
+                higher_studies_interest=row.get("higher_studies_interest"),
+                entrepreneurship_interest=row.get("entrepreneurship_interest"),
+                certification_interest=row.get("certification_interest"),
+                internship_completed=row.get("internship_completed"),
+                placement_readiness_level=row.get("placement_readiness_level"),
+                average_sleep_hours=_to_float(row.get("average_sleep_hours")),
+                daily_study_hours=_to_float(row.get("daily_study_hours")),
+                screen_time_hours=_to_float(row.get("screen_time_hours")),
+                physical_activity=row.get("physical_activity"),
+                stress_level=row.get("stress_level"),
+                mental_wellbeing=row.get("mental_wellbeing"),
+                attendance_commitment=row.get("attendance_commitment"),
+                part_time_job=row.get("part_time_job"),
+                internet_access=row.get("internet_access"),
+                preferred_learning_mode=row.get("preferred_learning_mode"),
             )
             for row in data.get("items") or []
         ]
@@ -1106,5 +1134,106 @@ class AdminService:
             by_department=by_department,
             by_designation=by_designation,
             faculty=faculty,
+            generated_at=datetime.now(timezone.utc),
+        )
+
+    # ---------------------------------------------------------------------------
+    # MD-07 Admin Notifications & Executive Insights
+    # ---------------------------------------------------------------------------
+
+    async def create_announcement(
+        self, req: CreateAnnouncementRequest
+    ) -> CreateAnnouncementResponse:
+        """MD-07 Broadcast admin announcement/notice."""
+        res = await self.repo.create_announcement(
+            title=req.title.strip(),
+            message_body=req.message.strip(),
+            message_type=req.type,
+            target_audience=req.target_audience,
+            department_code=req.department_code,
+            priority=req.priority,
+        )
+        return CreateAnnouncementResponse(
+            announcement_id=res["announcement_id"],
+            title=res["title"],
+            type=res["type"],
+            target_audience=res["target_audience"],
+            recipients_notified=res["recipients_notified"],
+            created_at=res["created_at"],
+        )
+
+    async def get_admin_announcements(self) -> AdminAnnouncementsResponse:
+        """MD-07 History of admin announcements sent."""
+        rows = await self.repo.get_admin_announcements()
+        items = [
+            AdminAnnouncementItem(
+                title=r["title"],
+                message=r["message"],
+                type=r["type"],
+                target_audience=r["target_audience"],
+                department_code=None,
+                priority=r.get("priority") or "Normal",
+                recipient_count=int(r.get("recipient_count") or 0),
+                created_at=r["created_at"],
+            )
+            for r in rows
+        ]
+        return AdminAnnouncementsResponse(
+            announcements=items,
+            total_count=len(items),
+            generated_at=datetime.now(timezone.utc),
+        )
+
+    async def get_executive_summary(self) -> ExecutiveSummaryResponse:
+        """MD-07 Executive Academic Summary & Grounded Insights."""
+        data = await self.repo.get_executive_summary()
+
+        strongest_dept = None
+        if data.get("strongest_department"):
+            sd = data["strongest_department"]
+            strongest_dept = ExecutiveDepartmentPerformance(
+                department_code=sd["department_code"],
+                department_name=sd["department_name"],
+                student_count=int(sd.get("student_count") or 0),
+                avg_cgpa=_to_float(sd.get("avg_cgpa")),
+                avg_percentage=_to_float(sd.get("avg_percentage")),
+            )
+
+        weakest_dept = None
+        if data.get("weakest_department"):
+            wd = data["weakest_department"]
+            weakest_dept = ExecutiveDepartmentPerformance(
+                department_code=wd["department_code"],
+                department_name=wd["department_name"],
+                student_count=int(wd.get("student_count") or 0),
+                avg_cgpa=_to_float(wd.get("avg_cgpa")),
+                avg_percentage=_to_float(wd.get("avg_percentage")),
+            )
+
+        weakest_subj = None
+        if data.get("weakest_subject"):
+            ws = data["weakest_subject"]
+            weakest_subj = ExecutiveSubjectPerformance(
+                subject_code=ws["subject_code"],
+                subject_name=ws["subject_name"],
+                avg_percentage=_to_float(ws.get("avg_percentage")),
+                student_count=int(ws.get("student_count") or 0),
+            )
+
+        return ExecutiveSummaryResponse(
+            strongest_department=strongest_dept,
+            weakest_department=weakest_dept,
+            weakest_subject=weakest_subj,
+            attendance_concern_department=data.get("attendance_concern_department"),
+            attendance_shortage_count=data.get("attendance_shortage_count", 0),
+            total_at_risk_students=data.get("total_at_risk_students", 0),
+            high_risk_count=data.get("high_risk_count", 0),
+            critical_risk_count=data.get("critical_risk_count", 0),
+            top_risk_department=data.get("top_risk_department"),
+            total_students=data.get("total_students", 0),
+            overall_avg_cgpa=_to_float(data.get("overall_avg_cgpa")),
+            overall_attendance_pct=_to_float(data.get("overall_attendance_pct")),
+            internship_completion_rate=_to_float(data.get("internship_completion_rate")),
+            insights=data.get("insights") or [],
             generated_at=datetime.now(timezone.utc),
         )

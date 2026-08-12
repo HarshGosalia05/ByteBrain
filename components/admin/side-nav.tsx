@@ -19,27 +19,6 @@ import {
 
 import { cn } from "@/lib/utils"
 
-function DisabledItem({
-  icon: Icon,
-  label,
-}: {
-  icon: LucideIcon
-  label: string
-}) {
-  return (
-    <div
-      aria-disabled="true"
-      title="Coming in a later Admin slice"
-      className="flex min-h-8 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground/60"
-    >
-      <Icon className="size-4 shrink-0 text-muted-foreground/50" />
-      {label}
-      <span className="ml-auto text-[10px] font-semibold tracking-wide text-muted-foreground/40 uppercase">
-        Soon
-      </span>
-    </div>
-  )
-}
 
 function GroupLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -146,9 +125,9 @@ export function SideNav() {
         <NavLink href="/admin/risk" icon={AlertTriangle} label="Risk & Early Warning" />
         <NavLink href="/admin/students" icon={Users} label="Students" />
         <NavLink href="/admin/faculty" icon={UserCog} label="Faculty" />
-        <DisabledItem icon={Rocket} label="Career Readiness" />
-        <DisabledItem icon={Smile} label="Lifestyle Insights" />
-        <DisabledItem icon={Bell} label="Notifications" />
+        <NavLink href="/admin/career" icon={Rocket} label="Career Readiness" />
+        <NavLink href="/admin/health" icon={Smile} label="Lifestyle Insights" />
+        <NavLink href="/admin/notifications" icon={Bell} label="Notifications & Insights" />
       </div>
     </nav>
   )

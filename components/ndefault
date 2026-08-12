@@ -1,0 +1,40 @@
+import { GraduationCap } from "lucide-react"
+
+import type { CareerData } from "@/lib/admin-api"
+
+import { ChartCard } from "@/components/shared/data/chart-card"
+import { CareerFilterBar } from "@/components/admin/career/career-filter-bar"
+import { CareerTable } from "@/components/admin/career/career-table"
+
+export function CareerView({
+  data,
+  fetchedAt,
+}: {
+  data: CareerData
+  fetchedAt: string
+}) {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Career</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Career path and placement intelligence from stored student data.
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+          <GraduationCap className="size-3.5" />
+          {data.students_total} total
+        </span>
+      </div>
+
+      <CareerFilterBar filters={data.filters} />
+
+      <CareerTable data={data} />
+
+      <p className="text-xs text-muted-foreground">
+        Data refreshed {fetchedAt ? new Date(fetchedAt).toLocaleString() : "just now"}
+      </p>
+    </div>
+  )
+}

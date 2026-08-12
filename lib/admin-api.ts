@@ -136,6 +136,8 @@ async function callFastapi<T>(
   ttlMs: number,
   options?: {
     query?: Record<string, string | number | null | undefined>
+    method?: string
+    body?: unknown
   },
 ): Promise<BffResult<T>> {
   const user = await getSessionUser()
@@ -178,9 +180,20 @@ async function callFastapi<T>(
 
   try {
     const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const method = options?.method ?? "GET"
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+    }
+    if (options?.body) {
+      headers["Content-Type"] = "application/json"
+    }
+
     const res = await fetch(`${FASTAPI_URL}/api/v1/admin/${pathWithQuery}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      method,
+      headers,
+      body: options?.body ? JSON.stringify(options.body) : undefined,
       cache: "no-store",
+      signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) {
       return { ok: false, error: toBffError(res.status) }
@@ -531,6 +544,26 @@ export type AdminStudentRow = {
   backlogs: number | null
   risk: string | null
   academic_standing: string | null
+  preferred_domain?: string | null
+  dream_job_role?: string | null
+  preferred_industry?: string | null
+  preferred_work_mode?: string | null
+  target_package_lpa?: number | null
+  higher_studies_interest?: string | null
+  entrepreneurship_interest?: string | null
+  certification_interest?: string | null
+  internship_completed?: string | null
+  placement_readiness_level?: string | null
+  average_sleep_hours?: number | null
+  daily_study_hours?: number | null
+  screen_time_hours?: number | null
+  physical_activity?: string | null
+  stress_level?: string | null
+  mental_wellbeing?: string | null
+  attendance_commitment?: string | null
+  part_time_job?: string | null
+  internet_access?: string | null
+  preferred_learning_mode?: string | null
 }
 
 export type AdminStudentsData = {
@@ -623,3 +656,93 @@ export type AdminFacultyData = {
 export function getAdminFaculty(): Promise<BffResult<AdminFacultyData>> {
   return callFastapi<AdminFacultyData>("faculty", BFF_TTL_MS)
 }
+
+// ---------------------------------------------------------------------------
+// MD-07 — Admin Notifications, Announcements & Executive Insights
+// ---------------------------------------------------------------------------
+
+export type CreateAnnouncementInput = {
+  title: string
+  message: string
+  type: "ANNOUNCEMENT" | "ACADEMIC_NOTICE" | "HOLIDAY" | "EVENT" | "SYSTEM_NOTICE"
+  target_audience: "students" | "faculty" | "both"
+  department_code?: number | null
+  priority?: "Normal" | "High" | "Urgent"
+}
+
+export type CreateAnnouncementResult = {
+  announcement_id: string
+  title: string
+  type: string
+  target_audience: string
+  recipients_notified: number
+  created_at: string
+}
+
+export type AdminAnnouncementItem = {
+  title: string
+  message: string
+  type: string
+  target_audience: string
+  department_code: number | null
+  priority: string
+  recipient_count: number
+  created_at: string
+}
+
+export type AdminAnnouncementsData = {
+  announcements: AdminAnnouncementItem[]
+  total_count: number
+  generated_at: string
+}
+
+export type ExecutiveDepartmentPerformance = {
+  department_code: number
+  department_name: string
+  student_count: number
+  avg_cgpa: number | null
+  avg_percentage: number | null
+}
+
+export type ExecutiveSubjectPerformance = {
+  subject_code: string
+  subject_name: string
+  avg_percentage: number | null
+  student_count: number
+}
+
+export type ExecutiveSummaryData = {
+  strongest_department: ExecutiveDepartmentPerformance | null
+  weakest_department: ExecutiveDepartmentPerformance | null
+  weakest_subject: ExecutiveSubjectPerformance | null
+  attendance_concern_department: string | null
+  attendance_shortage_count: number
+  total_at_risk_students: number
+  high_risk_count: number
+  critical_risk_count: number
+  top_risk_department: string | null
+  total_students: number
+  overall_avg_cgpa: number | null
+  overall_attendance_pct: number | null
+  internship_completion_rate: number | null
+  insights: string[]
+  generated_at: string
+}
+
+export function createAnnouncement(
+  input: CreateAnnouncementInput,
+): Promise<BffResult<CreateAnnouncementResult>> {
+  return callFastapi<CreateAnnouncementResult>("announcements", 0, {
+    method: "POST",
+    body: input,
+  })
+}
+
+export function getAdminAnnouncements(): Promise<BffResult<AdminAnnouncementsData>> {
+  return callFastapi<AdminAnnouncementsData>("announcements", BFF_TTL_MS)
+}
+
+export function getExecutiveSummary(): Promise<BffResult<ExecutiveSummaryData>> {
+  return callFastapi<ExecutiveSummaryData>("executive-summary", BFF_TTL_MS)
+}
+

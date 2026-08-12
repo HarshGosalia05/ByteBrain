@@ -1045,7 +1045,27 @@ class AdminRepository:
                 s.overall_attendance_percentage AS attendance,
                 s.total_backlogs AS backlogs,
                 s.academic_standing,
-                sr.risk
+                sr.risk,
+                cp.preferred_domain,
+                cp.dream_job_role,
+                cp.preferred_industry,
+                cp.preferred_work_mode,
+                cp.target_package_lpa,
+                cp.higher_studies_interest,
+                cp.entrepreneurship_interest,
+                cp.certification_interest,
+                cp.internship_completed,
+                cp.placement_readiness_level,
+                ls.average_sleep_hours,
+                ls.daily_study_hours,
+                ls.screen_time_hours,
+                ls.physical_activity,
+                ls.stress_level,
+                ls.mental_wellbeing,
+                ls.attendance_commitment,
+                ls.part_time_job,
+                ls.internet_access,
+                ls.preferred_learning_mode
             FROM students s
             LEFT JOIN departments d ON d.dept_code = s.department_code
             LEFT JOIN LATERAL (
@@ -1055,6 +1075,40 @@ class AdminRepository:
                 ORDER BY r.prediction_timestamp DESC NULLS LAST
                 LIMIT 1
             ) sr ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT
+                    cp.preferred_domain,
+                    cp.dream_job_role,
+                    cp.preferred_industry,
+                    cp.preferred_work_mode,
+                    cp.target_package_lpa,
+                    cp.higher_studies_interest,
+                    cp.entrepreneurship_interest,
+                    cp.certification_interest,
+                    cp.internship_completed,
+                    cp.placement_readiness_level
+                FROM career_preferences cp
+                WHERE cp.student_id = s.student_id
+                ORDER BY cp.survey_date DESC NULLS LAST
+                LIMIT 1
+            ) cp ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT
+                    ls.average_sleep_hours,
+                    ls.daily_study_hours,
+                    ls.screen_time_hours,
+                    ls.physical_activity,
+                    ls.stress_level,
+                    ls.mental_wellbeing,
+                    ls.attendance_commitment,
+                    ls.part_time_job,
+                    ls.internet_access,
+                    ls.preferred_learning_mode
+                FROM lifestyle_survey ls
+                WHERE ls.student_id = s.student_id
+                ORDER BY ls.survey_date DESC NULLS LAST
+                LIMIT 1
+            ) ls ON TRUE
             WHERE ($1::int IS NULL OR s.department_code = $1)
               AND ($2::int IS NULL OR s.current_semester = $2)
               AND ($3::text IS NULL OR s.current_academic_year = $3)
@@ -1191,3 +1245,277 @@ class AdminRepository:
             """,
             (weeks,),
         )
+
+    # --- MD-07 Admin Notifications & Executive Insights -----------------------
+
+    async def create_announcement(
+        self,
+        title: str,
+        message_body: str,
+        message_type: str,
+        target_audience: str,
+        department_code: Optional[int],
+        priority: str,
+    ) -> Dict[str, Any]:
+        """MD-07 Broadcast admin announcement/notice into student_messages.
+
+        Targets 'students', 'faculty', or 'both'. Optional department_code filter.
+        Reuses existing student_messages notification store without modifying schema.
+        """
+        message_type = (message_type or "ANNOUNCEMENT").upper()
+        if message_type not in {"ANNOUNCEMENT", "ACADEMIC_NOTICE", "HOLIDAY", "EVENT", "SYSTEM_NOTICE"}:
+            message_type = "ANNOUNCEMENT"
+
+        target_audience = (target_audience or "both").lower()
+        if target_audience not in {"students", "faculty", "both"}:
+            target_audience = "both"
+
+        priority = priority or "Normal"
+
+        inserted_count = 0
+        event_id = f"announcement:{int(datetime.now().timestamp())}:{abs(hash((title, target_audience)))}"
+
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                if target_audience in {"students", "both"}:
+                    student_rows = await conn.fetch(
+                        "SELECT student_id FROM students WHERE ($1::int IS NULL OR department_code = $1)",
+                        department_code,
+                    )
+                    for s in student_rows:
+                        await conn.execute(
+                            """
+                            INSERT INTO student_messages (
+                                student_id, faculty_recipient_id, recipient_type, faculty_id,
+                                subject, message_type, title, message_body, priority, status,
+                                event_id, created_at
+                            ) VALUES ($1, NULL, 'student', NULL, NULL, $2, $3, $4, $5, 'Unread', $6, NOW())
+                            """,
+                            s["student_id"],
+                            message_type,
+                            title,
+                            message_body,
+                            priority,
+                            event_id,
+                        )
+                        inserted_count += 1
+
+                if target_audience in {"faculty", "both"}:
+                    faculty_rows = await conn.fetch(
+                        "SELECT faculty_id FROM faculty WHERE ($1::int IS NULL OR department_code = $1)",
+                        department_code,
+                    )
+                    for f in faculty_rows:
+                        await conn.execute(
+                            """
+                            INSERT INTO student_messages (
+                                student_id, faculty_recipient_id, recipient_type, faculty_id,
+                                subject, message_type, title, message_body, priority, status,
+                                event_id, created_at
+                            ) VALUES (NULL, $1, 'faculty', NULL, NULL, $2, $3, $4, $5, 'Unread', $6, NOW())
+                            """,
+                            f["faculty_id"],
+                            message_type,
+                            title,
+                            message_body,
+                            priority,
+                            event_id,
+                        )
+                        inserted_count += 1
+
+        return {
+            "announcement_id": event_id,
+            "title": title,
+            "type": message_type,
+            "target_audience": target_audience,
+            "recipients_notified": inserted_count,
+            "created_at": datetime.now(),
+        }
+
+    async def get_admin_announcements(self) -> List[Dict[str, Any]]:
+        """MD-07 History of admin announcements sent."""
+        rows = await self._fetch(
+            """
+            SELECT
+                title,
+                message_body AS message,
+                message_type AS type,
+                CASE
+                    WHEN recipient_type = 'faculty' THEN 'faculty'
+                    WHEN student_id IS NOT NULL THEN 'students'
+                    ELSE 'both'
+                END AS target_audience,
+                priority,
+                COUNT(*) AS recipient_count,
+                MAX(created_at) AS created_at
+            FROM student_messages
+            WHERE message_type IN ('ANNOUNCEMENT', 'ACADEMIC_NOTICE', 'HOLIDAY', 'EVENT', 'SYSTEM_NOTICE')
+            GROUP BY title, message_body, message_type, recipient_type, priority, event_id
+            ORDER BY MAX(created_at) DESC
+            LIMIT 50
+            """
+        )
+        return rows
+
+    async def get_executive_summary(self) -> Dict[str, Any]:
+        """MD-07 Executive Academic Summary & Grounded Insights.
+
+        Aggregates structured verified analytics from MD-01 through MD-06.
+        Generates 100% grounded natural language summary points.
+        """
+        # 1. Department academic performance
+        dept_rows = await self._fetch(
+            """
+            SELECT
+                s.department_code,
+                COALESCE(d.department_name, s.department_name) AS department_name,
+                COUNT(DISTINCT s.student_id) AS student_count,
+                ROUND(AVG(s.overall_cgpa)::numeric, 2) AS avg_cgpa,
+                ROUND(AVG(s.overall_percentage)::numeric, 2) AS avg_percentage
+            FROM students s
+            LEFT JOIN departments d ON d.dept_code = s.department_code
+            GROUP BY s.department_code, d.department_name, s.department_name
+            ORDER BY AVG(s.overall_cgpa) DESC NULLS LAST
+            """
+        )
+
+        strongest_dept = dept_rows[0] if dept_rows else None
+        weakest_dept = dept_rows[-1] if dept_rows else None
+
+        # 2. Subject performance
+        subject_rows = await self._fetch(
+            """
+            SELECT
+                sub.subject_code,
+                sub.subject_name,
+                COUNT(DISTINCT sem.student_id) AS student_count,
+                ROUND(AVG(sem.overall_percentage)::numeric, 2) AS avg_percentage
+            FROM student_semester_subject_summary sem
+            JOIN subjects sub ON sub.subject_code = sem.subject_code
+            WHERE sem.overall_percentage IS NOT NULL
+            GROUP BY sub.subject_code, sub.subject_name
+            ORDER BY AVG(sem.overall_percentage) ASC NULLS LAST
+            LIMIT 1
+            """
+        )
+        weakest_subject = subject_rows[0] if subject_rows else None
+
+        # 3. Attendance concern
+        att_rows = await self._fetch(
+            """
+            SELECT
+                COALESCE(d.department_name, s.department_name) AS department_name,
+                ROUND(AVG(s.overall_attendance_percentage)::numeric, 2) AS avg_att,
+                COUNT(*) FILTER (WHERE s.overall_attendance_percentage < 75) AS shortage_count
+            FROM students s
+            LEFT JOIN departments d ON d.dept_code = s.department_code
+            GROUP BY s.department_code, d.department_name, s.department_name
+            ORDER BY AVG(s.overall_attendance_percentage) ASC NULLS LAST
+            LIMIT 1
+            """
+        )
+        att_concern = att_rows[0] if att_rows else None
+
+        # 4. Stored risk predictions summary
+        risk_rows = await self._fetch(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE UPPER(r.prediction_status) IN ('HIGH', 'CRITICAL')) AS total_risk,
+                COUNT(*) FILTER (WHERE UPPER(r.prediction_status) = 'HIGH') AS high_risk,
+                COUNT(*) FILTER (WHERE UPPER(r.prediction_status) = 'CRITICAL') AS critical_risk
+            FROM (
+                SELECT DISTINCT ON (student_id) student_id, prediction_status
+                FROM risk_predictions
+                ORDER BY student_id, prediction_timestamp DESC NULLS LAST
+            ) r
+            """
+        )
+        risk_stats = risk_rows[0] if risk_rows else {"total_risk": 0, "high_risk": 0, "critical_risk": 0}
+
+        top_risk_dept_row = await self._fetchrow(
+            """
+            SELECT COALESCE(d.department_name, s.department_name) AS department_name
+            FROM students s
+            LEFT JOIN departments d ON d.dept_code = s.department_code
+            JOIN (
+                SELECT DISTINCT ON (student_id) student_id, prediction_status
+                FROM risk_predictions
+                ORDER BY student_id, prediction_timestamp DESC NULLS LAST
+            ) r ON r.student_id = s.student_id
+            WHERE UPPER(r.prediction_status) IN ('HIGH', 'CRITICAL')
+            GROUP BY s.department_code, d.department_name, s.department_name
+            ORDER BY COUNT(*) DESC
+            LIMIT 1
+            """
+        )
+
+        # 5. Overall institution health
+        inst_row = await self._fetchrow(
+            """
+            SELECT
+                COUNT(DISTINCT student_id) AS total_students,
+                ROUND(AVG(overall_cgpa)::numeric, 2) AS overall_avg_cgpa,
+                ROUND(AVG(overall_attendance_percentage)::numeric, 2) AS overall_attendance_pct
+            FROM students
+            """
+        )
+
+        # 6. Career internship rate
+        career_row = await self._fetchrow(
+            """
+            SELECT
+                COUNT(*) AS total_career_records,
+                COUNT(*) FILTER (WHERE internship_completed = 'Yes') AS internships_done
+            FROM career_preferences
+            """
+        )
+        internship_rate = None
+        if career_row and career_row.get("total_career_records"):
+            internship_rate = round(
+                (float(career_row["internships_done"]) / float(career_row["total_career_records"])) * 100, 1
+            )
+
+        # Construct grounded insights bullets
+        insights: List[str] = []
+        if strongest_dept:
+            insights.append(
+                f"Strongest Department: {strongest_dept['department_name']} leads academic performance with an average CGPA of {strongest_dept['avg_cgpa']}."
+            )
+        if weakest_subject:
+            insights.append(
+                f"Academic Focus Area: {weakest_subject['subject_name']} ({weakest_subject['subject_code']}) shows the lowest average score across enrollments ({weakest_subject['avg_percentage']}%)."
+            )
+        if att_concern:
+            insights.append(
+                f"Attendance Concern: {att_concern['department_name']} has the lowest attendance average at {att_concern['avg_att']}%, with {att_concern['shortage_count']} students below 75% threshold."
+            )
+        if risk_stats and risk_stats.get("total_risk", 0) > 0:
+            top_dept_str = f" (concentrated in {top_risk_dept_row['department_name']})" if top_risk_dept_row else ""
+            insights.append(
+                f"Risk Early Warning: {risk_stats['total_risk']} students are currently flagged At-Risk ({risk_stats['high_risk']} High Risk, {risk_stats['critical_risk']} Critical Risk){top_dept_str}."
+            )
+        if internship_rate is not None:
+            insights.append(
+                f"Career Readiness: {internship_rate}% of surveyed students have completed at least one internship."
+            )
+
+        insights.append(
+            "Recommended Administrative Action: Prioritize academic counseling for high-risk students and review attendance enforcement in vulnerable departments."
+        )
+
+        return {
+            "strongest_department": strongest_dept,
+            "weakest_department": weakest_dept,
+            "weakest_subject": weakest_subject,
+            "attendance_concern_department": att_concern["department_name"] if att_concern else None,
+            "attendance_shortage_count": int(att_concern["shortage_count"] if att_concern else 0),
+            "total_at_risk_students": int(risk_stats.get("total_risk") or 0),
+            "high_risk_count": int(risk_stats.get("high_risk") or 0),
+            "critical_risk_count": int(risk_stats.get("critical_risk") or 0),
+            "top_risk_department": top_risk_dept_row["department_name"] if top_risk_dept_row else None,
+            "total_students": int(inst_row.get("total_students") or 0) if inst_row else 0,
+            "overall_avg_cgpa": float(inst_row.get("overall_avg_cgpa") or 0) if inst_row and inst_row.get("overall_avg_cgpa") else None,
+            "overall_attendance_pct": float(inst_row.get("overall_attendance_pct") or 0) if inst_row and inst_row.get("overall_attendance_pct") else None,
+            "internship_completion_rate": internship_rate,
+            "insights": insights,
+        }

@@ -40,6 +40,26 @@ class AdminStudentRow(BaseModel):
     backlogs: Optional[int] = None
     risk: Optional[str] = None
     academic_standing: Optional[str] = None
+    preferred_domain: Optional[str] = None
+    dream_job_role: Optional[str] = None
+    preferred_industry: Optional[str] = None
+    preferred_work_mode: Optional[str] = None
+    target_package_lpa: Optional[float] = None
+    higher_studies_interest: Optional[str] = None
+    entrepreneurship_interest: Optional[str] = None
+    certification_interest: Optional[str] = None
+    internship_completed: Optional[str] = None
+    placement_readiness_level: Optional[str] = None
+    average_sleep_hours: Optional[float] = None
+    daily_study_hours: Optional[float] = None
+    screen_time_hours: Optional[float] = None
+    physical_activity: Optional[str] = None
+    stress_level: Optional[str] = None
+    mental_wellbeing: Optional[str] = None
+    attendance_commitment: Optional[str] = None
+    part_time_job: Optional[str] = None
+    internet_access: Optional[str] = None
+    preferred_learning_mode: Optional[str] = None
 
 
 class AdminStudentsResponse(BaseModel):

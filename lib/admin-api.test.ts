@@ -231,3 +231,73 @@ test("error mapping for admin endpoints (401/403/422/503/500)", async () => {
     assert.equal(result.error.status, status)
   }
 })
+
+// ---------------------------------------------------------------------------
+// MD-07 Announcements & Executive Summary
+// ---------------------------------------------------------------------------
+
+test("createAnnouncement POSTs notification body and returns result", async () => {
+  const body = {
+    announcement_id: "announcement:123:456",
+    title: "Exam Notice",
+    type: "ACADEMIC_NOTICE",
+    target_audience: "both",
+    recipients_notified: 90,
+    created_at: "2026-08-12T00:00:00Z",
+  }
+  route("announcements", 201, body)
+
+  const result = await adminApi.createAnnouncement({
+    title: "Exam Notice",
+    message: "Exams start on Monday.",
+    type: "ACADEMIC_NOTICE",
+    target_audience: "both",
+    priority: "High",
+  })
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.announcement_id, "announcement:123:456")
+  assert.equal(result.data.recipients_notified, 90)
+
+  const hit = getCalls("announcements")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].init?.method, "POST")
+})
+
+test("getExecutiveSummary fetches grounded insights contract", async () => {
+  const body = {
+    strongest_department: {
+      department_code: 1,
+      department_name: "CSE",
+      student_count: 40,
+      avg_cgpa: 8.2,
+      avg_percentage: 82.0,
+    },
+    weakest_department: null,
+    weakest_subject: null,
+    attendance_concern_department: "BBA",
+    attendance_shortage_count: 10,
+    total_at_risk_students: 15,
+    high_risk_count: 10,
+    critical_risk_count: 5,
+    top_risk_department: "CSE",
+    total_students: 80,
+    overall_avg_cgpa: 7.6,
+    overall_attendance_pct: 78.0,
+    internship_completion_rate: 62.5,
+    insights: [
+      "Strongest Department: CSE leads performance.",
+      "Risk Early Warning: 15 students flagged At-Risk.",
+    ],
+    generated_at: "2026-08-12T00:00:00Z",
+  }
+  route("executive-summary", 200, body)
+
+  const result = await adminApi.getExecutiveSummary()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.total_students, 80)
+  assert.equal(result.data.insights.length, 2)
+  assert.equal(getCalls("executive-summary")[0].url, `${baseUrl}/executive-summary`)
+})
+

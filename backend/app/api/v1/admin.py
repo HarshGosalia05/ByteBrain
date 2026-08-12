@@ -12,6 +12,12 @@ from app.schemas.admin_attendance_risk import (
     AttendanceIntelligenceResponse,
     RiskIntelligenceResponse,
 )
+from app.schemas.admin_notifications import (
+    CreateAnnouncementRequest,
+    CreateAnnouncementResponse,
+    AdminAnnouncementsResponse,
+    ExecutiveSummaryResponse,
+)
 from app.schemas.admin_students_faculty import (
     AdminFacultyResponse,
     AdminStudentsResponse,
@@ -222,3 +228,31 @@ async def get_admin_faculty(
     counts and weekly workload (existing faculty derivation, no new rules).
     """
     return await service.get_admin_faculty()
+
+
+@router.post("/announcements", response_model=CreateAnnouncementResponse, status_code=status.HTTP_201_CREATED)
+async def create_announcement(
+    req: CreateAnnouncementRequest,
+    user: dict = Depends(require_admin_role),
+    service: AdminService = Depends(get_admin_service),
+):
+    """MD-07 Broadcast admin announcement / notice to students, faculty, or both."""
+    return await service.create_announcement(req)
+
+
+@router.get("/announcements", response_model=AdminAnnouncementsResponse)
+async def get_admin_announcements(
+    user: dict = Depends(require_admin_role),
+    service: AdminService = Depends(get_admin_service),
+):
+    """MD-07 History of admin announcements sent."""
+    return await service.get_admin_announcements()
+
+
+@router.get("/executive-summary", response_model=ExecutiveSummaryResponse)
+async def get_executive_summary(
+    user: dict = Depends(require_admin_role),
+    service: AdminService = Depends(get_admin_service),
+):
+    """MD-07 Grounded Executive Academic Summary & Insights."""
+    return await service.get_executive_summary()

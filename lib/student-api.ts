@@ -364,6 +364,7 @@ async function callFastapi<T>(
     const res = await fetch(`${FASTAPI_URL}/api/v1/students/me/${pathWithQuery}`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
+      signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) {
       return { ok: false, error: toBffError(res.status) }
