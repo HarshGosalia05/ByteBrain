@@ -142,8 +142,8 @@ export function SideNav() {
       </div>
 
       <div className="flex flex-col gap-1">
-        <DisabledItem icon={CalendarCheck} label="Attendance" />
-        <DisabledItem icon={AlertTriangle} label="Risk & Early Warning" />
+        <NavLink href="/admin/attendance" icon={CalendarCheck} label="Attendance" />
+        <NavLink href="/admin/risk" icon={AlertTriangle} label="Risk & Early Warning" />
         <DisabledItem icon={Users} label="Students" />
         <DisabledItem icon={UserCog} label="Faculty" />
         <DisabledItem icon={Rocket} label="Career Readiness" />

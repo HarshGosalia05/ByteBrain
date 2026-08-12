@@ -149,7 +149,7 @@ def _default_responses(overrides=None):
             {"risk_level": "CRITICAL", "count": 12},
         ],
         # Risk by Department Scoped
-        ("fetch", "GROUP BY s.department_code, d.department_name, r.prediction_status"): [
+        ("fetch", "GROUP BY s.department_code, d.department_name, s.department_name, r.prediction_status"): [
             {"department_code": 1, "department_name": "CSE", "risk_level": "CRITICAL", "count": 6},
             {"department_code": 1, "department_name": "CSE", "risk_level": "HIGH", "count": 1},
             {"department_code": 2, "department_name": "BBA", "risk_level": "CRITICAL", "count": 6},

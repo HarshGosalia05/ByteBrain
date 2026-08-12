@@ -676,13 +676,14 @@ class AdminRepository:
                 COUNT(*) FILTER (WHERE a.eligibility_status = 'Not Eligible') AS not_eligible_count
             FROM student_subject_enrollment e
             LEFT JOIN attendance a ON a.enrollment_record_id = e.enrollment_record_id
+            LEFT JOIN departments d ON d.dept_code = e.department_code
             WHERE ($1::int IS NULL OR e.department_code = $1)
               AND ($2::text IS NULL OR e.academic_year = $2)
               AND ($3::int IS NULL OR e.semester_no = $3)
               AND ($6::text IS NULL OR e.subject_code ILIKE '%' || $6 || '%'
                    OR e.subject_name ILIKE '%' || $6 || '%')
             GROUP BY e.subject_code, e.subject_name, e.department_code,
-                     e.department_name, e.semester_no
+                     d.department_name, e.department_name, e.semester_no
             ORDER BY e.semester_no ASC, e.subject_code ASC
             LIMIT $7::int OFFSET $8::int
             """,
@@ -697,8 +698,8 @@ class AdminRepository:
                 WHERE ($1::int IS NULL OR e.department_code = $1)
                   AND ($2::text IS NULL OR e.academic_year = $2)
                   AND ($3::int IS NULL OR e.semester_no = $3)
-                  AND ($6::text IS NULL OR e.subject_code ILIKE '%' || $6 || '%'
-                       OR e.subject_name ILIKE '%' || $6 || '%')
+                  AND ($4::text IS NULL OR e.subject_code ILIKE '%' || $4 || '%'
+                       OR e.subject_name ILIKE '%' || $4 || '%')
                 GROUP BY e.enrollment_record_id
             ) sub
             """,
@@ -808,7 +809,7 @@ class AdminRepository:
             LEFT JOIN departments d ON d.dept_code = s.department_code
             WHERE ($1::int IS NULL OR s.current_semester = $1)
               AND ($2::text IS NULL OR s.current_academic_year = $2)
-            GROUP BY s.department_code, d.department_name, r.prediction_status
+            GROUP BY s.department_code, d.department_name, s.department_name, r.prediction_status
             ORDER BY s.department_code ASC
             """,
             (semester, academic_year,),
@@ -855,6 +856,10 @@ class AdminRepository:
         else:
             risk_cond = ""
 
+        search_idx = len(risk_args) + 4
+        limit_idx = search_idx + 1
+        offset_idx = search_idx + 2
+
         args = (department_code, academic_year, semester) + tuple(risk_args) + (search, limit, offset)
 
         qry = f"""
@@ -878,17 +883,18 @@ class AdminRepository:
               AND ($2::text IS NULL OR st.current_academic_year = $2)
               AND ($3::int IS NULL OR st.current_semester = $3)
               {risk_cond}
-              AND ($5::text IS NULL OR st.full_name ILIKE '%' || $5 || '%'
-                   OR CAST(st.enrollment_no AS text) ILIKE '%' || $5 || '%')
+              AND (${search_idx}::text IS NULL OR st.full_name ILIKE '%' || ${search_idx} || '%'
+                   OR CAST(st.enrollment_no AS text) ILIKE '%' || ${search_idx} || '%')
             ORDER BY
                 CASE UPPER(r.prediction_status)
                     WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MODERATE' THEN 2 ELSE 3
                 END,
                 st.full_name ASC
-            LIMIT ${len(risk_args) + 6}::int OFFSET ${len(risk_args) + 7}::int
+            LIMIT ${limit_idx}::int OFFSET ${offset_idx}::int
         """
 
         items = await self._fetch(qry, args)
+        total_args = (department_code, academic_year, semester) + tuple(risk_args) + (search,)
         total = await self._fetchrow(
             f"""
             SELECT COUNT(*) AS total
@@ -898,10 +904,10 @@ class AdminRepository:
               AND ($2::text IS NULL OR st.current_academic_year = $2)
               AND ($3::int IS NULL OR st.current_semester = $3)
               {risk_cond}
-              AND ($5::text IS NULL OR st.full_name ILIKE '%' || $5 || '%'
-                   OR CAST(st.enrollment_no AS text) ILIKE '%' || $5 || '%')
+              AND (${search_idx}::text IS NULL OR st.full_name ILIKE '%' || ${search_idx} || '%'
+                   OR CAST(st.enrollment_no AS text) ILIKE '%' || ${search_idx} || '%')
             """,
-            args,
+            total_args,
         )
         return {"items": items, "total": total}
 
@@ -916,7 +922,7 @@ class AdminRepository:
         risk_cond = ""
         args: List[object] = [department_code, academic_year]
         if risk_upper:
-            risk_cond = " AND UPPER(r.prediction_status) = $4::text"
+            risk_cond = " AND UPPER(r.prediction_status) = $3::text"
             args.append(risk_upper.upper())
 
         qry = f"""

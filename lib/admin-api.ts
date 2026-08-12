@@ -354,3 +354,161 @@ export function getSubjectIntelligence(
     },
   })
 }
+
+// --- MD-04 Attendance & Risk Intelligence ------------------------------------
+
+export type AttendanceKpis = {
+  avg_attendance: number | null
+  students_below_target: number
+  critical_shortage_students: number
+  eligible_students: number
+  not_eligible_students: number
+}
+
+export type AttendanceByDepartmentItem = {
+  department_code: number
+  department_name: string
+  avg_attendance: number | null
+}
+
+export type AttendanceBySemesterItem = {
+  semester: number
+  avg_attendance: number | null
+}
+
+export type SubjectAttendanceRow = {
+  subject_code: string
+  subject_name: string
+  department_code: number
+  department_name: string
+  semester: number
+  student_count: number
+  avg_attendance: number | null
+  below_target_count: number
+  critical_shortage_count: number
+  eligible_count: number
+  not_eligible_count: number
+}
+
+export type ShortageStudentRow = {
+  student_id: string
+  student_name: string
+  enrollment_no: number
+  department_code: number
+  department_name: string
+  semester: number
+  subject_code: string
+  subject_name: string
+  attendance_percentage: number | null
+  required_target: number
+  shortage: number | null
+  eligibility_status: string | null
+}
+
+export type AttendanceIntelligenceData = {
+  kpis: AttendanceKpis
+  required_target: number
+  filters: DashboardFilterOptions
+  by_department: AttendanceByDepartmentItem[]
+  by_semester: AttendanceBySemesterItem[]
+  distribution: AttendanceDistributionItem[]
+  subjects: SubjectAttendanceRow[]
+  subjects_total: number
+  shortage_total: number
+  shortage_students: ShortageStudentRow[]
+  limit: number
+  offset: number
+  generated_at: string
+}
+
+export type RiskKpis = {
+  total_predicted: number
+  low: number
+  moderate: number
+  high: number
+  critical: number
+  at_risk: number
+}
+
+export type RiskByDepartmentItem = {
+  department_code: number
+  department_name: string
+  distribution: RiskDistributionItem[]
+}
+
+export type RiskBySemesterItem = {
+  semester: number
+  distribution: RiskDistributionItem[]
+}
+
+export type RiskStudentRow = {
+  student_id: string
+  student_name: string
+  enrollment_no: number
+  department_code: number
+  department_name: string
+  semester: number | null
+  academic_year: string | null
+  attendance: number | null
+  percentage: number | null
+  backlogs: number | null
+  academic_standing: string | null
+  risk: string
+}
+
+export type EarlyWarningRow = {
+  student_id: string
+  student_name: string
+  enrollment_no: number
+  department_code: number
+  department_name: string
+  semester: number | null
+  severity: string
+  primary_concern: string | null
+  supporting_signals: string[]
+  recommended_action: string | null
+}
+
+export type RiskIntelligenceData = {
+  kpis: RiskKpis
+  filters: DashboardFilterOptions
+  distribution: RiskDistributionItem[]
+  by_department: RiskByDepartmentItem[]
+  by_semester: RiskBySemesterItem[]
+  students: RiskStudentRow[]
+  students_total: number
+  early_warning: EarlyWarningRow[]
+  limit: number
+  offset: number
+  generated_at: string
+}
+
+export function getAttendanceIntelligence(
+  filters: AdminDashboardFilters = {},
+  search?: string | null,
+): Promise<BffResult<AttendanceIntelligenceData>> {
+  return callFastapi<AttendanceIntelligenceData>("attendance", BFF_TTL_MS, {
+    query: {
+      department_code: filters.department_code,
+      academic_year: filters.academic_year,
+      semester: filters.semester,
+      search: search || undefined,
+    },
+  })
+}
+
+export function getRiskIntelligence(
+  filters: AdminDashboardFilters = {},
+  risk?: string | null,
+  search?: string | null,
+): Promise<BffResult<RiskIntelligenceData>> {
+  return callFastapi<RiskIntelligenceData>("risk", BFF_TTL_MS, {
+    query: {
+      department_code: filters.department_code,
+      academic_year: filters.academic_year,
+      semester: filters.semester,
+      risk: risk || undefined,
+      search: search || undefined,
+    },
+  })
+}
