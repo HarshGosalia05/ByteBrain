@@ -973,3 +973,221 @@ class AdminRepository:
             """,
             (student_ids,),
         )
+
+    # --- MD-05 Admin Student & Faculty Overview ------------------------------
+
+    # Whitelist for the students table ORDER BY. Only these column expressions
+    # may be injected; anything else falls back to name. Risk uses a severity
+    # rank (Critical=4 .. Low=1, no prediction=0) so "risk" sorts Low -> Critical
+    # ascending and Critical -> Low descending, never alphabetically.
+    STUDENT_SORT_COLUMNS: Dict[str, str] = {
+        "name": "s.full_name",
+        "sgpa": "s.latest_sgpa",
+        "percentage": "s.overall_percentage",
+        "attendance": "s.overall_attendance_percentage",
+        "backlogs": "s.total_backlogs",
+    }
+    STUDENT_RISK_SEVERITY_SQL = (
+        "CASE UPPER(sr.risk)"
+        " WHEN 'CRITICAL' THEN 4 WHEN 'HIGH' THEN 3 WHEN 'MODERATE' THEN 2"
+        " WHEN 'LOW' THEN 1 ELSE 0 END"
+    )
+
+    async def get_admin_students(
+        self,
+        department_code: Optional[int],
+        semester: Optional[int],
+        academic_year: Optional[str],
+        risk_upper: Optional[str],
+        search: Optional[str],
+        sort_by: str,
+        sort_dir: str,
+        limit: int,
+        offset: int,
+    ) -> Dict[str, Any]:
+        """MD-05 read-only institution students listing.
+
+        Filters: department / semester / academic year / stored risk band.
+        Search: full name, enrollment number, email (ILIKE). Sorting uses a
+        strict column whitelist; risk sorts by canonical MD-04 severity.
+        Pagination via limit/offset.
+        """
+        direction = "DESC" if sort_dir == "desc" else "ASC"
+        if sort_by == "risk":
+            order_expr = f"{self.STUDENT_RISK_SEVERITY_SQL} {direction}"
+        else:
+            column = self.STUDENT_SORT_COLUMNS.get(sort_by, self.STUDENT_SORT_COLUMNS["name"])
+            order_expr = f"{column} {direction} NULLS LAST"
+
+        args = (
+            department_code,
+            semester,
+            academic_year,
+            risk_upper.upper() if risk_upper else None,
+            search,
+            limit,
+            offset,
+        )
+
+        items_query = f"""
+            SELECT
+                s.student_id,
+                s.full_name AS student_name,
+                s.enrollment_no,
+                s.email,
+                s.department_code,
+                COALESCE(d.department_name, s.department_name) AS department_name,
+                s.current_semester AS semester,
+                s.current_academic_year AS academic_year,
+                s.latest_sgpa AS sgpa,
+                s.overall_cgpa AS cgpa,
+                s.overall_percentage AS percentage,
+                s.overall_attendance_percentage AS attendance,
+                s.total_backlogs AS backlogs,
+                s.academic_standing,
+                sr.risk
+            FROM students s
+            LEFT JOIN departments d ON d.dept_code = s.department_code
+            LEFT JOIN LATERAL (
+                SELECT r.prediction_status AS risk
+                FROM risk_predictions r
+                WHERE r.student_id = s.student_id
+                ORDER BY r.prediction_timestamp DESC NULLS LAST
+                LIMIT 1
+            ) sr ON TRUE
+            WHERE ($1::int IS NULL OR s.department_code = $1)
+              AND ($2::int IS NULL OR s.current_semester = $2)
+              AND ($3::text IS NULL OR s.current_academic_year = $3)
+              AND ($4::text IS NULL OR UPPER(sr.risk) = $4)
+              AND ($5::text IS NULL OR s.full_name ILIKE '%' || $5 || '%'
+                   OR CAST(s.enrollment_no AS text) ILIKE '%' || $5 || '%'
+                   OR s.email ILIKE '%' || $5 || '%')
+            ORDER BY {order_expr}, s.student_id ASC
+            LIMIT $6::int OFFSET $7::int
+        """
+
+        total_query = """
+            SELECT COUNT(*) AS total
+            FROM students s
+            LEFT JOIN LATERAL (
+                SELECT r.prediction_status AS risk
+                FROM risk_predictions r
+                WHERE r.student_id = s.student_id
+                ORDER BY r.prediction_timestamp DESC NULLS LAST
+                LIMIT 1
+            ) sr ON TRUE
+            WHERE ($1::int IS NULL OR s.department_code = $1)
+              AND ($2::int IS NULL OR s.current_semester = $2)
+              AND ($3::text IS NULL OR s.current_academic_year = $3)
+              AND ($4::text IS NULL OR UPPER(sr.risk) = $4)
+              AND ($5::text IS NULL OR s.full_name ILIKE '%' || $5 || '%'
+                   OR CAST(s.enrollment_no AS text) ILIKE '%' || $5 || '%'
+                   OR s.email ILIKE '%' || $5 || '%')
+        """
+        total_args = (
+            department_code,
+            semester,
+            academic_year,
+            risk_upper.upper() if risk_upper else None,
+            search,
+        )
+
+        items = await self._fetch(items_query, args)
+        total = await self._fetchrow(total_query, total_args)
+        return {"items": items, "total": total}
+
+    async def get_faculty_kpis(self) -> Dict[str, Any]:
+        """MD-05 faculty KPIs: total / active (status) / department count."""
+        row = await self._fetchrow(
+            """
+            SELECT
+                COUNT(*) AS total_faculty,
+                COUNT(*) FILTER (WHERE f.status = 'Active') AS active_faculty,
+                (SELECT COUNT(*) FROM departments) AS department_count
+            FROM faculty f
+            """,
+            (),
+        )
+        return row or {
+            "total_faculty": 0,
+            "active_faculty": 0,
+            "department_count": 0,
+        }
+
+    async def get_faculty_by_department(self) -> List[Dict[str, Any]]:
+        """MD-05 faculty headcount grouped by department (chart)."""
+        return await self._fetch(
+            """
+            SELECT
+                f.department_code,
+                COALESCE(d.department_name, f.department_name) AS department_name,
+                COUNT(*) AS count
+            FROM faculty f
+            LEFT JOIN departments d ON d.dept_code = f.department_code
+            GROUP BY f.department_code, d.department_name, f.department_name
+            ORDER BY f.department_code ASC
+            """
+        )
+
+    async def get_faculty_by_designation(self) -> List[Dict[str, Any]]:
+        """MD-05 faculty headcount grouped by designation (chart)."""
+        return await self._fetch(
+            """
+            SELECT
+                COALESCE(NULLIF(f.designation, ''), 'Unassigned') AS designation,
+                COUNT(*) AS count
+            FROM faculty f
+            GROUP BY f.designation
+            ORDER BY count DESC, designation ASC
+            """
+        )
+
+    async def get_faculty_overview_rows(self, weeks: float) -> List[Dict[str, Any]]:
+        """MD-05 faculty table with teaching allocation aggregates.
+
+        subject_count / student_count come from active subject allocations
+        (student_subject_enrollment); weekly workload reuses the existing
+        faculty workload calculation MAX(total_classes) / weeks per offering,
+        summed across the faculty member's active offerings.
+        """
+        return await self._fetch(
+            """
+            WITH offering AS (
+                SELECT
+                    sse.faculty_id,
+                    sse.subject_id,
+                    sse.semester_no,
+                    sse.academic_year,
+                    MAX(a.total_classes) AS classes
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                WHERE sse.enrollment_status = 'Active'
+                GROUP BY sse.faculty_id, sse.subject_id, sse.semester_no, sse.academic_year
+            )
+            SELECT
+                f.faculty_id,
+                f.faculty_code,
+                f.full_name,
+                f.department_code,
+                COALESCE(d.department_name, f.department_name) AS department_name,
+                f.designation,
+                COUNT(o.subject_id) AS subject_count,
+                (SELECT COUNT(DISTINCT sse.student_id)
+                 FROM student_subject_enrollment sse
+                 WHERE sse.faculty_id = f.faculty_id
+                   AND sse.enrollment_status = 'Active') AS student_count,
+                ROUND(
+                    CASE WHEN COUNT(o.subject_id) > 0
+                         THEN COALESCE(SUM(o.classes), 0)::numeric * 1.0 / $1::numeric
+                         ELSE NULL END,
+                    2
+                ) AS workload_hours
+            FROM faculty f
+            LEFT JOIN departments d ON d.dept_code = f.department_code
+            LEFT JOIN offering o ON o.faculty_id = f.faculty_id
+            GROUP BY f.faculty_id, f.faculty_code, f.full_name, f.department_code,
+                     d.department_name, f.department_name, f.designation
+            ORDER BY COALESCE(d.department_name, f.department_name) ASC, f.full_name ASC
+            """,
+            (weeks,),
+        )

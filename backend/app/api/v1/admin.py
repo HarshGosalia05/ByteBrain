@@ -12,6 +12,10 @@ from app.schemas.admin_attendance_risk import (
     AttendanceIntelligenceResponse,
     RiskIntelligenceResponse,
 )
+from app.schemas.admin_students_faculty import (
+    AdminFacultyResponse,
+    AdminStudentsResponse,
+)
 from app.services.admin_service import AdminService
 
 router = APIRouter()
@@ -164,3 +168,57 @@ async def get_risk_intelligence(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/students", response_model=AdminStudentsResponse)
+async def get_admin_students(
+    user: dict = Depends(require_admin_role),
+    service: AdminService = Depends(get_admin_service),
+    department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
+    academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
+    semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
+    risk: Optional[str] = Query(
+        None, description="Filter students by risk band (Low, Moderate, High, Critical)"
+    ),
+    search: Optional[str] = Query(
+        None, max_length=100, description="Search students by name, enrollment or email"
+    ),
+    sort_by: str = Query(
+        "name", description="Sort field: name, sgpa, percentage, attendance, backlogs, risk"
+    ),
+    sort_dir: str = Query("asc", description="Sort direction: asc or desc"),
+    limit: int = Query(100, ge=1, le=500, description="Page size"),
+    offset: int = Query(0, ge=0, description="Page offset"),
+):
+    """MD-05 Part A — read-only Admin Student Overview.
+
+    Institution-wide student table with department / semester / academic-year
+    / risk band filters, search (name, enrollment, email), whitelisted
+    sorting (risk sorts by canonical MD-04 severity) and pagination. All
+    figures come from real database columns; NULL academic values stay NULL.
+    """
+    return await service.get_admin_students(
+        department_code=department_code,
+        academic_year=academic_year,
+        semester=semester,
+        risk=risk,
+        search=search,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/faculty", response_model=AdminFacultyResponse)
+async def get_admin_faculty(
+    user: dict = Depends(require_admin_role),
+    service: AdminService = Depends(get_admin_service),
+):
+    """MD-05 Part B — read-only Admin Faculty Overview.
+
+    Faculty KPIs (total / active / department count), department and
+    designation breakdowns, and the faculty table with subject / student
+    counts and weekly workload (existing faculty derivation, no new rules).
+    """
+    return await service.get_admin_faculty()

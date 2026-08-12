@@ -512,3 +512,114 @@ export function getRiskIntelligence(
     },
   })
 }
+
+// --- MD-05 Admin Student & Faculty Overview ----------------------------------
+
+export type AdminStudentRow = {
+  student_id: string
+  student_name: string
+  enrollment_no: number
+  email: string | null
+  department_code: number
+  department_name: string
+  semester: number | null
+  academic_year: string | null
+  sgpa: number | null
+  cgpa: number | null
+  percentage: number | null
+  attendance: number | null
+  backlogs: number | null
+  risk: string | null
+  academic_standing: string | null
+}
+
+export type AdminStudentsData = {
+  filters: DashboardFilterOptions
+  students: AdminStudentRow[]
+  students_total: number
+  limit: number
+  offset: number
+  sort_by: string
+  sort_dir: string
+  generated_at: string
+}
+
+export type AdminStudentsQuery = {
+  filters?: AdminDashboardFilters
+  risk?: string | null
+  search?: string | null
+  sortBy?: string
+  sortDir?: string
+  limit?: number
+  offset?: number
+}
+
+export const ADMIN_STUDENT_SORT_FIELDS = [
+  "name",
+  "sgpa",
+  "percentage",
+  "attendance",
+  "backlogs",
+  "risk",
+] as const
+
+export type AdminStudentSortField = (typeof ADMIN_STUDENT_SORT_FIELDS)[number]
+
+export function getAdminStudents(
+  query: AdminStudentsQuery = {},
+): Promise<BffResult<AdminStudentsData>> {
+  return callFastapi<AdminStudentsData>("students", BFF_TTL_MS, {
+    query: {
+      department_code: query.filters?.department_code,
+      academic_year: query.filters?.academic_year,
+      semester: query.filters?.semester,
+      risk: query.risk || undefined,
+      search: query.search || undefined,
+      sort_by: query.sortBy || undefined,
+      sort_dir: query.sortDir || undefined,
+      limit: query.limit,
+      offset: query.offset,
+    },
+  })
+}
+
+export type AdminFacultyKpis = {
+  total_faculty: number
+  active_faculty: number
+  department_count: number
+}
+
+export type AdminFacultyByDepartmentItem = {
+  department_code: number
+  department_name: string
+  count: number
+}
+
+export type AdminFacultyByDesignationItem = {
+  designation: string
+  count: number
+}
+
+export type AdminFacultyRow = {
+  faculty_id: string
+  faculty_code: string | null
+  full_name: string
+  department_code: number
+  department_name: string
+  designation: string | null
+  subject_count: number
+  student_count: number
+  workload_hours: number | null
+}
+
+export type AdminFacultyData = {
+  kpis: AdminFacultyKpis
+  by_department: AdminFacultyByDepartmentItem[]
+  by_designation: AdminFacultyByDesignationItem[]
+  faculty: AdminFacultyRow[]
+  generated_at: string
+}
+
+export function getAdminFaculty(): Promise<BffResult<AdminFacultyData>> {
+  return callFastapi<AdminFacultyData>("faculty", BFF_TTL_MS)
+}

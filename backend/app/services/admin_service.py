@@ -49,6 +49,15 @@ from app.schemas.admin_dashboard import (
     ResultOverviewItem,
     RiskDistributionItem,
 )
+from app.schemas.admin_students_faculty import (
+    AdminFacultyByDepartmentItem,
+    AdminFacultyByDesignationItem,
+    AdminFacultyKpis,
+    AdminFacultyResponse,
+    AdminFacultyRow,
+    AdminStudentRow,
+    AdminStudentsResponse,
+)
 from app.core.config import settings
 
 # Canonical display order for the risk donut (plan MD-04 risk bands).
@@ -980,3 +989,122 @@ class AdminService:
         warnings.sort(key=lambda w: 0 if w.severity == "Critical" else (1 if w.severity == "High" else (2 if w.severity == "Moderate" else 3)))
 
         return warnings
+
+    # --- MD-05 Admin Student & Faculty Overview -------------------------------
+
+    async def get_admin_students(
+        self,
+        department_code: Optional[int] = None,
+        academic_year: Optional[str] = None,
+        semester: Optional[int] = None,
+        risk: Optional[str] = None,
+        search: Optional[str] = None,
+        sort_by: str = "name",
+        sort_dir: str = "asc",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> AdminStudentsResponse:
+        """MD-05 Part A — read-only Admin Student Overview.
+
+        Filters: department / academic year / semester / stored risk band /
+        search (name, enrollment, email). Sorting is whitelisted in the repo;
+        risk sorts by canonical MD-04 severity. NULL academic figures stay
+        NULL (never coerced to 0).
+        """
+        risk_upper = RISK_BAND_MAP.get((risk or "").upper()) if risk else None
+        sort_by = sort_by if sort_by in {"name", "sgpa", "percentage", "attendance", "backlogs", "risk"} else "name"
+        sort_dir = sort_dir if sort_dir in {"asc", "desc"} else "asc"
+
+        data = await self.repo.get_admin_students(
+            department_code,
+            semester,
+            academic_year,
+            risk_upper,
+            search,
+            sort_by,
+            sort_dir,
+            limit,
+            offset,
+        )
+        students = [
+            AdminStudentRow(
+                student_id=row["student_id"],
+                student_name=row.get("student_name") or "",
+                enrollment_no=row.get("enrollment_no"),
+                email=row.get("email"),
+                department_code=row.get("department_code"),
+                department_name=row.get("department_name") or "",
+                semester=row.get("semester"),
+                academic_year=row.get("academic_year"),
+                sgpa=_to_float(row.get("sgpa")),
+                cgpa=_to_float(row.get("cgpa")),
+                percentage=_to_float(row.get("percentage")),
+                attendance=_to_float(row.get("attendance")),
+                backlogs=row.get("backlogs"),
+                risk=RISK_BAND_MAP.get(str(row.get("risk") or "").upper())
+                or (row.get("risk") if row.get("risk") else None),
+                academic_standing=row.get("academic_standing"),
+            )
+            for row in data.get("items") or []
+        ]
+        return AdminStudentsResponse(
+            filters=await self._build_filter_options(),
+            students=students,
+            students_total=int((data.get("total") or {}).get("total") or 0),
+            limit=limit,
+            offset=offset,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            generated_at=datetime.now(timezone.utc),
+        )
+
+    async def get_admin_faculty(self) -> AdminFacultyResponse:
+        """MD-05 Part B — read-only Admin Faculty Overview.
+
+        KPIs (total / active / department count), department and designation
+        breakdowns, and the faculty table with subject / student counts and
+        weekly workload (existing faculty derivation — no new business rules).
+        """
+        kpis_data = await self.repo.get_faculty_kpis()
+        by_department = [
+            AdminFacultyByDepartmentItem(
+                department_code=row["department_code"],
+                department_name=row.get("department_name") or "Department",
+                count=int(row.get("count") or 0),
+            )
+            for row in await self.repo.get_faculty_by_department()
+        ]
+        by_designation = [
+            AdminFacultyByDesignationItem(
+                designation=row.get("designation") or "Unassigned",
+                count=int(row.get("count") or 0),
+            )
+            for row in await self.repo.get_faculty_by_designation()
+        ]
+        faculty = [
+            AdminFacultyRow(
+                faculty_id=row["faculty_id"],
+                faculty_code=row.get("faculty_code"),
+                full_name=row.get("full_name") or "",
+                department_code=row.get("department_code"),
+                department_name=row.get("department_name") or "",
+                designation=row.get("designation"),
+                subject_count=int(row.get("subject_count") or 0),
+                student_count=int(row.get("student_count") or 0),
+                workload_hours=_to_float(row.get("workload_hours")),
+            )
+            for row in await self.repo.get_faculty_overview_rows(
+                weeks=settings.WORKLOAD_WEEKS_PER_SEMESTER
+            )
+        ]
+        return AdminFacultyResponse(
+            kpis=AdminFacultyKpis(
+                total_faculty=int(kpis_data.get("total_faculty") or 0),
+                active_faculty=int(kpis_data.get("active_faculty") or 0),
+                department_count=int(kpis_data.get("department_count") or 0),
+            ),
+            by_department=by_department,
+            by_designation=by_designation,
+            faculty=faculty,
+            generated_at=datetime.now(timezone.utc),
+        )
