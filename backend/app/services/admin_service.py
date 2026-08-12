@@ -24,6 +24,20 @@ from app.schemas.admin_academic import (
     SubjectIntelligenceResponse,
     SubjectRow,
 )
+from app.schemas.admin_attendance_risk import (
+    AttendanceIntelligenceResponse,
+    RiskIntelligenceResponse,
+    AttendanceKpis,
+    AttendanceByDepartmentItem,
+    AttendanceBySemesterItem,
+    SubjectAttendanceRow,
+    ShortageStudentRow,
+    RiskKpis,
+    RiskByDepartmentItem,
+    RiskBySemesterItem,
+    RiskStudentRow,
+    EarlyWarningRow,
+)
 from app.schemas.admin_dashboard import (
     AcademicTrendPoint as DashboardTrendPoint,
     AdminDashboardResponse,
@@ -607,3 +621,362 @@ class AdminService:
             )
 
         return insights
+
+    async def get_attendance_intelligence(
+        self,
+        department_code: Optional[int] = None,
+        academic_year: Optional[str] = None,
+        semester: Optional[int] = None,
+        search: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> AttendanceIntelligenceResponse:
+        """MD-04 Admin Attendance Intelligence.
+
+        KPIs, by-department, by-semester, distribution, subject attendance,
+        and shortage students. Attendance thresholds come from the Threshold
+        Engine settings (never hardcoded).
+        """
+        from app.core.config import settings
+
+        target = settings.FACULTY_ATTENDANCE_THRESHOLD
+        critical = settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD
+
+        # KPIs
+        kpi_row = await self.repo.get_attendance_kpis(
+            department_code, academic_year, semester, target, critical
+        ) or {}
+        kpis = AttendanceKpis(
+            avg_attendance=_to_float(kpi_row.get("avg_attendance")),
+            students_below_target=int(kpi_row.get("students_below_target") or 0),
+            critical_shortage_students=int(kpi_row.get("critical_shortage_students") or 0),
+            eligible_students=int(kpi_row.get("eligible_students") or 0),
+            not_eligible_students=int(kpi_row.get("not_eligible_students") or 0),
+        )
+
+        # By department
+        by_department = [
+            AttendanceByDepartmentItem(
+                department_code=int(row["department_code"]),
+                department_name=str(row.get("department_name") or "Department"),
+                avg_attendance=_to_float(row.get("avg_attendance")),
+            )
+            for row in await self.repo.get_attendance_by_department(academic_year, semester)
+        ]
+
+        # By semester
+        by_semester = [
+            AttendanceBySemesterItem(
+                semester=int(row["semester"]),
+                avg_attendance=_to_float(row.get("avg_attendance")),
+            )
+            for row in await self.repo.get_attendance_by_semester(department_code, academic_year)
+        ]
+
+        # Distribution (reuse existing repo method)
+        dist_rows = await self.repo.get_attendance_distribution(
+            department_code, academic_year, semester
+        )
+        total = sum(int(r.get("count") or 0) for r in dist_rows) or 0
+        distribution = [
+            AttendanceDistributionItem(
+                status=str(row["status"]),
+                count=int(row.get("count") or 0),
+            )
+            for row in dist_rows
+        ]
+
+        # Subject attendance
+        subject_data = await self.repo.get_subject_attendance(
+            department_code, academic_year, semester, search, target, critical, limit, offset
+        )
+        subjects = [
+            SubjectAttendanceRow(
+                subject_code=str(row["subject_code"]),
+                subject_name=str(row.get("subject_name") or row["subject_code"]),
+                department_code=int(row["department_code"]),
+                department_name=str(row.get("department_name") or "Department"),
+                semester=int(row["semester"]),
+                student_count=int(row.get("student_count") or 0),
+                avg_attendance=_to_float(row.get("avg_attendance")),
+                below_target_count=int(row.get("below_target_count") or 0),
+                critical_shortage_count=int(row.get("critical_shortage_count") or 0),
+                eligible_count=int(row.get("eligible_count") or 0),
+                not_eligible_count=int(row.get("not_eligible_count") or 0),
+            )
+            for row in subject_data.get("items") or []
+        ]
+        subjects_total = int((subject_data.get("total") or {}).get("total") or 0)
+
+        # Shortage students
+        shortage_data = await self.repo.get_shortage_students(
+            department_code, academic_year, semester, search, target, limit, offset
+        )
+        shortage_students = []
+        for row in shortage_data.get("items") or []:
+            pct = _to_float(row.get("attendance_percentage"))
+            shortage_students.append(
+                ShortageStudentRow(
+                    student_id=str(row["student_id"]),
+                    student_name=str(row.get("student_name") or row["student_id"]),
+                    enrollment_no=int(row.get("enrollment_no") or 0),
+                    department_code=int(row["department_code"]),
+                    department_name=str(row.get("department_name") or "Department"),
+                    semester=int(row.get("semester") or 0),
+                    subject_code=str(row.get("subject_code") or ""),
+                    subject_name=str(row.get("subject_name") or row.get("subject_code") or ""),
+                    attendance_percentage=pct,
+                    required_target=round(target, 2),
+                    shortage=(round(target - pct, 2) if pct is not None else None),
+                    eligibility_status=row.get("eligibility_status"),
+                )
+            )
+        shortage_total = int((shortage_data.get("total") or {}).get("total") or 0)
+
+        return AttendanceIntelligenceResponse(
+            kpis=kpis,
+            required_target=round(target, 2),
+            filters=await self._build_filter_options(),
+            by_department=by_department,
+            by_semester=by_semester,
+            distribution=distribution,
+            subjects=subjects,
+            subjects_total=subjects_total,
+            shortage_total=shortage_total,
+            shortage_students=shortage_students,
+            limit=limit,
+            offset=offset,
+            generated_at=datetime.now(timezone.utc),
+        )
+
+    async def get_risk_intelligence(
+        self,
+        department_code: Optional[int] = None,
+        academic_year: Optional[str] = None,
+        semester: Optional[int] = None,
+        risk: Optional[str] = None,
+        search: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> RiskIntelligenceResponse:
+        """MD-04 Admin Risk Intelligence + Early Warning Center.
+
+        KPIs, distribution, by-department, by-semester, at-risk table (with
+        risk filter), and early warning (High/Critical students with
+        deterministic reasons/recommendations).
+        """
+        # Normalize risk filter
+        risk_upper = RISK_BAND_MAP.get((risk or "").upper()) if risk else None
+
+        # KPIs
+        kpis = RiskKpis()
+        for row in await self.repo.get_risk_counts(department_code, semester, academic_year):
+            label = RISK_BAND_MAP.get(str(row.get("risk_level")).upper())
+            if not label:
+                continue
+            setattr(kpis, label.lower(), int(row.get("count") or 0))
+        kpis.low = int(kpis.low) if hasattr(kpis, "low") and str(kpis.low).isdigit() else 0
+        kpis.moderate = int(kpis.moderate) if hasattr(kpis, "moderate") and str(kpis.moderate).isdigit() else 0
+        kpis.high = int(kpis.high) if hasattr(kpis, "high") and str(kpis.high).isdigit() else 0
+        kpis.critical = int(kpis.critical) if hasattr(kpis, "critical") and str(kpis.critical).isdigit() else 0
+        kpis.total_predicted = kpis.low + kpis.moderate + kpis.high + kpis.critical
+        kpis.at_risk = kpis.high + kpis.critical
+
+        # Distribution (zero-filled per canonical order)
+        counts: Dict[str, int] = {"Low": kpis.low, "Moderate": kpis.moderate, "High": kpis.high, "Critical": kpis.critical}
+        distribution = [
+            RiskDistributionItem(risk_level=level, count=counts[level])
+            for level in RISK_BAND_ORDER
+        ]
+
+        # By department (scoped by semester + year only)
+        dept_map: Dict[int, Dict[str, int]] = {}
+        dept_names: Dict[int, str] = {}
+        for row in await self.repo.get_risk_by_department_scoped(semester, academic_year):
+            code = int(row["department_code"])
+            dept_names[code] = str(row.get("department_name") or "Department")
+            label = RISK_BAND_MAP.get(str(row.get("risk_level")).upper())
+            if label:
+                dept_map.setdefault(code, {})[label] = int(row.get("count") or 0)
+        by_department = [
+            RiskByDepartmentItem(
+                department_code=code,
+                department_name=dept_names.get(code, "Department"),
+                distribution=[
+                    RiskDistributionItem(risk_level=level, count=dept_map.get(code, {}).get(level, 0))
+                    for level in RISK_BAND_ORDER
+                ],
+            )
+            for code in sorted(dept_map.keys())
+        ]
+
+        # By semester (scoped by department + year)
+        sem_map: Dict[int, Dict[str, int]] = {}
+        for row in await self.repo.get_risk_by_semester_scoped(department_code, academic_year):
+            sem = int(row["semester"])
+            label = RISK_BAND_MAP.get(str(row.get("risk_level")).upper())
+            if label:
+                sem_map.setdefault(sem, {})[label] = int(row.get("count") or 0)
+        by_semester = [
+            RiskBySemesterItem(
+                semester=sem,
+                distribution=[
+                    RiskDistributionItem(risk_level=level, count=sem_map[sem].get(level, 0))
+                    for level in RISK_BAND_ORDER
+                ],
+            )
+            for sem in sorted(sem_map.keys())
+        ]
+
+        # At-risk students table (paginated, with risk filter + search)
+        risk_data = await self.repo.get_risk_students(
+            department_code, semester, academic_year, risk_upper, search, limit, offset
+        )
+        students = [
+            RiskStudentRow(
+                student_id=str(row["student_id"]),
+                student_name=str(row.get("student_name") or row["student_id"]),
+                enrollment_no=int(row.get("enrollment_no") or 0),
+                department_code=int(row["department_code"]),
+                department_name=str(row.get("department_name") or "Department"),
+                semester=int(row["semester"]) if row.get("semester") is not None else None,
+                academic_year=row.get("academic_year"),
+                attendance=_to_float(row.get("attendance")),
+                percentage=_to_float(row.get("percentage")),
+                backlogs=int(row["backlogs"]) if row.get("backlogs") is not None else None,
+                academic_standing=row.get("academic_standing"),
+                risk=RISK_BAND_MAP.get(str(row.get("risk") or "").upper()) or str(row.get("risk") or "Unknown"),
+            )
+            for row in risk_data.get("items") or []
+        ]
+        students_total = int((risk_data.get("total") or {}).get("total") or 0)
+
+        # Early warning center (High + Critical students in scope)
+        early_warning = await self._build_early_warning(
+            department_code=department_code,
+            semester=semester,
+            academic_year=academic_year,
+            risk_upper=risk_upper,
+        )
+
+        return RiskIntelligenceResponse(
+            kpis=kpis,
+            filters=await self._build_filter_options(),
+            distribution=distribution,
+            by_department=by_department,
+            by_semester=by_semester,
+            students=students,
+            students_total=students_total,
+            early_warning=early_warning,
+            limit=limit,
+            offset=offset,
+            generated_at=datetime.now(timezone.utc),
+        )
+
+    async def _build_early_warning(
+        self,
+        department_code: Optional[int] = None,
+        semester: Optional[int] = None,
+        academic_year: Optional[str] = None,
+        risk_upper: Optional[str] = None,
+    ) -> List[EarlyWarningRow]:
+        """Build deterministic early-warning rows for High/Critical students."""
+        RISK_CONCERN_ORDER = [
+            ("attendance", "Low attendance", "Attendance intervention"),
+            ("marks", "Low academic performance", "Academic support / mentoring"),
+            ("backlogs", "Backlogs", "Backlog support"),
+            ("standing", "Academic standing concern", "Academic counseling"),
+            ("decline", "Repeated poor performance", "Faculty/HOD review"),
+        ]
+
+        rows = await self.repo.get_at_risk_students(
+            department_code, semester, academic_year, risk_upper
+        )
+        if not rows:
+            return []
+
+        # Detect performance decline per student
+        student_ids = [str(r["student_id"]) for r in rows]
+        decline: Dict[str, bool] = {}
+        if student_ids:
+            trend_rows = await self.repo.get_performance_trend_by_students(student_ids)
+            by_student: Dict[str, List[float]] = {}
+            for r in trend_rows:
+                sid = str(r["student_id"])
+                pct = float(r["semester_percentage"]) if r.get("semester_percentage") is not None else None
+                if pct is not None:
+                    by_student.setdefault(sid, []).append(pct)
+            for sid, percentages in by_student.items():
+                if len(percentages) >= 2 and percentages[-1] < percentages[-2]:
+                    decline[sid] = True
+
+        warnings: List[EarlyWarningRow] = []
+        for row in rows:
+            student_id = str(row["student_id"])
+            attendance = _to_float(row.get("attendance"))
+            percentage = _to_float(row.get("percentage"))
+            backlogs = row.get("backlogs")
+            standing = row.get("academic_standing")
+            has_decline = decline.get(student_id, False)
+
+            flags = {
+                "attendance": attendance is not None and attendance < settings.FACULTY_ATTENDANCE_THRESHOLD,
+                "marks": percentage is not None and percentage < settings.CRITICAL_PERFORMANCE_THRESHOLD,
+                "backlogs": backlogs is not None and int(backlogs) >= settings.FACULTY_MENTEE_BACKLOG_THRESHOLD,
+                "standing": standing is not None and standing in {"Needs Attention", "Probation"},
+                "decline": has_decline,
+            }
+
+            # Determine primary concern (first present in order)
+            primary_key: Optional[str] = None
+            for key, _, _ in RISK_CONCERN_ORDER:
+                if flags.get(key, False):
+                    primary_key = key
+                    break
+
+            if primary_key is None:
+                # No canonical signals present; still list the student at risk
+                warnings.append(
+                    EarlyWarningRow(
+                        student_id=student_id,
+                        student_name=str(row.get("student_name") or student_id),
+                        enrollment_no=int(row.get("enrollment_no") or 0),
+                        department_code=int(row["department_code"]),
+                        department_name=str(row.get("department_name") or "Department"),
+                        semester=int(row["semester"]) if row.get("semester") is not None else None,
+                        severity=RISK_BAND_MAP.get(str(row.get("risk") or "").upper()) or "High",
+                        primary_concern=None,
+                        supporting_signals=[],
+                        recommended_action=None,
+                    )
+                )
+                continue
+
+            # Build primary concern + supporting signals
+            primary_label = dict((key, label) for key, label, _ in RISK_CONCERN_ORDER)[primary_key]
+            primary_action = dict((key, action) for key, _, action in RISK_CONCERN_ORDER)[primary_key]
+
+            supporting: List[str] = []
+            for key, _, _ in RISK_CONCERN_ORDER:
+                if key != primary_key and flags.get(key, False):
+                    supporting.append(dict((key, label) for key, label, _ in RISK_CONCERN_ORDER)[key])
+
+            warnings.append(
+                EarlyWarningRow(
+                    student_id=student_id,
+                    student_name=str(row.get("student_name") or student_id),
+                    enrollment_no=int(row.get("enrollment_no") or 0),
+                    department_code=int(row["department_code"]),
+                    department_name=str(row.get("department_name") or "Department"),
+                    semester=int(row["semester"]) if row.get("semester") is not None else None,
+                    severity=RISK_BAND_MAP.get(str(row.get("risk") or "").upper()) or "High",
+                    primary_concern=primary_label,
+                    supporting_signals=supporting,
+                    recommended_action=primary_action,
+                )
+            )
+
+        # Sort: Critical first, then High, Moderate, Low
+        warnings.sort(key=lambda w: 0 if w.severity == "Critical" else (1 if w.severity == "High" else (2 if w.severity == "Moderate" else 3)))
+
+        return warnings

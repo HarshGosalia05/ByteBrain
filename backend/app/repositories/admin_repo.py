@@ -557,3 +557,413 @@ class AdminRepository:
             """,
             (department_code, academic_year, semester, search),
         )
+
+    async def get_attendance_kpis(
+        self,
+        department_code: Optional[int],
+        academic_year: Optional[str],
+        semester: Optional[int],
+        target: float,
+        critical: float,
+    ) -> Optional[Dict[str, Any]]:
+        """MD-04 student-level attendance KPIs over scoped subject rows.
+
+        A student's scoped attendance is the mean of their subject-level
+        attendance percentages (NULL-safe). ``eligible`` uses the canonical stored
+        eligibility_status per subject: a student is Eligible only when every
+        scoped subject record is Eligible.
+        """
+        return await self._fetchrow(
+            """
+            SELECT
+                (SELECT AVG(a.attendance_percentage)
+                 FROM attendance a
+                 JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
+                 WHERE ($1::int IS NULL OR e.department_code = $1)
+                   AND ($2::text IS NULL OR e.academic_year = $2)
+                   AND ($3::int IS NULL OR e.semester_no = $3)
+                   AND a.attendance_percentage IS NOT NULL) AS avg_attendance,
+                COUNT(*) AS students_with_records,
+                COUNT(*) FILTER (WHERE st.mean_pct < $4) AS students_below_target,
+                COUNT(*) FILTER (WHERE st.mean_pct < $5) AS critical_shortage_students,
+                COUNT(*) FILTER (WHERE st.all_eligible IS TRUE) AS eligible_students,
+                COUNT(*) FILTER (WHERE st.all_eligible IS FALSE) AS not_eligible_students
+            FROM (
+                SELECT
+                    e.student_id,
+                    AVG(a.attendance_percentage) AS mean_pct,
+                    BOOL_AND(COALESCE(a.eligibility_status = 'Eligible', FALSE)) AS all_eligible
+                FROM attendance a
+                JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
+                WHERE ($1::int IS NULL OR e.department_code = $1)
+                  AND ($2::text IS NULL OR e.academic_year = $2)
+                  AND ($3::int IS NULL OR e.semester_no = $3)
+                GROUP BY e.student_id
+            ) st
+            """,
+            (department_code, academic_year, semester, target, critical,),
+        )
+
+    async def get_attendance_by_department(
+        self,
+        academic_year: Optional[str],
+        semester: Optional[int],
+    ) -> List[Dict[str, Any]]:
+        """MD-04 average attendance per department (year + semester scoped)."""
+        return await self._fetch(
+            """
+            SELECT
+                e.department_code,
+                COALESCE(d.department_name, e.department_name) AS department_name,
+                AVG(a.attendance_percentage) AS avg_attendance
+            FROM student_subject_enrollment e
+            LEFT JOIN attendance a ON a.enrollment_record_id = e.enrollment_record_id
+            LEFT JOIN departments d ON d.dept_code = e.department_code
+            WHERE ($1::text IS NULL OR e.academic_year = $1)
+              AND ($2::int IS NULL OR e.semester_no = $2)
+            GROUP BY e.department_code, d.department_name, e.department_name
+            ORDER BY e.department_code ASC
+            """,
+            (academic_year, semester,),
+        )
+
+    async def get_attendance_by_semester(
+        self,
+        department_code: Optional[int],
+        academic_year: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """MD-04 average attendance per semester (numeric order)."""
+        return await self._fetch(
+            """
+            SELECT
+                e.semester_no AS semester,
+                AVG(a.attendance_percentage) AS avg_attendance
+            FROM student_subject_enrollment e
+            LEFT JOIN attendance a ON a.enrollment_record_id = e.enrollment_record_id
+            WHERE ($1::int IS NULL OR e.department_code = $1)
+              AND ($2::text IS NULL OR e.academic_year = $2)
+            GROUP BY e.semester_no
+            ORDER BY e.semester_no ASC
+            """,
+            (department_code, academic_year,),
+        )
+
+    async def get_subject_attendance(
+        self,
+        department_code: Optional[int],
+        academic_year: Optional[str],
+        semester: Optional[int],
+        search: Optional[str],
+        target: float,
+        critical: float,
+        limit: int,
+        offset: int,
+    ) -> Dict[str, Any]:
+        """MD-04 subject-level attendance aggregation (canonical enrollment join)."""
+        items = await self._fetch(
+            """
+            SELECT
+                e.subject_code,
+                e.subject_name,
+                e.department_code,
+                COALESCE(d.department_name, e.department_name) AS department_name,
+                e.semester_no AS semester,
+                COUNT(DISTINCT e.enrollment_record_id) AS student_count,
+                AVG(a.attendance_percentage) AS avg_attendance,
+                COUNT(*) FILTER (WHERE a.attendance_percentage < $4) AS below_target_count,
+                COUNT(*) FILTER (WHERE a.attendance_percentage < $5) AS critical_shortage_count,
+                COUNT(*) FILTER (WHERE a.eligibility_status = 'Eligible') AS eligible_count,
+                COUNT(*) FILTER (WHERE a.eligibility_status = 'Not Eligible') AS not_eligible_count
+            FROM student_subject_enrollment e
+            LEFT JOIN attendance a ON a.enrollment_record_id = e.enrollment_record_id
+            WHERE ($1::int IS NULL OR e.department_code = $1)
+              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND ($3::int IS NULL OR e.semester_no = $3)
+              AND ($6::text IS NULL OR e.subject_code ILIKE '%' || $6 || '%'
+                   OR e.subject_name ILIKE '%' || $6 || '%')
+            GROUP BY e.subject_code, e.subject_name, e.department_code,
+                     e.department_name, e.semester_no
+            ORDER BY e.semester_no ASC, e.subject_code ASC
+            LIMIT $7::int OFFSET $8::int
+            """,
+            (department_code, academic_year, semester, target, critical, search, limit, offset,),
+        )
+        total = await self._fetchrow(
+            """
+            SELECT COUNT(*) AS total
+            FROM (
+                SELECT e.enrollment_record_id
+                FROM student_subject_enrollment e
+                WHERE ($1::int IS NULL OR e.department_code = $1)
+                  AND ($2::text IS NULL OR e.academic_year = $2)
+                  AND ($3::int IS NULL OR e.semester_no = $3)
+                  AND ($6::text IS NULL OR e.subject_code ILIKE '%' || $6 || '%'
+                       OR e.subject_name ILIKE '%' || $6 || '%')
+                GROUP BY e.enrollment_record_id
+            ) sub
+            """,
+            (department_code, academic_year, semester, search,),
+        )
+        return {"items": items, "total": total}
+
+    async def get_shortage_students(
+        self,
+        department_code: Optional[int],
+        academic_year: Optional[str],
+        semester: Optional[int],
+        search: Optional[str],
+        target: float,
+        limit: int,
+        offset: int,
+    ) -> Dict[str, Any]:
+        """MD-04 students with subject-level attendance below the target."""
+        items = await self._fetch(
+            """
+            SELECT
+                st.student_id,
+                st.full_name AS student_name,
+                st.enrollment_no,
+                e.department_code,
+                e.department_name,
+                e.semester_no AS semester,
+                e.subject_code,
+                e.subject_name,
+                a.attendance_percentage,
+                a.eligibility_status
+            FROM attendance a
+            JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
+            JOIN students st ON st.student_id = e.student_id
+            WHERE ($1::int IS NULL OR e.department_code = $1)
+              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND ($3::int IS NULL OR e.semester_no = $3)
+              AND a.attendance_percentage IS NOT NULL
+              AND a.attendance_percentage < $4
+              AND ($5::text IS NULL OR st.full_name ILIKE '%' || $5 || '%'
+                   OR CAST(st.enrollment_no AS text) ILIKE '%' || $5 || '%'
+                   OR e.subject_code ILIKE '%' || $5 || '%'
+                   OR e.subject_name ILIKE '%' || $5 || '%')
+            ORDER BY a.attendance_percentage ASC, st.full_name ASC
+            LIMIT $6::int OFFSET $7::int
+            """,
+            (department_code, academic_year, semester, target, search, limit, offset,),
+        )
+        total = await self._fetchrow(
+            """
+            SELECT COUNT(*) AS total
+            FROM attendance a
+            JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
+            JOIN students st ON st.student_id = e.student_id
+            WHERE ($1::int IS NULL OR e.department_code = $1)
+              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND ($3::int IS NULL OR e.semester_no = $3)
+              AND a.attendance_percentage IS NOT NULL
+              AND a.attendance_percentage < $4
+              AND ($5::text IS NULL OR st.full_name ILIKE '%' || $5 || '%'
+                   OR CAST(st.enrollment_no AS text) ILIKE '%' || $5 || '%'
+                   OR e.subject_code ILIKE '%' || $5 || '%'
+                   OR e.subject_name ILIKE '%' || $5 || '%')
+            """,
+            (department_code, academic_year, semester, target, search,),
+        )
+        return {"items": items, "total": total}
+
+
+    # --- MD-04 Risk Intelligence ----------------------------------------------
+
+    async def get_risk_counts(
+        self,
+        department_code: Optional[int],
+        semester: Optional[int],
+        academic_year: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """MD-04 stored risk band counts over the scoped students."""
+        return await self._fetch(
+            """
+            SELECT r.prediction_status AS risk_level, COUNT(*) AS count
+            FROM risk_predictions r
+            JOIN students s ON s.student_id = r.student_id
+            WHERE ($1::int IS NULL OR s.department_code = $1)
+              AND ($2::int IS NULL OR s.current_semester = $2)
+              AND ($3::text IS NULL OR s.current_academic_year = $3)
+            GROUP BY r.prediction_status
+            """,
+            (department_code, semester, academic_year,),
+        )
+
+    async def get_risk_by_department_scoped(
+        self,
+        semester: Optional[int],
+        academic_year: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """MD-04 per-department risk band counts (comparison chart)."""
+        return await self._fetch(
+            """
+            SELECT
+                s.department_code,
+                COALESCE(d.department_name, s.department_name) AS department_name,
+                r.prediction_status AS risk_level,
+                COUNT(*) AS count
+            FROM risk_predictions r
+            JOIN students s ON s.student_id = r.student_id
+            LEFT JOIN departments d ON d.dept_code = s.department_code
+            WHERE ($1::int IS NULL OR s.current_semester = $1)
+              AND ($2::text IS NULL OR s.current_academic_year = $2)
+            GROUP BY s.department_code, d.department_name, r.prediction_status
+            ORDER BY s.department_code ASC
+            """,
+            (semester, academic_year,),
+        )
+
+    async def get_risk_by_semester_scoped(
+        self,
+        department_code: Optional[int],
+        academic_year: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """MD-04 per-semester risk band counts (numeric semester order)."""
+        return await self._fetch(
+            """
+            SELECT
+                s.current_semester AS semester,
+                r.prediction_status AS risk_level,
+                COUNT(*) AS count
+            FROM risk_predictions r
+            JOIN students s ON s.student_id = r.student_id
+            WHERE ($1::int IS NULL OR s.department_code = $1)
+              AND ($2::text IS NULL OR s.current_academic_year = $2)
+              AND s.current_semester IS NOT NULL
+            GROUP BY s.current_semester, r.prediction_status
+            ORDER BY s.current_semester ASC
+            """,
+            (department_code, academic_year,),
+        )
+
+    async def get_risk_students(
+        self,
+        department_code: Optional[int],
+        semester: Optional[int],
+        academic_year: Optional[str],
+        risk_upper: Optional[str],
+        search: Optional[str],
+        limit: int,
+        offset: int,
+    ) -> Dict[str, Any]:
+        """MD-04 students with a stored risk prediction (severity sort applied in service)."""
+        risk_args: List[object] = []
+        if risk_upper:
+            risk_cond = f" AND UPPER(r.prediction_status) = ${len(risk_args) + 4}::text"
+            risk_args.append(risk_upper.upper())
+        else:
+            risk_cond = ""
+
+        args = (department_code, academic_year, semester) + tuple(risk_args) + (search, limit, offset)
+
+        qry = f"""
+            SELECT
+                st.student_id,
+                st.full_name AS student_name,
+                st.enrollment_no,
+                st.department_code,
+                COALESCE(d.department_name, st.department_name) AS department_name,
+                st.current_semester AS semester,
+                st.current_academic_year AS academic_year,
+                st.overall_attendance_percentage AS attendance,
+                st.overall_percentage AS percentage,
+                st.total_backlogs AS backlogs,
+                st.academic_standing,
+                r.prediction_status AS risk
+            FROM risk_predictions r
+            JOIN students st ON st.student_id = r.student_id
+            LEFT JOIN departments d ON d.dept_code = st.department_code
+            WHERE ($1::int IS NULL OR st.department_code = $1)
+              AND ($2::text IS NULL OR st.current_academic_year = $2)
+              AND ($3::int IS NULL OR st.current_semester = $3)
+              {risk_cond}
+              AND ($5::text IS NULL OR st.full_name ILIKE '%' || $5 || '%'
+                   OR CAST(st.enrollment_no AS text) ILIKE '%' || $5 || '%')
+            ORDER BY
+                CASE UPPER(r.prediction_status)
+                    WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MODERATE' THEN 2 ELSE 3
+                END,
+                st.full_name ASC
+            LIMIT ${len(risk_args) + 6}::int OFFSET ${len(risk_args) + 7}::int
+        """
+
+        items = await self._fetch(qry, args)
+        total = await self._fetchrow(
+            f"""
+            SELECT COUNT(*) AS total
+            FROM risk_predictions r
+            JOIN students st ON st.student_id = r.student_id
+            WHERE ($1::int IS NULL OR st.department_code = $1)
+              AND ($2::text IS NULL OR st.current_academic_year = $2)
+              AND ($3::int IS NULL OR st.current_semester = $3)
+              {risk_cond}
+              AND ($5::text IS NULL OR st.full_name ILIKE '%' || $5 || '%'
+                   OR CAST(st.enrollment_no AS text) ILIKE '%' || $5 || '%')
+            """,
+            args,
+        )
+        return {"items": items, "total": total}
+
+    async def get_at_risk_students(
+        self,
+        department_code: Optional[int],
+        semester: Optional[int],
+        academic_year: Optional[str],
+        risk_upper: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """MD-04 students with High/Critical risk (early warning center)."""
+        risk_cond = ""
+        args: List[object] = [department_code, academic_year]
+        if risk_upper:
+            risk_cond = " AND UPPER(r.prediction_status) = $4::text"
+            args.append(risk_upper.upper())
+
+        qry = f"""
+            SELECT
+                st.student_id,
+                st.full_name AS student_name,
+                st.enrollment_no,
+                st.department_code,
+                COALESCE(d.department_name, st.department_name) AS department_name,
+                st.current_semester AS semester,
+                st.current_academic_year AS academic_year,
+                st.overall_attendance_percentage AS attendance,
+                st.overall_percentage AS percentage,
+                st.total_backlogs AS backlogs,
+                st.academic_standing,
+                r.prediction_status AS risk
+            FROM risk_predictions r
+            JOIN students st ON st.student_id = r.student_id
+            LEFT JOIN departments d ON d.dept_code = st.department_code
+            WHERE ($1::int IS NULL OR st.department_code = $1)
+              AND ($2::text IS NULL OR st.current_academic_year = $2)
+              AND st.current_semester IS NOT NULL
+              {risk_cond}
+            ORDER BY
+                CASE UPPER(r.prediction_status)
+                    WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 ELSE 2
+                END,
+                st.full_name ASC
+        """
+        return await self._fetch(qry, tuple(args))
+
+    async def get_performance_trend_by_students(
+        self,
+        student_ids: List[str],
+    ) -> List[Dict[str, Any]]:
+        """MD-04 per-student semester performance trend (for decline detection)."""
+        return await self._fetch(
+            """
+            SELECT
+                student_id,
+                semester_no,
+                semester_percentage,
+                academic_year
+            FROM student_semester_summary
+            WHERE student_id = ANY($1::text[])
+              AND semester_percentage IS NOT NULL
+            ORDER BY student_id, semester_no ASC
+            """,
+            (student_ids,),
+        )

@@ -8,6 +8,10 @@ from app.schemas.admin_academic import (
     SubjectIntelligenceResponse,
 )
 from app.schemas.admin_dashboard import AdminDashboardResponse
+from app.schemas.admin_attendance_risk import (
+    AttendanceIntelligenceResponse,
+    RiskIntelligenceResponse,
+)
 from app.services.admin_service import AdminService
 
 router = APIRouter()
@@ -101,4 +105,62 @@ async def get_academic_subjects(
         academic_year=academic_year,
         semester=semester,
         search=search,
+    )
+
+
+@router.get("/attendance", response_model=AttendanceIntelligenceResponse)
+async def get_attendance_intelligence(
+    user: dict = Depends(require_admin_role),
+    service: AdminService = Depends(get_admin_service),
+    department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
+    academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
+    semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
+    search: Optional[str] = Query(None, max_length=100, description="Search subjects or students"),
+    limit: int = Query(100, ge=1, le=500, description="Page size"),
+    offset: int = Query(0, ge=0, description="Page offset"),
+):
+    """MD-04 Admin Attendance Intelligence.
+
+    KPIs, attendance by department, by semester, distribution, subject attendance,
+    and shortage students. Attendance thresholds come from the Threshold Engine
+    settings (never hardcoded).
+    """
+    return await service.get_attendance_intelligence(
+        department_code=department_code,
+        academic_year=academic_year,
+        semester=semester,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/risk", response_model=RiskIntelligenceResponse)
+async def get_risk_intelligence(
+    user: dict = Depends(require_admin_role),
+    service: AdminService = Depends(get_admin_service),
+    department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
+    academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
+    semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
+    risk: Optional[str] = Query(
+        None, description="Filter students by risk band (Low, Moderate, High, Critical)"
+    ),
+    search: Optional[str] = Query(None, max_length=100, description="Search students by name or enrollment"),
+    limit: int = Query(100, ge=1, le=500, description="Page size"),
+    offset: int = Query(0, ge=0, description="Page offset"),
+):
+    """MD-04 Admin Risk Intelligence + Early Warning Center.
+
+    KPIs, risk distribution, by-department, by-semester, at-risk table (with
+    risk filter), and early warning (High/Critical students with
+    deterministic reasons/recommendations).
+    """
+    return await service.get_risk_intelligence(
+        department_code=department_code,
+        academic_year=academic_year,
+        semester=semester,
+        risk=risk,
+        search=search,
+        limit=limit,
+        offset=offset,
     )
