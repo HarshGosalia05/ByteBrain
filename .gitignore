@@ -31,3 +31,36 @@ coverage/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# =========================
+# ML datasets
+# =========================
+*.csv
+*.zip
+**/data/raw/
+**/datasets/
+**/dataset/
+
+# =========================
+# ML generated outputs
+# =========================
+**/data/final/
+
+
+# =========================
+# ML reports
+# =========================
+**/reports/
+
+
+# =========================
+# Python virtual environment
+# =========================
+ml.venv/
+
+# =========================
+# Python cache
+# =========================
+__pycache__/
+*.pyo
