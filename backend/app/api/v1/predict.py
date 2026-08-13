@@ -18,6 +18,7 @@ from ml.src import inference
 from ml.src.prediction_service import PredictionService, fetch_m1_raw_data, fetch_m2m3_raw_data, fetch_m4_raw_data
 from app.services.prediction_generation_service import PredictionGenerationService
 from app.services.prediction_insights_service import PredictionInsightsService
+from app.services.faculty_service import FacultyService
 
 router = APIRouter(prefix="/predict", tags=["predictions"])
 
@@ -36,11 +37,34 @@ def get_insights_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> Predictio
     return PredictionInsightsService(pool)
 
 
-def authorize_prediction_access(user: dict, student_id: str) -> None:
-    """Existing prediction RBAC: Student own-student only; Faculty/Admin any.
+def get_faculty_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> FacultyService:
+    return FacultyService(pool)
 
-    Mirrors the authorization already enforced by the read-only GET
-    /predict endpoints so the new persistence endpoints share one rule.
+
+def _faculty_id_or_error(user: dict) -> str:
+    faculty_id = user.get("faculty_id")
+    if not faculty_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No faculty_id found in user token",
+        )
+    return faculty_id
+
+
+async def authorize_prediction_access(
+    user: dict,
+    student_id: str,
+    faculty_service: FacultyService | None = None,
+) -> None:
+    """Single authorization rule for every /predict route.
+
+    STUDENT: only their own student_id.
+    FACULTY: only students within their existing authorized scope
+            (FacultyService.assert_student_in_scope - same rule as the
+            student overview/profile and faculty ML insights routes).
+    ADMIN: existing admin access rules (unrestricted).
+
+    Client-supplied student_id can never override this server-side check.
     """
     role = user.get("role")
     if role not in ("Student", "Faculty", "Admin"):
@@ -53,6 +77,15 @@ def authorize_prediction_access(user: dict, student_id: str) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Students can only access predictions for their own student_id",
         )
+    if role == "Faculty":
+        if faculty_service is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Faculty scope check unavailable",
+            )
+        await faculty_service.assert_student_in_scope(
+            _faculty_id_or_error(user), student_id
+        )
 
 
 @router.get(
@@ -63,22 +96,16 @@ def authorize_prediction_access(user: dict, student_id: str) -> None:
 async def predict_m1(
     student_id: str,
     service: PredictionService = Depends(get_prediction_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
 ) -> inference.PredictionResult:
     """Predict end-semester marks for a student's subject enrollments.
 
     Returns structured prediction results with predicted marks clipped to [0, 70].
-    Students can only predict for their own student_id; Faculty and Admin can predict
-    for any student.
+    Students can only predict for their own student_id; Faculty only within their
+    authorized scope; Admin for any student.
     """
-    # Authorization: Students can only predict for themselves
-    if user.get("role") == "Student" and user.get("student_id") != student_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Students can only predict for their own student_id",
-        )
-
-    # Faculty/Admin: no additional restrictions beyond auth
+    await authorize_prediction_access(user, student_id, faculty_service)
 
     try:
         result = await service.predict_m1_for_student(student_id)
@@ -100,23 +127,14 @@ async def predict_m1(
 async def predict_m2(
     student_id: str,
     service: PredictionService = Depends(get_prediction_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
 ) -> inference.PredictionResult:
     """Predict next-semester SGPA and percentage for a student.
 
     Uses real data from the database via read-only repositories.
     """
-    # Authorization: Students can only predict for themselves
-    if user.get("role") == "Student" and user.get("student_id") != student_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Students can only predict for their own student_id",
-        )
-    if user.get("role") not in ["Student", "Faculty", "Admin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access prediction resources",
-        )
+    await authorize_prediction_access(user, student_id, faculty_service)
 
     try:
         result = await service.predict_m2_for_student(student_id)
@@ -138,23 +156,14 @@ async def predict_m2(
 async def predict_m3(
     student_id: str,
     service: PredictionService = Depends(get_prediction_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
 ) -> inference.PredictionResult:
     """Predict next-semester at-risk/ATKT status for a student.
 
     Returns structured prediction results (binary: 0 = not at risk, 1 = at risk).
     """
-    # Authorization: Students can only predict for themselves
-    if user.get("role") == "Student" and user.get("student_id") != student_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Students can only predict for their own student_id",
-        )
-    if user.get("role") not in ["Student", "Faculty", "Admin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access prediction resources",
-        )
+    await authorize_prediction_access(user, student_id, faculty_service)
 
     try:
         result = await service.predict_m3_for_student(student_id)
@@ -176,6 +185,7 @@ async def predict_m3(
 async def predict_m4(
     student_id: str,
     service: PredictionService = Depends(get_prediction_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
 ) -> inference.PredictionResult:
     """Compute career readiness score for a student.
@@ -183,17 +193,7 @@ async def predict_m4(
     Uses the rule-based CareerReadinessEngine (NOT an ML model).
     Returns 0-100 score with Low/Medium/High level and factors.
     """
-    # Authorization: Students can only predict for themselves
-    if user.get("role") == "Student" and user.get("student_id") != student_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Students can only predict for their own student_id",
-        )
-    if user.get("role") not in ["Student", "Faculty", "Admin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access prediction resources",
-        )
+    await authorize_prediction_access(user, student_id, faculty_service)
 
     try:
         result = await service.predict_m4_for_student(student_id)
@@ -225,6 +225,7 @@ async def predict_m4(
 async def student_insights(
     student_id: str,
     service: PredictionInsightsService = Depends(get_insights_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
 ) -> dict:
     """Return M1-M4 predictions paired with grounded ML-08 explanations.
@@ -233,7 +234,7 @@ async def student_insights(
     ``explanation``, or ``available: false`` with a reason when data is
     missing (``no_data``) or the model failed (``error``).
     """
-    authorize_prediction_access(user, student_id)
+    await authorize_prediction_access(user, student_id, faculty_service)
     try:
         return await service.get_student_insights(student_id)
     except ValueError as e:
@@ -264,6 +265,7 @@ async def persist_prediction(
     prediction_type: str,
     student_id: str,
     service: PredictionGenerationService = Depends(get_generation_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
 ) -> dict:
     """Generate, validate, persist, and return an M1-M4 prediction.
@@ -274,7 +276,7 @@ async def persist_prediction(
     append-only design; nothing is persisted if generation or
     validation fails.
     """
-    authorize_prediction_access(user, student_id)
+    await authorize_prediction_access(user, student_id, faculty_service)
     try:
         return await service.generate_and_persist(prediction_type, student_id)
     except ValueError as e:
@@ -294,10 +296,11 @@ async def latest_prediction(
     prediction_type: str,
     student_id: str,
     service: PredictionGenerationService = Depends(get_generation_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
 ) -> dict:
     """Return the latest stored prediction for a student/model type."""
-    authorize_prediction_access(user, student_id)
+    await authorize_prediction_access(user, student_id, faculty_service)
     try:
         row = await service.get_latest(student_id, prediction_type)
     except ValueError as e:
@@ -320,10 +323,11 @@ async def persisted_history(
     limit: int = 20,
     offset: int = 0,
     service: PredictionGenerationService = Depends(get_generation_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
 ) -> dict:
     """Return newest-first persisted prediction history for a student."""
-    authorize_prediction_access(user, student_id)
+    await authorize_prediction_access(user, student_id, faculty_service)
     try:
         rows = await service.get_history(
             student_id, prediction_type, limit=limit, offset=offset

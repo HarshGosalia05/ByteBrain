@@ -259,6 +259,7 @@ class StudentRepository:
                 academic_year,
                 subjects_registered,
                 credits_registered,
+                semester_total_marks,
                 semester_percentage,
                 semester_grade,
                 semester_result,

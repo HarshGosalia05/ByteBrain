@@ -8,7 +8,7 @@ Verifies:
   * POST /predict/persist/{type}/{student_id} for m1-m4
   * invalid prediction type / generation failure / validation failure
   * Student own-student authorization, cross-student denial
-  * Faculty/Admin access, unauthorized role denial
+  * Faculty in-scope access, out-of-scope denial, Admin access, unknown-role denial
   * GET /predict/persisted/latest and /persisted/history
   * existing GET /predict/m{1-4} stays READ-ONLY (no persistence calls)
 """
@@ -25,13 +25,14 @@ for p in (str(ROOT), str(ROOT / "backend"), str(ROOT / "ml")):
 
 import unittest
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_db_pool
 from app.api.v1 import predict
 from app.api.v1.predict import (
     get_current_user,
+    get_faculty_service,
     get_generation_service,
     get_prediction_service,
 )
@@ -77,6 +78,22 @@ class FakeGenPersist:
         return self.history
 
 
+class FakeFacultyService:
+    """Stand-in for FacultyService scope enforcement (assert_student_in_scope)."""
+
+    def __init__(self, reachable=True):
+        self.reachable = reachable
+        self.checks = []
+
+    async def assert_student_in_scope(self, faculty_id, student_id):
+        self.checks.append((faculty_id, student_id))
+        if not self.reachable:
+            raise HTTPException(
+                status_code=404,
+                detail="Student not found in your classes or mentees",
+            )
+
+
 class FakePool:
     async def acquire(self):
         return None
@@ -113,6 +130,8 @@ class APITestCase(unittest.TestCase):
         app.dependency_overrides[get_current_user] = lambda: self.user
         app.dependency_overrides[get_prediction_service] = lambda: self.generation
         app.dependency_overrides[get_generation_service] = lambda: self.gen_persist
+        app.dependency_overrides[get_faculty_service] = lambda: FakeFacultyService()
+        self.app = app
         self.client = TestClient(app)
 
 
@@ -165,10 +184,21 @@ class TestAuthorization(APITestCase):
         self.assertIn("own student_id", r.json()["detail"])
         self.assertEqual(self.gen_persist.persist_calls, [])
 
-    def test_faculty_any_student_allowed(self):
-        self.user = {"role": "Faculty", "student_id": None}
+    def test_faculty_in_scope_student_allowed(self):
+        svc = FakeFacultyService()
+        self.app.dependency_overrides[get_faculty_service] = lambda: svc
+        self.user = {"role": "Faculty", "faculty_id": "FAC-1", "student_id": None}
         r = self._post("STU000999")
         self.assertEqual(r.status_code, 200)
+        self.assertEqual(svc.checks, [("FAC-1", "STU000999")])
+
+    def test_faculty_out_of_scope_student_denied(self):
+        self.app.dependency_overrides[get_faculty_service] = lambda: FakeFacultyService(reachable=False)
+        self.user = {"role": "Faculty", "faculty_id": "FAC-1", "student_id": None}
+        r = self._post("STU000999")
+        self.assertEqual(r.status_code, 404)
+        self.assertIn("classes or mentees", r.json()["detail"])
+        self.assertEqual(self.gen_persist.persist_calls, [])
 
     def test_admin_any_student_allowed(self):
         self.user = {"role": "Admin", "student_id": None}

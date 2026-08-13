@@ -4,3 +4,11 @@ asyncpg>=0.29.0
 pydantic>=2.6.1
 pydantic-settings>=2.2.1
 PyJWT>=2.8.0
+
+# ML runtime deps: the backend imports ml.src at module load time.
+# scikit-learn is pinned to 1.9.0 (the version the M1/M2/M3 artifacts
+# were pickled with) so predictions load without version warnings.
+pandas==2.3.3
+numpy==2.2.6
+joblib==1.5.3
+scikit-learn==1.9.0

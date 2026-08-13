@@ -1,0 +1,10 @@
+# ML runtime dependencies required to load and serve the M1/M2/M3
+# joblib artifacts and the M4 deterministic rule engine.
+#
+# The trained M1/M2/M3 artifacts were pickled with scikit-learn 1.9.0.
+# The runtime MUST stay pinned to 1.9.0 so predictions are reproducible
+# and the artifacts load without sklearn version-mismatch warnings.
+scikit-learn==1.9.0
+pandas==2.3.3
+numpy==2.2.6
+joblib==1.5.3
