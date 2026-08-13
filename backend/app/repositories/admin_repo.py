@@ -274,7 +274,7 @@ class AdminRepository:
         )
 
     async def get_filter_options(self) -> Dict[str, Any]:
-        """Available academic years / departments / semesters for the filters."""
+        """Available academic years / departments / semesters / career domains / dream roles for filters."""
         years = await self._fetch(
             "SELECT DISTINCT academic_year FROM student_semester_summary "
             "WHERE academic_year IS NOT NULL ORDER BY academic_year"
@@ -287,10 +287,20 @@ class AdminRepository:
             "SELECT DISTINCT semester_no FROM student_semester_summary "
             "WHERE semester_no IS NOT NULL ORDER BY semester_no"
         )
+        domains = await self._fetch(
+            "SELECT DISTINCT preferred_domain FROM career_preferences "
+            "WHERE preferred_domain IS NOT NULL AND preferred_domain != '' ORDER BY preferred_domain"
+        )
+        roles = await self._fetch(
+            "SELECT DISTINCT dream_job_role FROM career_preferences "
+            "WHERE dream_job_role IS NOT NULL AND dream_job_role != '' ORDER BY dream_job_role"
+        )
         return {
             "academic_years": [r["academic_year"] for r in years],
             "departments": departments,
             "semesters": [r["semester_no"] for r in semesters],
+            "preferred_domains": [r["preferred_domain"] for r in domains],
+            "dream_roles": [r["dream_job_role"] for r in roles],
         }
 
     # --- MD-03 Academic / Department / Subject intelligence ------------------
@@ -995,22 +1005,29 @@ class AdminRepository:
 
     async def get_admin_students(
         self,
-        department_code: Optional[int],
-        semester: Optional[int],
-        academic_year: Optional[str],
-        risk_upper: Optional[str],
-        search: Optional[str],
-        sort_by: str,
-        sort_dir: str,
-        limit: int,
-        offset: int,
+        department_code: Optional[int] = None,
+        semester: Optional[int] = None,
+        academic_year: Optional[str] = None,
+        risk_upper: Optional[str] = None,
+        search: Optional[str] = None,
+        preferred_domain: Optional[str] = None,
+        dream_job_role: Optional[str] = None,
+        internship_status: Optional[str] = None,
+        placement_readiness_level: Optional[str] = None,
+        career_status: Optional[str] = None,
+        target_package: Optional[str] = None,
+        sort_by: str = "name",
+        sort_dir: str = "asc",
+        limit: int = 100,
+        offset: int = 0,
     ) -> Dict[str, Any]:
-        """MD-05 read-only institution students listing.
+        """MD-05 / MD-06 read-only institution students listing with career filters.
 
-        Filters: department / semester / academic year / stored risk band.
-        Search: full name, enrollment number, email (ILIKE). Sorting uses a
-        strict column whitelist; risk sorts by canonical MD-04 severity.
-        Pagination via limit/offset.
+        Filters: department / semester / academic year / stored risk band /
+        preferred domain / dream role / internship status / placement readiness /
+        career status / target package range.
+        Search: full name, enrollment number, email, student ID, department name,
+        preferred domain, dream role (ILIKE).
         """
         direction = "DESC" if sort_dir == "desc" else "ASC"
         if sort_by == "risk":
@@ -1027,6 +1044,12 @@ class AdminRepository:
             search,
             limit,
             offset,
+            preferred_domain,
+            dream_job_role,
+            internship_status,
+            placement_readiness_level,
+            career_status,
+            target_package,
         )
 
         items_query = f"""
@@ -1115,7 +1138,23 @@ class AdminRepository:
               AND ($4::text IS NULL OR UPPER(sr.risk) = $4)
               AND ($5::text IS NULL OR s.full_name ILIKE '%' || $5 || '%'
                    OR CAST(s.enrollment_no AS text) ILIKE '%' || $5 || '%'
-                   OR s.email ILIKE '%' || $5 || '%')
+                   OR s.email ILIKE '%' || $5 || '%'
+                   OR s.student_id ILIKE '%' || $5 || '%'
+                   OR COALESCE(d.department_name, s.department_name) ILIKE '%' || $5 || '%'
+                   OR cp.preferred_domain ILIKE '%' || $5 || '%'
+                   OR cp.dream_job_role ILIKE '%' || $5 || '%')
+              AND ($8::text IS NULL OR cp.preferred_domain = $8)
+              AND ($9::text IS NULL OR cp.dream_job_role = $9)
+              AND ($10::text IS NULL OR cp.internship_completed = $10)
+              AND ($11::text IS NULL OR cp.placement_readiness_level = $11)
+              AND ($12::text IS NULL OR
+                   ($12 = 'At Risk' AND (s.academic_standing = 'At Risk' OR UPPER(sr.risk) IN ('HIGH', 'CRITICAL'))) OR
+                   ($12 = 'Ready' AND (s.academic_standing IS NULL OR s.academic_standing != 'At Risk')))
+              AND ($13::text IS NULL OR
+                   ($13 = 'below_5' AND cp.target_package_lpa < 5.0) OR
+                   ($13 = '5_7' AND cp.target_package_lpa >= 5.0 AND cp.target_package_lpa <= 7.0) OR
+                   ($13 = '7_10' AND cp.target_package_lpa > 7.0 AND cp.target_package_lpa <= 10.0) OR
+                   ($13 = 'above_10' AND cp.target_package_lpa > 10.0))
             ORDER BY {order_expr}, s.student_id ASC
             LIMIT $6::int OFFSET $7::int
         """
@@ -1123,6 +1162,7 @@ class AdminRepository:
         total_query = """
             SELECT COUNT(*) AS total
             FROM students s
+            LEFT JOIN departments d ON d.dept_code = s.department_code
             LEFT JOIN LATERAL (
                 SELECT r.prediction_status AS risk
                 FROM risk_predictions r
@@ -1130,13 +1170,41 @@ class AdminRepository:
                 ORDER BY r.prediction_timestamp DESC NULLS LAST
                 LIMIT 1
             ) sr ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT
+                    cp.preferred_domain,
+                    cp.dream_job_role,
+                    cp.internship_completed,
+                    cp.placement_readiness_level,
+                    cp.target_package_lpa
+                FROM career_preferences cp
+                WHERE cp.student_id = s.student_id
+                ORDER BY cp.survey_date DESC NULLS LAST
+                LIMIT 1
+            ) cp ON TRUE
             WHERE ($1::int IS NULL OR s.department_code = $1)
               AND ($2::int IS NULL OR s.current_semester = $2)
               AND ($3::text IS NULL OR s.current_academic_year = $3)
               AND ($4::text IS NULL OR UPPER(sr.risk) = $4)
               AND ($5::text IS NULL OR s.full_name ILIKE '%' || $5 || '%'
                    OR CAST(s.enrollment_no AS text) ILIKE '%' || $5 || '%'
-                   OR s.email ILIKE '%' || $5 || '%')
+                   OR s.email ILIKE '%' || $5 || '%'
+                   OR s.student_id ILIKE '%' || $5 || '%'
+                   OR COALESCE(d.department_name, s.department_name) ILIKE '%' || $5 || '%'
+                   OR cp.preferred_domain ILIKE '%' || $5 || '%'
+                   OR cp.dream_job_role ILIKE '%' || $5 || '%')
+              AND ($6::text IS NULL OR cp.preferred_domain = $6)
+              AND ($7::text IS NULL OR cp.dream_job_role = $7)
+              AND ($8::text IS NULL OR cp.internship_completed = $8)
+              AND ($9::text IS NULL OR cp.placement_readiness_level = $9)
+              AND ($10::text IS NULL OR
+                   ($10 = 'At Risk' AND (s.academic_standing = 'At Risk' OR UPPER(sr.risk) IN ('HIGH', 'CRITICAL'))) OR
+                   ($10 = 'Ready' AND (s.academic_standing IS NULL OR s.academic_standing != 'At Risk')))
+              AND ($11::text IS NULL OR
+                   ($11 = 'below_5' AND cp.target_package_lpa < 5.0) OR
+                   ($11 = '5_7' AND cp.target_package_lpa >= 5.0 AND cp.target_package_lpa <= 7.0) OR
+                   ($11 = '7_10' AND cp.target_package_lpa > 7.0 AND cp.target_package_lpa <= 10.0) OR
+                   ($11 = 'above_10' AND cp.target_package_lpa > 10.0))
         """
         total_args = (
             department_code,
@@ -1144,6 +1212,12 @@ class AdminRepository:
             academic_year,
             risk_upper.upper() if risk_upper else None,
             search,
+            preferred_domain,
+            dream_job_role,
+            internship_status,
+            placement_readiness_level,
+            career_status,
+            target_package,
         )
 
         items = await self._fetch(items_query, args)

@@ -13,6 +13,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -343,6 +344,55 @@ class TestUnsupportedModelType(unittest.TestCase):
     def test_unknown_model_id_raises_key_error(self):
         with self.assertRaises(KeyError):
             load_model("nonexistent_model")
+
+
+class TestArtifactLoadUnderPinnedRuntime(unittest.TestCase):
+    """Smoke test: M1/M2/M3 must load without sklearn version warnings.
+
+    The artifacts were pickled with scikit-learn 1.9.0. If the runtime
+    sklearn version drifts, joblib emits an ``InconsistentVersionWarning``
+    on load, which means predictions are no longer reproducible. This test
+    fails if any version-mismatch warning is raised while loading the
+    real artifacts (ml/requirements.txt pins scikit-learn==1.9.0).
+    """
+
+    def setUp(self):
+        clear_cache()
+
+    def _load_without_version_warnings(self, model_id):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            obj = load_model(model_id)
+        version_warnings = [
+            x for x in caught if "sklearn" in str(x.message).lower()
+            or "version" in str(x.message).lower()
+        ]
+        self.assertEqual(
+            version_warnings,
+            [],
+            f"sklearn version-mismatch warning(s) while loading {model_id}: "
+            f"{[str(x.message) for x in version_warnings]}",
+        )
+        return obj
+
+    def test_m1_loads_without_version_warning(self):
+        obj = self._load_without_version_warnings("m1")
+        self.assertIn("model", obj)
+        self.assertIn("feature_names", obj)
+
+    def test_m2_loads_without_version_warning(self):
+        obj = self._load_without_version_warnings("m2")
+        self.assertIn("next_semester_percentage", obj)
+        self.assertIn("next_semester_sgpa", obj)
+
+    def test_m3_loads_without_version_warning(self):
+        obj = self._load_without_version_warnings("m3")
+        self.assertTrue(hasattr(obj, "predict"))
+
+    def test_all_artifacts_reload_after_clear(self):
+        for model_id in ("m1", "m2", "m3"):
+            clear_cache()
+            self._load_without_version_warnings(model_id)
 
 
 if __name__ == "__main__":

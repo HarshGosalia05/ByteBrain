@@ -132,6 +132,7 @@ def _make_mock_pool(student_data: dict | None = None,
                 "academic_year": "2024-25",
                 "subjects_registered": 6,
                 "credits_registered": 22,
+                "semester_total_marks": 807.0,
                 "semester_percentage": 75.0,
                 "semester_grade": "A",
                 "semester_result": "PASS",
@@ -376,6 +377,38 @@ class TestDataFetchers:
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 1
         assert result["semester_no"].iloc[0] == 1
+
+    def test_fetch_semester_summary_populates_semester_total_marks(self):
+        """semester_total_marks must come from real DB data, never default 0.0.
+
+        Regression: StudentRepository.get_semester_summaries did not SELECT
+        semester_total_marks, so serving silently fed the trained model a
+        constant 0.0. This test fails if the value is missing, NaN, or 0.0
+        while the mock DB row provides it.
+        """
+        pool = _make_mock_pool()
+        result = asyncio.run(_fetch_student_semester_summary(pool, "STU000001"))
+        assert "semester_total_marks" in result.columns
+        value = result["semester_total_marks"].iloc[0]
+        assert not pd.isna(value), "semester_total_marks silently became NA"
+        assert value != 0.0, "semester_total_marks silently defaulted to 0.0"
+        assert value == 807.0
+
+    def test_fetch_semester_summary_maps_attendance_percentage(self):
+        """attendance_percentage must be mapped to semester_attendance_percentage.
+
+        Regression: the repo aliases semester_attendance_percentage AS
+        attendance_percentage, and the service never remapped it, so the M2/M3
+        feature was always NA (imputer median). This test fails if the mapped
+        value is missing, NaN, or 0.0 while the mock DB row provides it.
+        """
+        pool = _make_mock_pool()
+        result = asyncio.run(_fetch_student_semester_summary(pool, "STU000001"))
+        assert "semester_attendance_percentage" in result.columns
+        value = result["semester_attendance_percentage"].iloc[0]
+        assert not pd.isna(value), "semester_attendance_percentage silently became NA"
+        assert value != 0.0, "semester_attendance_percentage silently defaulted to 0.0"
+        assert value == 88.0
 
     def test_fetch_career_preferences_returns_dataframe(self):
         pool = _make_mock_pool()

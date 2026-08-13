@@ -27,6 +27,8 @@ export type DashboardFilterOptions = {
   academic_years: string[]
   departments: DepartmentOption[]
   semesters: number[]
+  preferred_domains?: string[]
+  dream_roles?: string[]
 }
 
 export type DepartmentPerformanceItem = {
@@ -80,6 +82,12 @@ export type AdminDashboardFilters = {
   department_code?: number | null
   academic_year?: string | null
   semester?: number | null
+  preferred_domain?: string | null
+  dream_job_role?: string | null
+  internship_status?: string | null
+  placement_readiness_level?: string | null
+  career_status?: string | null
+  target_package?: string | null
 }
 
 export type BffError = {
@@ -606,6 +614,12 @@ export function getAdminStudents(
       department_code: query.filters?.department_code,
       academic_year: query.filters?.academic_year,
       semester: query.filters?.semester,
+      preferred_domain: query.filters?.preferred_domain || undefined,
+      dream_job_role: query.filters?.dream_job_role || undefined,
+      internship_status: query.filters?.internship_status || undefined,
+      placement_readiness_level: query.filters?.placement_readiness_level || undefined,
+      career_status: query.filters?.career_status || undefined,
+      target_package: query.filters?.target_package || undefined,
       risk: query.risk || undefined,
       search: query.search || undefined,
       sort_by: query.sortBy || undefined,

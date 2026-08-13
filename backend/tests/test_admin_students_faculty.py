@@ -220,7 +220,7 @@ class AdminStudentsOverviewServiceTests(unittest.TestCase):
             self.assertIn("($4::text IS NULL OR UPPER(sr.risk) = $4)", q)
             self.assertIn("ILIKE '%' || $5 || '%'", q)
         # The risk band is forwarded uppercased so it matches stored bands.
-        item_args = [a for _, _, a in conn.executed if len(a) == 7][0]
+        item_args = [a for _, _, a in conn.executed if len(a) == 13][0]
         self.assertEqual(item_args[3], "HIGH")
 
     def test_students_risk_sort_uses_severity_case(self):
@@ -245,7 +245,7 @@ class AdminStudentsOverviewServiceTests(unittest.TestCase):
         run(service.get_admin_students(limit=50, offset=10))
         items = next(q for _, q, _ in conn.executed if "s.full_name AS student_name" in q)
         self.assertIn("LIMIT $6::int OFFSET $7::int", items)
-        args = [a for _, _, a in conn.executed if len(a) == 7][0]
+        args = [a for _, _, a in conn.executed if len(a) == 13][0]
         self.assertEqual(args[5], 50)
         self.assertEqual(args[6], 10)
 

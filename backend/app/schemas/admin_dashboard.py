@@ -67,6 +67,8 @@ class FilterOptions(BaseModel):
     academic_years: List[str] = []
     departments: List[dict] = []
     semesters: List[int] = []
+    preferred_domains: List[str] = []
+    dream_roles: List[str] = []
 
 
 class QuickInsight(BaseModel):

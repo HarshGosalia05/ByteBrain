@@ -274,7 +274,7 @@ class StudentReportCardServiceTests(unittest.TestCase):
     def test_report_card_generated_at_is_today(self):
         conn = self._conn()
         response = run(self._service(conn).get_report_card("STU-A"))
-        self.assertEqual(response.generated_at, date.today().isoformat())
+        self.assertEqual(response.generated_at, datetime.now(timezone.utc).date().isoformat())
 
 
 class ReportCardSchemaContractTests(unittest.TestCase):

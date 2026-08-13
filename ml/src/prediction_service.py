@@ -180,6 +180,12 @@ class PredictionService:
         """Predict next-semester SGPA and percentage for a student.
 
         Uses real data from the database via read-only repositories.
+
+        SEMANTICS: M2 predicts semester T+1 from the most recent COMPLETED
+        semester T in student_semester_summary (the models are trained on
+        semester-relative, ordered features). Consumers should present the
+        result as the prediction for the NEXT semester after the student's
+        latest completed semester, never as a value for a past semester.
         """
         # Check cache
         cache_key = self._cache_key("m2", student_id)
@@ -219,6 +225,12 @@ class PredictionService:
         """Predict next-semester at-risk/ATKT status for a student.
 
         Uses real data from the database via read-only repositories.
+
+        SEMANTICS: M3 predicts semester T+1 from the most recent COMPLETED
+        semester T in student_semester_summary (the models are trained on
+        semester-relative, ordered features). Consumers should present the
+        result as the prediction for the NEXT semester after the student's
+        latest completed semester, never as a value for a past semester.
         """
         # Check cache
         cache_key = self._cache_key("m3", student_id)
@@ -460,6 +472,11 @@ async def _fetch_student_semester_summary(pool: Any, student_id: str) -> pd.Data
         col_map["total_credits_earned"] = "credits_earned"
     if "active_backlogs" in df.columns and "backlog_count" not in df.columns:
         col_map["active_backlogs"] = "backlog_count"
+    # StudentRepository.get_semester_summaries aliases the DB column
+    # semester_attendance_percentage AS attendance_percentage; map it back
+    # so the M2/M3 feature is populated instead of defaulting to NA.
+    if "attendance_percentage" in df.columns and "semester_attendance_percentage" not in df.columns:
+        col_map["attendance_percentage"] = "semester_attendance_percentage"
 
     if col_map:
         df = df.rename(columns=col_map)
@@ -553,6 +570,11 @@ async def fetch_m1_raw_data(pool: Any, student_id: str) -> tuple:
 
     Returns (performance_df, attendance_df, subjects_df, students_df).
     Each DataFrame may be empty if no data found.
+
+    NOTE: test/utility helper only. attendance_df is intentionally empty here
+    because attendance is embedded in performance_df via the SQL JOIN; the
+    LIVE prediction path (predict_m1_for_student) fetches real attendance
+    through _fetch_student_attendance.
     """
     perf = await _fetch_student_performance(pool, student_id)
     # attendance is included in performance data via the SQL JOIN

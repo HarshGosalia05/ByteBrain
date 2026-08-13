@@ -397,6 +397,13 @@ class TestPrepareM1Inference(unittest.TestCase):
 class TestPrepareM2Inference(unittest.TestCase):
     """Verify M2 feature preparation pipeline."""
 
+    _M2_EXPECTED_COLS = [
+        "semester_no", "subjects_registered", "credits_registered", "credits_earned",
+        "semester_total_marks", "semester_percentage", "semester_sgpa",
+        "semester_attendance_percentage", "backlog_count",
+        "department_name_BBA", "department_name_CSE", "is_male",
+    ]
+
     def test_prepare_m2_returns_ndarray(self):
         X, raw_df = prepare_m2_inference(
             _make_summary_df(),
@@ -414,6 +421,39 @@ class TestPrepareM2Inference(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             prepare_m2_inference(bad_summary, _make_students_df())
         self.assertIn("missing", str(ctx.exception).lower())
+
+    def test_m2_alignment_has_exact_feature_order(self):
+        X, _ = prepare_m2_inference(_make_summary_df(), _make_students_df())
+        self.assertEqual(X.shape[1], len(self._M2_EXPECTED_COLS))
+        # numeric features must stay at their artifact-aligned indices
+        self.assertEqual(X[0, self._M2_EXPECTED_COLS.index("semester_no")], 1)
+        self.assertEqual(X[0, self._M2_EXPECTED_COLS.index("subjects_registered")], 6)
+        self.assertEqual(X[0, self._M2_EXPECTED_COLS.index("credits_earned")], 22)
+        # CSE student S1 -> department_name_CSE=1, BBA=0
+        self.assertEqual(X[0, self._M2_EXPECTED_COLS.index("department_name_CSE")], 1)
+        self.assertEqual(X[0, self._M2_EXPECTED_COLS.index("department_name_BBA")], 0)
+        # Male S1 -> is_male=1
+        self.assertEqual(X[0, self._M2_EXPECTED_COLS.index("is_male")], 1)
+
+    def test_m2_alignment_preserves_semester_total_marks(self):
+        X, _ = prepare_m2_inference(_make_summary_df(), _make_students_df())
+        col = self._M2_EXPECTED_COLS.index("semester_total_marks")
+        value = X[0, col]
+        self.assertEqual(value, 450.0)
+        self.assertFalse(np.isnan(value))
+
+    def test_m2_alignment_maps_attendance_percentage(self):
+        X, _ = prepare_m2_inference(_make_summary_df(), _make_students_df())
+        col = self._M2_EXPECTED_COLS.index("semester_attendance_percentage")
+        value = X[0, col]
+        self.assertEqual(value, 88.0)
+        self.assertFalse(np.isnan(value))
+
+    def test_m2_alignment_no_future_semester_information(self):
+        """Each row must describe only its own completed semester T, never T+1."""
+        X, raw_df = prepare_m2_inference(_make_summary_df(), _make_students_df())
+        self.assertEqual(list(raw_df["semester_no"]), [1, 2, 1])
+        self.assertNotIn("next_", " ".join(self._M2_EXPECTED_COLS))
 
 
 class TestPrepareM3Inference(unittest.TestCase):
