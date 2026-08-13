@@ -476,18 +476,23 @@ class TestAdminMLIntelligenceAuth(unittest.TestCase):
         from app.api.v1.predict import authorize_prediction_access
         from fastapi import HTTPException
 
-        # Admin user allowed
-        admin_user = {"role": "Admin", "id": "admin1"}
-        authorize_prediction_access(admin_user, "STU001")
+        # Faculty scope check stub: student is in the faculty's scope.
+        class _ScopeOkService:
+            async def assert_student_in_scope(self, faculty_id, student_id):
+                pass
 
-        # Faculty user allowed
-        faculty_user = {"role": "Faculty", "id": "fac1"}
-        authorize_prediction_access(faculty_user, "STU001")
+        # Admin user allowed (any student)
+        admin_user = {"role": "Admin", "id": "admin1"}
+        run(authorize_prediction_access(admin_user, "STU001"))
+
+        # Faculty user allowed (student within authorized scope)
+        faculty_user = {"role": "Faculty", "faculty_id": "fac1"}
+        run(authorize_prediction_access(faculty_user, "STU001", _ScopeOkService()))
 
         # Student accessing other student denied
         student_user = {"role": "Student", "student_id": "STU002"}
         with self.assertRaises(HTTPException) as ctx:
-            authorize_prediction_access(student_user, "STU001")
+            run(authorize_prediction_access(student_user, "STU001"))
         self.assertEqual(ctx.exception.status_code, 403)
 
 
