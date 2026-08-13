@@ -720,6 +720,22 @@ class FacultyService:
             ),
         )
 
+    async def assert_student_in_scope(self, faculty_id: str, student_id: str) -> None:
+        """Raise 404 unless ``student_id`` is reachable by ``faculty_id``.
+
+        Reuses the same scope rule as ``get_student_overview`` and
+        ``get_student_profile_view`` (a student the faculty teaches in a
+        class or mentors) so ML insights stay inside the existing Faculty
+        authorization scope.
+        """
+        await self._ensure_profile(faculty_id)
+        relationship = await self.repo.student_is_reachable(faculty_id, student_id)
+        if not relationship:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Student not found in your classes or mentees",
+            )
+
     async def get_student_overview(
         self,
         faculty_id: str,

@@ -509,3 +509,156 @@ test("getStudentHealthData aggregates five endpoints; cached reads skip refetch"
     "second call must serve cached reads and only refetch unread-count",
   )
 })
+
+// ---------------------------------------------------------------------------
+// ML insights (ML-09)
+// ---------------------------------------------------------------------------
+
+const ML_INSIGHTS_BODY = {
+  student_id: "STU-A",
+  generated_at: "2026-08-13T06:00:00+00:00",
+  models: {
+    m1: {
+      available: true,
+      prediction: {
+        model_id: "m1",
+        predictions: [
+          {
+            student_id: "STU-A",
+            subject_id: "SUB001",
+            semester_no: 3,
+            predicted_end_sem_marks: 55.5,
+            clipped: false,
+          },
+        ],
+        input_row_count: 1,
+        prediction_count: 1,
+      },
+      explanation: {
+        model_id: "m1",
+        prediction_type: "m1",
+        student_id: "STU-A",
+        explanation_kind: "grounded_rule_based",
+        model_metadata: {
+          model_id: "m1",
+          model_type: "supervised",
+          algorithm: "linear",
+          task: "regression",
+          target: "end_sem_marks",
+        },
+        model_version: "1",
+        not_supported: ["confidence", "probability", "feature_importance"],
+        rule_context: {},
+        explanations: [
+          {
+            prediction_type: "m1",
+            subject_id: "SUB001",
+            subject_name: "Data Structures",
+            semester_no: 3,
+            predicted_end_sem_marks: 55.5,
+            clipped: false,
+            projected_percentage: 70.0,
+            projected_band: "Average",
+            inputs: [{ name: "internal_marks", value: 14.5, present: true }],
+            factors: [
+              {
+                kind: "positive",
+                source: "business_rule",
+                detail: "Projected total percentage of 70.0% is in the documented 'Average' band.",
+              },
+            ],
+            interpretation: "M1 predicts end-semester marks of 55.5 for Data Structures.",
+          },
+        ],
+      },
+    },
+    m2: {
+      available: true,
+      prediction: {
+        model_id: "m2",
+        predictions: [],
+        input_row_count: 0,
+        prediction_count: 0,
+      },
+      explanation: { model_id: "m2", prediction_type: "m2", explanations: [] },
+    },
+    m3: {
+      available: false,
+      reason: "no_data",
+      message: "No data found for student STU-A",
+    },
+    m4: {
+      available: false,
+      reason: "error",
+      message: "This insight is temporarily unavailable.",
+    },
+  },
+}
+
+test("getStudentMlInsights fetches /predict/insights with own student id", async () => {
+  route("/predict/insights/STU-A", 200, ML_INSIGHTS_BODY)
+
+  const result = await studentApi.getStudentMlInsights()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.student_id, "STU-A")
+  assert.deepEqual(Object.keys(result.data.models), ["m1", "m2", "m3", "m4"])
+  assert.equal(result.data.models.m3.available, false)
+  if (result.data.models.m1.available) {
+    const prediction = result.data.models.m1.prediction
+    if (prediction.model_id === "m1") {
+      assert.equal(prediction.predictions[0].subject_id, "SUB001")
+    }
+  }
+
+  const hit = getCalls("/predict/insights")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/insights/STU-A")
+  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const headers = hit[0].init?.headers as Record<string, string>
+  assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
+})
+
+test("getStudentMlInsights url-encodes the student id", async () => {
+  activeSession = { ...DEFAULT_SESSION, student_id: "STU A/1" }
+  route("/predict/insights/STU%20A%2F1", 200, ML_INSIGHTS_BODY)
+
+  const result = await studentApi.getStudentMlInsights()
+  assert.equal(result.ok, true)
+
+  const hit = getCalls("/predict/insights")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/insights/STU%20A%2F1")
+})
+
+test("getStudentMlInsights auth gating (401 / 403 / 400) applies", async () => {
+  activeSession = null
+  const noSession = await studentApi.getStudentMlInsights()
+  assert.equal(noSession.ok, false)
+  if (!noSession.ok) assert.equal(noSession.error.status, 401)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Faculty" }
+  const wrongRole = await studentApi.getStudentMlInsights()
+  assert.equal(wrongRole.ok, false)
+  if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
+
+  activeSession = { ...DEFAULT_SESSION, student_id: null }
+  const unlinked = await studentApi.getStudentMlInsights()
+  assert.equal(unlinked.ok, false)
+  if (!unlinked.ok) assert.equal(unlinked.error.status, 400)
+})
+
+test("getStudentMlInsights maps 404 and is cached across reads", async () => {
+  route("/predict/insights/STU-A", 200, ML_INSIGHTS_BODY)
+  await studentApi.getStudentMlInsights()
+  await studentApi.getStudentMlInsights()
+  const gets = getCalls("/predict/insights").filter((c) => c.init?.method === undefined)
+  assert.equal(gets.length, 1, "second read must hit the cache")
+
+  routes.clear()
+  route("/predict/insights/STU-A", 404, { detail: "no records" })
+  await studentApi.invalidateBffKeys(DEFAULT_SESSION.student_id, [""])
+  const missing = await studentApi.getStudentMlInsights()
+  assert.equal(missing.ok, false)
+  if (!missing.ok) assert.equal(missing.error.code, "not_found")
+})

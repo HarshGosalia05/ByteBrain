@@ -1,6 +1,4 @@
-import { getSessionUser } from "./student-session.ts"
-
-export type { SessionUser } from "./student-session.ts"
+import { getSessionUser, type SessionUser } from "./student-session.ts"
 
 const FASTAPI_URL = (process.env.FASTAPI_URL ?? "http://localhost:8000").replace(/\/+$/, "")
 const BFF_TTL_MS = 60_000
@@ -300,14 +298,12 @@ function toBffError(status: number): BffError {
   }
 }
 
-async function callFastapi<T>(
-  path: string,
-  ttlMs: number,
-  options?: {
-    useCache?: boolean
-    query?: Record<string, string | number | null | undefined>
-  },
-): Promise<BffResult<T>> {
+type LinkedStudentUser = SessionUser & { student_id: string }
+
+async function requireStudentApiAccess(): Promise<
+  | { ok: true; user: LinkedStudentUser }
+  | { ok: false; error: BffError }
+> {
   const user = await getSessionUser()
   if (!user) {
     return {
@@ -339,21 +335,30 @@ async function callFastapi<T>(
       },
     }
   }
+  return { ok: true, user: user as LinkedStudentUser }
+}
 
-  const query = options?.query ?? {}
+function toQueryString(
+  query: Record<string, string | number | null | undefined>,
+): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
     if (value !== null && value !== undefined) {
       params.set(key, String(value))
     }
   }
-  const queryString = params.size > 0 ? `?${params.toString()}` : ""
-  const pathWithQuery = `${path}${queryString}`
-  const key = `${user.student_id}:${pathWithQuery}`
-  const useCache = options?.useCache !== false
+  return params.size > 0 ? `?${params.toString()}` : ""
+}
 
+async function fetchStudentApi<T>(
+  user: SessionUser,
+  url: string,
+  cacheKey: string,
+  ttlMs: number,
+  useCache: boolean,
+): Promise<BffResult<T>> {
   if (useCache) {
-    const hit = bffCache.get(key)
+    const hit = bffCache.get(cacheKey)
     if (hit && hit.expiresAt > Date.now()) {
       return Promise.resolve(hit.value as BffResult<T>)
     }
@@ -361,7 +366,7 @@ async function callFastapi<T>(
 
   try {
     const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
-    const res = await fetch(`${FASTAPI_URL}/api/v1/students/me/${pathWithQuery}`, {
+    const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
       signal: AbortSignal.timeout(10000),
@@ -376,7 +381,7 @@ async function callFastapi<T>(
       fetchedAt: new Date().toISOString(),
     }
     if (useCache) {
-      bffCache.set(key, { value: result, expiresAt: Date.now() + ttlMs })
+      bffCache.set(cacheKey, { value: result, expiresAt: Date.now() + ttlMs })
     }
     return result
   } catch {
@@ -389,6 +394,53 @@ async function callFastapi<T>(
       },
     }
   }
+}
+
+async function callFastapi<T>(
+  path: string,
+  ttlMs: number,
+  options?: {
+    useCache?: boolean
+    query?: Record<string, string | number | null | undefined>
+  },
+): Promise<BffResult<T>> {
+  const auth = await requireStudentApiAccess()
+  if (!auth.ok) return auth
+  const user = auth.user
+
+  const queryString = toQueryString(options?.query ?? {})
+  const pathWithQuery = `${path}${queryString}`
+  return fetchStudentApi<T>(
+    user,
+    `${FASTAPI_URL}/api/v1/students/me/${pathWithQuery}`,
+    `${user.student_id}:${pathWithQuery}`,
+    ttlMs,
+    options?.useCache !== false,
+  )
+}
+
+async function callApiV1<T>(
+  pathBuilder: (studentId: string) => string,
+  ttlMs: number,
+  options?: {
+    useCache?: boolean
+    query?: Record<string, string | number | null | undefined>
+  },
+): Promise<BffResult<T>> {
+  const auth = await requireStudentApiAccess()
+  if (!auth.ok) return auth
+  const user = auth.user
+
+  const path = pathBuilder(user.student_id)
+  const queryString = toQueryString(options?.query ?? {})
+  const pathWithQuery = `${path}${queryString}`
+  return fetchStudentApi<T>(
+    user,
+    `${FASTAPI_URL}/api/v1${pathWithQuery}`,
+    `${user.student_id}:${pathWithQuery}`,
+    ttlMs,
+    options?.useCache !== false,
+  )
 }
 
 export function getStudentProfile(): Promise<BffResult<StudentProfile>> {
@@ -412,6 +464,168 @@ export function getStudentPerformance(
 
 export function getStudentAnalytics(): Promise<BffResult<StudentAnalytics>> {
   return callFastapi<StudentAnalytics>("analytics", BFF_TTL_MS)
+}
+
+// ML-09 ML insights: M1-M4 predictions + ML-08 grounded explanations --------
+
+export type MlModelKey = "m1" | "m2" | "m3" | "m4"
+
+export type MlExplanationFactor = {
+  kind: "positive" | "concern"
+  source: "input" | "business_rule" | "model_metadata"
+  detail: string
+}
+
+export type MlExplanationInput = {
+  name: string
+  value: unknown
+  present: boolean
+}
+
+export type MlModelMetadata = {
+  model_id: string
+  model_type: string
+  algorithm: string
+  task: string
+  target: string
+}
+
+export type MlM1Prediction = {
+  student_id: string
+  subject_id: string
+  semester_no: number
+  predicted_end_sem_marks: number
+  clipped: boolean
+}
+
+export type MlM2Prediction = {
+  student_id: string
+  semester_no: number
+  predicted_next_semester_sgpa: number
+  predicted_next_semester_percentage: number
+}
+
+export type MlM3Prediction = {
+  student_id: string
+  semester_no: number
+  is_at_risk_next_sem: 0 | 1
+}
+
+export type MlM4Prediction = {
+  student_id: string
+  enrollment_no: string
+  full_name: string
+  department_name: string
+  current_semester: string | number
+  career_readiness_score: number
+  career_readiness_level: string
+  positive_factors: string
+  risk_factors: string
+}
+
+export type MlPredictionResult =
+  | {
+      model_id: "m1"
+      predictions: MlM1Prediction[]
+      input_row_count: number
+      prediction_count: number
+    }
+  | {
+      model_id: "m2"
+      predictions: MlM2Prediction[]
+      input_row_count: number
+      prediction_count: number
+    }
+  | {
+      model_id: "m3"
+      predictions: MlM3Prediction[]
+      input_row_count: number
+      prediction_count: number
+    }
+  | {
+      model_id: "m4"
+      predictions: MlM4Prediction[]
+      input_row_count: number
+      prediction_count: number
+    }
+
+export type MlM1Explanation = {
+  prediction_type: "m1"
+  subject_id: string
+  subject_name: string | null
+  semester_no: number
+  predicted_end_sem_marks: number
+  clipped: boolean
+  projected_percentage: number | null
+  projected_band: string | null
+  inputs: MlExplanationInput[]
+  factors: MlExplanationFactor[]
+  interpretation: string
+}
+
+export type MlM2Explanation = {
+  prediction_type: "m2"
+  semester_no: number
+  predicted_next_semester_sgpa: number
+  predicted_next_semester_percentage: number
+  current_percentage: number | null
+  projected_delta_percentage: number | null
+  inputs: MlExplanationInput[]
+  factors: MlExplanationFactor[]
+  interpretation: string
+}
+
+export type MlM3Explanation = {
+  prediction_type: "m3"
+  risk_scope: string
+  risk_label: 0 | 1
+  inputs: MlExplanationInput[]
+  factors: MlExplanationFactor[]
+  suggestions: string[]
+  interpretation: string
+}
+
+export type MlM4Explanation = {
+  prediction_type: "m4"
+  readiness_score: number
+  readiness_level: string
+  positive_factors: string[]
+  risk_factors: string[]
+  inputs: MlExplanationInput[]
+  interpretation: string
+}
+
+export type MlExplanationResult = {
+  model_id: MlModelKey
+  prediction_type: MlModelKey
+  student_id: string
+  explanation_kind: string
+  model_metadata: MlModelMetadata
+  model_version: string | null
+  not_supported: string[]
+  rule_context: Record<string, unknown>
+  explanations: unknown[]
+}
+
+export type MlModelInsight =
+  | {
+      available: true
+      prediction: MlPredictionResult
+      explanation: MlExplanationResult
+    }
+  | { available: false; reason: "no_data" | "error"; message: string }
+
+export type StudentMlInsights = {
+  student_id: string
+  generated_at: string
+  models: Record<MlModelKey, MlModelInsight>
+}
+
+export function getStudentMlInsights(): Promise<BffResult<StudentMlInsights>> {
+  return callApiV1<StudentMlInsights>(
+    (studentId) => `/predict/insights/${encodeURIComponent(studentId)}`,
+    BFF_TTL_MS,
+  )
 }
 
 export type DashboardData = {

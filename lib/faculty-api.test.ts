@@ -1,0 +1,372 @@
+import { test, mock, beforeEach } from "node:test"
+import assert from "node:assert/strict"
+
+import type { FacultyStudentMlInsights } from "./faculty-api.ts"
+
+// ---------------------------------------------------------------------------
+// Session mock. Registered BEFORE faculty-api is imported so that the real
+// student-session.ts (which imports next/headers, not resolvable in plain
+// Node) is never loaded.
+// ---------------------------------------------------------------------------
+
+let activeSession: unknown = null
+
+mock.module("./student-session.ts", {
+  namedExports: {
+    getSessionUser: async () => activeSession,
+  },
+})
+
+const facultyApi = await import("./faculty-api.ts")
+
+// ---------------------------------------------------------------------------
+// Fetch mock
+// ---------------------------------------------------------------------------
+
+const DEFAULT_SESSION = {
+  user_id: "u-1",
+  username: "fprof",
+  role: "Faculty",
+  department: "CSE",
+  faculty_id: "FAC-A",
+}
+
+type FetchCall = { url: string; init?: RequestInit }
+
+const calls: FetchCall[] = []
+const routes = new Map<string, { status?: number; body?: unknown }>()
+let defaultStatus = 200
+let defaultBody: unknown = {}
+
+function route(substring: string, status: number, body: unknown) {
+  routes.set(substring, { status, body })
+}
+
+function installFetchMock() {
+  globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
+    const urlString = String(url)
+    calls.push({ url: urlString, init })
+    const hit = [...routes.keys()].find((key) => urlString.includes(key))
+    const status = hit ? (routes.get(hit)!.status ?? defaultStatus) : defaultStatus
+    const body = hit ? routes.get(hit)!.body : defaultBody
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => body,
+    } as Response
+  }) as typeof fetch
+}
+
+beforeEach(() => {
+  activeSession = DEFAULT_SESSION
+  calls.length = 0
+  routes.clear()
+  defaultStatus = 200
+  defaultBody = {}
+  ;(globalThis as { bffCache?: Map<unknown, unknown> }).bffCache?.clear()
+  installFetchMock()
+})
+
+function getCalls(substring: string): FetchCall[] {
+  return calls.filter((c) => c.url.includes(substring))
+}
+
+const ML_INSIGHTS_BODY: FacultyStudentMlInsights = {
+  student_id: "STU-A",
+  generated_at: "2026-08-13T06:00:00+00:00",
+  models: {
+    m1: {
+      available: true,
+      prediction: {
+        model_id: "m1",
+        predictions: [
+          {
+            student_id: "STU-A",
+            subject_id: "SUB001",
+            semester_no: 3,
+            predicted_end_sem_marks: 55.5,
+            clipped: false,
+          },
+        ],
+        input_row_count: 1,
+        prediction_count: 1,
+      },
+      explanation: {
+        model_id: "m1",
+        prediction_type: "m1",
+        student_id: "STU-A",
+        explanation_kind: "grounded_rule_based",
+        model_metadata: {
+          model_id: "m1",
+          model_type: "supervised",
+          algorithm: "linear",
+          task: "regression",
+          target: "end_sem_marks",
+        },
+        model_version: "1",
+        not_supported: ["confidence", "probability", "feature_importance"],
+        rule_context: {},
+        explanations: [
+          {
+            prediction_type: "m1",
+            subject_id: "SUB001",
+            subject_name: null,
+            semester_no: 3,
+            predicted_end_sem_marks: 55.5,
+            clipped: false,
+            projected_percentage: null,
+            projected_band: null,
+            inputs: [{ name: "internal_marks", value: 14.5, present: true }],
+            factors: [],
+            interpretation: "M1 predicts end-semester marks of 55.5 for SUB001.",
+          },
+        ],
+      },
+    },
+    m2: {
+      available: true,
+      prediction: {
+        model_id: "m2",
+        predictions: [
+          {
+            student_id: "STU-A",
+            semester_no: 4,
+            predicted_next_semester_sgpa: 7.4,
+            predicted_next_semester_percentage: 66.5,
+          },
+        ],
+        input_row_count: 1,
+        prediction_count: 1,
+      },
+      explanation: {
+        model_id: "m2",
+        prediction_type: "m2",
+        student_id: "STU-A",
+        explanation_kind: "grounded_rule_based",
+        model_metadata: {
+          model_id: "m2",
+          model_type: "supervised",
+          algorithm: "linear",
+          task: "regression",
+          target: "sgpa",
+        },
+        model_version: "1",
+        not_supported: ["confidence", "probability", "feature_importance"],
+        rule_context: {},
+        explanations: [
+          {
+            prediction_type: "m2",
+            semester_no: 4,
+            predicted_next_semester_sgpa: 7.4,
+            predicted_next_semester_percentage: 66.5,
+            current_percentage: null,
+            projected_delta_percentage: null,
+            inputs: [],
+            factors: [],
+            interpretation: "M2 predicts a next-semester SGPA of 7.4.",
+          },
+        ],
+      },
+    },
+    m3: {
+      available: false,
+      reason: "no_data",
+      message: "No data found for student STU-A",
+    },
+    m4: {
+      available: true,
+      prediction: {
+        model_id: "m4",
+        predictions: [
+          {
+            student_id: "STU-A",
+            enrollment_no: "2023010001",
+            full_name: "Alice",
+            department_name: "Computer Science",
+            current_semester: 3,
+            career_readiness_score: 62.0,
+            career_readiness_level: "Medium",
+            positive_factors: "Strong academic standing",
+            risk_factors: "Low internship exposure",
+          },
+        ],
+        input_row_count: 1,
+        prediction_count: 1,
+      },
+      explanation: {
+        model_id: "m4",
+        prediction_type: "m4",
+        student_id: "STU-A",
+        explanation_kind: "grounded_rule_based",
+        model_metadata: {
+          model_id: "m4",
+          model_type: "deterministic",
+          algorithm: "rule_based",
+          task: "scoring",
+          target: "career_readiness",
+        },
+        model_version: "1",
+        not_supported: ["confidence", "probability", "feature_importance"],
+        rule_context: {},
+        explanations: [
+          {
+            prediction_type: "m4",
+            readiness_score: 62.0,
+            readiness_level: "Medium",
+            positive_factors: ["Strong academic standing"],
+            risk_factors: ["Low internship exposure"],
+            inputs: [],
+            interpretation: "M4 computes a rule-based career-readiness score of 62.0/100.",
+          },
+        ],
+      },
+    },
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getFacultyStudentMlInsights
+// ---------------------------------------------------------------------------
+
+test("getFacultyStudentMlInsights fetches the faculty insights endpoint with auth", async () => {
+  route("/students/STU-A/ml-insights", 200, ML_INSIGHTS_BODY)
+
+  const result = await facultyApi.getFacultyStudentMlInsights("STU-A")
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.student_id, "STU-A")
+  assert.deepEqual(Object.keys(result.data.models), ["m1", "m2", "m3", "m4"])
+  assert.equal(result.data.models.m3.available, false)
+  assert.equal(result.data.models.m3.reason, "no_data")
+
+  const hit = getCalls("/students/STU-A/ml-insights")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/faculty/students/STU-A/ml-insights")
+  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const headers = hit[0].init?.headers as Record<string, string>
+  assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
+})
+
+test("getFacultyStudentMlInsights preserves NULL fields (never coerced to zero)", async () => {
+  route("/students/STU-A/ml-insights", 200, ML_INSIGHTS_BODY)
+
+  const result = await facultyApi.getFacultyStudentMlInsights("STU-A")
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  const m1 = result.data.models.m1
+  const m2 = result.data.models.m2
+  assert.equal(m1.available, true)
+  if (m1.available) {
+    const explanations = m1.explanation.explanations as Array<{
+      projected_percentage: number | null
+      projected_band: string | null
+      subject_name: string | null
+    }>
+    assert.equal(explanations[0].projected_percentage, null)
+    assert.equal(explanations[0].projected_band, null)
+    assert.equal(explanations[0].subject_name, null)
+  }
+  assert.equal(m2.available, true)
+  if (m2.available) {
+    const explanations = m2.explanation.explanations as Array<{
+      current_percentage: number | null
+      projected_delta_percentage: number | null
+    }>
+    assert.equal(explanations[0].current_percentage, null)
+    assert.equal(explanations[0].projected_delta_percentage, null)
+  }
+})
+
+test("getFacultyStudentMlInsights URL-encodes the student id", async () => {
+  route("/ml-insights", 200, ML_INSIGHTS_BODY)
+
+  const result = await facultyApi.getFacultyStudentMlInsights("STU A/1")
+  assert.equal(result.ok, true)
+  const hit = getCalls("/ml-insights")
+  assert.equal(hit.length, 1)
+  assert.ok(hit[0].url.endsWith("/students/STU%20A%2F1/ml-insights"))
+})
+
+test("getFacultyStudentMlInsights caches per faculty+student within TTL", async () => {
+  route("/students/STU-A/ml-insights", 200, ML_INSIGHTS_BODY)
+
+  const first = await facultyApi.getFacultyStudentMlInsights("STU-A")
+  const second = await facultyApi.getFacultyStudentMlInsights("STU-A")
+  assert.equal(first.ok, true)
+  assert.equal(second.ok, true)
+  assert.equal(getCalls("/students/STU-A/ml-insights").length, 1)
+})
+
+test("getFacultyStudentMlInsights maps 404 to not_found", async () => {
+  route("/ml-insights", 404, { detail: "Student not found in your classes or mentees" })
+
+  const result = await facultyApi.getFacultyStudentMlInsights("STU-MISSING")
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.error.code, "not_found")
+})
+
+test("getFacultyStudentMlInsights requires a session", async () => {
+  activeSession = null
+
+  const result = await facultyApi.getFacultyStudentMlInsights("STU-A")
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.error.status, 401)
+  assert.equal(getCalls("/ml-insights").length, 0)
+})
+
+test("getFacultyStudentMlInsights rejects non-faculty roles", async () => {
+  activeSession = { ...DEFAULT_SESSION, role: "Student", student_id: "STU-A" }
+
+  const result = await facultyApi.getFacultyStudentMlInsights("STU-A")
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.error.status, 403)
+  assert.equal(getCalls("/ml-insights").length, 0)
+})
+
+test("getFacultyStudentMlInsights rejects accounts without a faculty link", async () => {
+  activeSession = { ...DEFAULT_SESSION, faculty_id: null }
+
+  const result = await facultyApi.getFacultyStudentMlInsights("STU-A")
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.error.status, 400)
+  assert.equal(result.error.code, "unlinked")
+  assert.equal(getCalls("/ml-insights").length, 0)
+})
+
+// ---------------------------------------------------------------------------
+// ML rendering helpers
+// ---------------------------------------------------------------------------
+
+test("facultyMlAvailableCount counts available models only", () => {
+  assert.equal(facultyApi.facultyMlAvailableCount(ML_INSIGHTS_BODY.models), 3)
+  assert.equal(
+    facultyApi.facultyMlAvailableCount({
+      m1: { available: false, reason: "no_data", message: "x" },
+      m2: { available: false, reason: "error", message: "x" },
+      m3: { available: false, reason: "no_data", message: "x" },
+      m4: { available: false, reason: "error", message: "x" },
+    }),
+    0,
+  )
+})
+
+test("facultyMlBandTone maps documented bands to tones", () => {
+  assert.equal(facultyApi.facultyMlBandTone("Top Performer"), "success")
+  assert.equal(facultyApi.facultyMlBandTone("Above Average"), "success")
+  assert.equal(facultyApi.facultyMlBandTone("Average"), "secondary")
+  assert.equal(facultyApi.facultyMlBandTone("Below Average"), "warning")
+  assert.equal(facultyApi.facultyMlBandTone("Unknown"), "destructive")
+  assert.equal(facultyApi.facultyMlBandTone(null), "destructive")
+  assert.equal(facultyApi.facultyMlBandTone(undefined), "destructive")
+})
+
+test("facultyMlReadinessTone maps readiness levels to tones", () => {
+  assert.equal(facultyApi.facultyMlReadinessTone("High"), "success")
+  assert.equal(facultyApi.facultyMlReadinessTone("high"), "success")
+  assert.equal(facultyApi.facultyMlReadinessTone("Medium"), "warning")
+  assert.equal(facultyApi.facultyMlReadinessTone("Low"), "destructive")
+})
