@@ -465,7 +465,26 @@ function cached<T>(
   })
 }
 
-function toBffError(status: number): BffError {
+function toBffError(status: number, customDetail?: string): BffError {
+  if (customDetail && typeof customDetail === "string" && customDetail.trim()) {
+    const code: BffErrorCode =
+      status >= 500
+        ? "server_error"
+        : status === 404
+          ? "not_found"
+          : status === 403 || status === 401
+            ? "unauthorized"
+            : status === 409
+              ? "conflict"
+              : status === 422
+                ? "invalid"
+                : "unavailable"
+    return {
+      status,
+      code,
+      message: customDetail.trim(),
+    }
+  }
   switch (status) {
     case 400:
       return {
@@ -571,7 +590,16 @@ async function callFastapi<T>(
           cache: "no-store",
         })
         if (!res.ok) {
-          return { ok: false, error: toBffError(res.status) }
+          let customDetail: string | undefined
+          try {
+            const errBody = await res.json()
+            if (typeof errBody?.detail === "string" && errBody.detail.trim()) {
+              customDetail = errBody.detail
+            } else if (typeof errBody?.message === "string" && errBody.message.trim()) {
+              customDetail = errBody.message
+            }
+          } catch {}
+          return { ok: false, error: toBffError(res.status, customDetail) }
         }
         const data = (await res.json()) as T
         return { ok: true, data, fetchedAt: new Date().toISOString() }
@@ -2700,7 +2728,16 @@ async function mutateFastapi<T>(
       cache: "no-store",
     })
     if (!res.ok) {
-      return { ok: false, error: toBffError(res.status) }
+      let customDetail: string | undefined
+      try {
+        const errBody = await res.json()
+        if (typeof errBody?.detail === "string" && errBody.detail.trim()) {
+          customDetail = errBody.detail
+        } else if (typeof errBody?.message === "string" && errBody.message.trim()) {
+          customDetail = errBody.message
+        }
+      } catch {}
+      return { ok: false, error: toBffError(res.status, customDetail) }
     }
     const data = (await res.json()) as T
     invalidateBffKeys(user.faculty_id, invalidatePrefixes)

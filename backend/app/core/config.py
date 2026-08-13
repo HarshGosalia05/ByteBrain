@@ -1,7 +1,17 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
 from typing import List
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_ROOT_DIR = Path(__file__).resolve().parents[3]
+_ENV_FILES = tuple(str(p) for p in [_ROOT_DIR / ".env.local", _ROOT_DIR / ".env"] if p.exists())
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILES,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
     PROJECT_NAME: str = "KenexAI KDAC-3 Backend"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
@@ -173,7 +183,7 @@ class Settings(BaseSettings):
     CAREER_ALIGNMENT_GOOD_MIN: float = 60.0
     CAREER_ALIGNMENT_DEVELOPING_MIN: float = 40.0
 
-    model_config = SettingsConfigDict(env_file="../.env.local", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILES, env_file_encoding="utf-8", extra="ignore")
 
     @property
     def database_url(self) -> str:
@@ -181,7 +191,7 @@ class Settings(BaseSettings):
         encoded_password = quote_plus(self.DB_PASSWORD)
         return f"postgresql://{self.DB_USER}:{encoded_password}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
-settings = Settings()
+settings = Settings(_env_file=_ENV_FILES)
 
 # --- Marks Entry band tables (plan 14 section 5.3) ---------------------------
 # Grade bands: (min_percentage, grade, grade_point), checked highest-first;

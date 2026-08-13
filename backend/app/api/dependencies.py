@@ -5,6 +5,8 @@ from app.core.security import get_current_user
 
 async def get_db_pool() -> asyncpg.Pool:
     if not db.pool:
+        await db.connect()
+    if not db.pool:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database connection pool is not initialized")
     return db.pool
 
