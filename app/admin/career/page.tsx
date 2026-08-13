@@ -19,12 +19,25 @@ export default async function AdminCareerPage(props: {
         ? dp
         : null
 
-  const ay = typeof searchParams.academic_year === "string" ? searchParams.academic_year : null
-  const semRaw = searchParams.semester
-  const semester = typeof semRaw === "string" && semRaw ? parseInt(semRaw, 10) || null : null
+  const preferred_domain = typeof searchParams.preferred_domain === "string" ? searchParams.preferred_domain : null
+  const dream_job_role = typeof searchParams.dream_job_role === "string" ? searchParams.dream_job_role : null
+  const internship_status = typeof searchParams.internship_status === "string" ? searchParams.internship_status : null
+  const placement_readiness_level = typeof searchParams.placement_readiness_level === "string" ? searchParams.placement_readiness_level : null
+  const career_status = typeof searchParams.career_status === "string" ? searchParams.career_status : null
+  const target_package = typeof searchParams.target_package === "string" ? searchParams.target_package : null
+  const search = typeof searchParams.search === "string" ? searchParams.search : null
 
   const res = await getAdminStudents({
-    filters: { department_code, academic_year: ay, semester },
+    filters: {
+      department_code,
+      preferred_domain,
+      dream_job_role,
+      internship_status,
+      placement_readiness_level,
+      career_status,
+      target_package,
+    },
+    search,
     limit: 100,
     offset: 0,
   })

@@ -187,8 +187,14 @@ async def get_admin_students(
         None, description="Filter students by risk band (Low, Moderate, High, Critical)"
     ),
     search: Optional[str] = Query(
-        None, max_length=100, description="Search students by name, enrollment or email"
+        None, max_length=100, description="Search students"
     ),
+    preferred_domain: Optional[str] = Query(None, description="Filter by preferred domain"),
+    dream_job_role: Optional[str] = Query(None, description="Filter by dream job role"),
+    internship_status: Optional[str] = Query(None, description="Filter by internship status (Yes/No)"),
+    placement_readiness_level: Optional[str] = Query(None, description="Filter by readiness level (High/Medium/Low)"),
+    career_status: Optional[str] = Query(None, description="Filter by career status (Ready/At Risk)"),
+    target_package: Optional[str] = Query(None, description="Filter by target package range (below_5, 5_7, 7_10, above_10)"),
     sort_by: str = Query(
         "name", description="Sort field: name, sgpa, percentage, attendance, backlogs, risk"
     ),
@@ -196,19 +202,19 @@ async def get_admin_students(
     limit: int = Query(100, ge=1, le=500, description="Page size"),
     offset: int = Query(0, ge=0, description="Page offset"),
 ):
-    """MD-05 Part A — read-only Admin Student Overview.
-
-    Institution-wide student table with department / semester / academic-year
-    / risk band filters, search (name, enrollment, email), whitelisted
-    sorting (risk sorts by canonical MD-04 severity) and pagination. All
-    figures come from real database columns; NULL academic values stay NULL.
-    """
+    """MD-05 Part A / MD-06 — read-only Admin Student Overview with career filters."""
     return await service.get_admin_students(
         department_code=department_code,
         academic_year=academic_year,
         semester=semester,
         risk=risk,
         search=search,
+        preferred_domain=preferred_domain,
+        dream_job_role=dream_job_role,
+        internship_status=internship_status,
+        placement_readiness_level=placement_readiness_level,
+        career_status=career_status,
+        target_package=target_package,
         sort_by=sort_by,
         sort_dir=sort_dir,
         limit=limit,

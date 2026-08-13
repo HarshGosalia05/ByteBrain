@@ -229,7 +229,7 @@ class AdminService:
         )
 
     async def _build_filter_options(self) -> FilterOptions:
-        """Shared department / academic-year / semester filter options."""
+        """Shared department / academic-year / semester / career domain / dream role filter options."""
         filter_data = await self.repo.get_filter_options()
         return FilterOptions(
             academic_years=filter_data.get("academic_years") or [],
@@ -242,6 +242,8 @@ class AdminService:
                 for r in filter_data.get("departments") or []
             ],
             semesters=filter_data.get("semesters") or [],
+            preferred_domains=filter_data.get("preferred_domains") or [],
+            dream_roles=filter_data.get("dream_roles") or [],
         )
 
     async def get_academic_overview(
@@ -1008,32 +1010,43 @@ class AdminService:
         semester: Optional[int] = None,
         risk: Optional[str] = None,
         search: Optional[str] = None,
+        preferred_domain: Optional[str] = None,
+        dream_job_role: Optional[str] = None,
+        internship_status: Optional[str] = None,
+        placement_readiness_level: Optional[str] = None,
+        career_status: Optional[str] = None,
+        target_package: Optional[str] = None,
         sort_by: str = "name",
         sort_dir: str = "asc",
         limit: int = 100,
         offset: int = 0,
     ) -> AdminStudentsResponse:
-        """MD-05 Part A — read-only Admin Student Overview.
+        """MD-05 Part A — read-only Admin Student Overview with career filters.
 
         Filters: department / academic year / semester / stored risk band /
-        search (name, enrollment, email). Sorting is whitelisted in the repo;
-        risk sorts by canonical MD-04 severity. NULL academic figures stay
-        NULL (never coerced to 0).
+        preferred domain / dream role / internship status / placement readiness /
+        career status / target package / search.
         """
         risk_upper = RISK_BAND_MAP.get((risk or "").upper()) if risk else None
         sort_by = sort_by if sort_by in {"name", "sgpa", "percentage", "attendance", "backlogs", "risk"} else "name"
         sort_dir = sort_dir if sort_dir in {"asc", "desc"} else "asc"
 
         data = await self.repo.get_admin_students(
-            department_code,
-            semester,
-            academic_year,
-            risk_upper,
-            search,
-            sort_by,
-            sort_dir,
-            limit,
-            offset,
+            department_code=department_code,
+            semester=semester,
+            academic_year=academic_year,
+            risk_upper=risk_upper,
+            search=search,
+            preferred_domain=preferred_domain,
+            dream_job_role=dream_job_role,
+            internship_status=internship_status,
+            placement_readiness_level=placement_readiness_level,
+            career_status=career_status,
+            target_package=target_package,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            limit=limit,
+            offset=offset,
         )
         students = [
             AdminStudentRow(
