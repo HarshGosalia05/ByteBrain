@@ -637,6 +637,14 @@ class StudentService:
             pct = ctx["profile"].get("overall_attendance_percentage")
         return pct
 
+    async def get_career_preferences(self, student_id: str) -> Optional[dict]:
+        """Most recent self-declared career survey response, if any.
+
+        Survey values are DECLARED preferences (never objective outcomes).
+        Read-only, student-scoped; ``None`` means no survey exists yet.
+        """
+        return await self.repo.get_career_preferences(student_id)
+
     async def get_career_readiness(self, student_id: str) -> CareerReadinessResponse:
         ctx = await self._career_context(student_id)
         if not ctx:
