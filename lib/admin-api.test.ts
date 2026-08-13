@@ -301,3 +301,134 @@ test("getExecutiveSummary fetches grounded insights contract", async () => {
   assert.equal(getCalls("executive-summary")[0].url, `${baseUrl}/executive-summary`)
 })
 
+test("getAdminMLIntelligence fetches ML intelligence bundle", async () => {
+  const body = {
+    overview: {
+      total_students: 80,
+      students_with_predictions: 40,
+      coverage_percentage: 50.0,
+      total_predictions: 160,
+      models_status: { m1: "active", m2: "active", m3: "active", m4: "active" },
+    },
+    future_risk: {
+      future_at_risk_count: 5,
+      future_at_risk_percentage: 12.5,
+      future_low_risk_count: 35,
+      current_deterministic_high_critical_count: 8,
+      future_risk_by_department: [],
+      future_risk_by_semester: [],
+      disclaimer: "M3 is a machine learning future-risk prediction model forecasting next-semester risk.",
+    },
+    academic_predictions: {
+      m1: {
+        total_subject_predictions: 50,
+        predicted_avg_subject_mark: 45.2,
+        department_subject_performance: [],
+        subjects_needing_attention: [],
+      },
+      m2: {
+        predicted_avg_next_sgpa: 7.5,
+        predicted_avg_next_percentage: 72.0,
+        sgpa_distribution: [],
+        percentage_distribution: [],
+        department_performance_distribution: [],
+        disclaimer: "M2 forecasts next-semester SGPA and percentage.",
+      },
+    },
+    career_readiness: {
+      avg_career_readiness_score: 78.5,
+      readiness_level_counts: { High: 20, Medium: 15, Low: 5 },
+      department_readiness_distribution: [],
+      top_positive_factors: [],
+      top_risk_factors: [],
+      disclaimer: "M4 is a deterministic rule-based scoring engine.",
+    },
+    executive_insights: [
+      {
+        category: "Future Risk Intelligence",
+        title: "Future Risk Forecast",
+        detail: "M3 ML model forecasts 5 students at future risk.",
+        priority: "high",
+      },
+    ],
+    filter_options: {
+      departments: [
+        { department_code: 1, department_name: "Computer Science and Engineering", student_count: 50 },
+        { department_code: 2, department_name: "Bachelor of Business Administration", student_count: 30 },
+      ],
+      semesters: [
+        { semester_no: 5, student_count: 30 },
+        { semester_no: 7, student_count: 50 },
+      ],
+    },
+    generated_at: "2026-08-13T10:00:00Z",
+  }
+
+  route("ml-intelligence?department_code=1", 200, body)
+
+  const result = await adminApi.getAdminMLIntelligence({ department_code: 1 })
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.overview.total_students, 80)
+  assert.equal(result.data.future_risk.future_at_risk_count, 5)
+  assert.equal(result.data.executive_insights.length, 1)
+  assert.equal(result.data.filter_options.departments.length, 2)
+  assert.deepEqual(
+    result.data.filter_options.semesters.map((s) => s.semester_no),
+    [5, 7],
+  )
+  assert.equal(getCalls("ml-intelligence")[0].url, `${baseUrl}/ml-intelligence?department_code=1`)
+})
+
+// ---------------------------------------------------------------------------
+// ML-12 §12.5 getAdminMlFeedbackHealth
+// ---------------------------------------------------------------------------
+
+const ML_FEEDBACK_HEALTH_BODY = {
+  total: 5,
+  confirmed: 3,
+  dismissed: 2,
+  pending: 7,
+  by_action: [
+    { action: "confirmed", count: 3 },
+    { action: "dismissed", count: 2 },
+  ],
+  by_department: [
+    {
+      department_code: 1,
+      department_name: "Computer Science and Engineering",
+      reviewed: 5,
+      confirmed: 3,
+      dismissed: 2,
+    },
+  ],
+  by_semester: [
+    { semester_no: 5, reviewed: 5, confirmed: 3, dismissed: 2 },
+  ],
+  disclaimer: "Faculty reviews are estimates gathered for model improvement only.",
+}
+
+test("getAdminMlFeedbackHealth fetches the admin feedback endpoint", async () => {
+  route("ml-feedback", 200, ML_FEEDBACK_HEALTH_BODY)
+
+  const result = await adminApi.getAdminMlFeedbackHealth()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.total, 5)
+  assert.equal(result.data.confirmed, 3)
+  assert.equal(result.data.dismissed, 2)
+  assert.equal(result.data.pending, 7)
+  assert.equal(result.data.by_action.length, 2)
+  assert.equal(result.data.by_department[0].department_name, "Computer Science and Engineering")
+  assert.equal(getCalls("ml-feedback")[0].url, `${baseUrl}/ml-feedback`)
+})
+
+test("getAdminMlFeedbackHealth requires an admin session", async () => {
+  activeSession = null
+  const result = await adminApi.getAdminMlFeedbackHealth()
+  assert.equal(result.ok, false)
+  assert.equal(result.ok ? "" : result.error.status, 401)
+  assert.equal(calls.length, 0)
+})
+
+

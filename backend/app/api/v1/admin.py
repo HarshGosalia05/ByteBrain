@@ -256,3 +256,54 @@ async def get_executive_summary(
 ):
     """MD-07 Grounded Executive Academic Summary & Insights."""
     return await service.get_executive_summary()
+
+
+from app.schemas.admin_ml_intelligence import AdminMlIntelligenceResponse
+from app.services.admin_ml_service import AdminMLService
+from app.schemas.prediction_feedback import AdminMlFeedbackHealth
+from app.services.prediction_feedback_service import PredictionFeedbackService
+
+
+def get_admin_ml_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> AdminMLService:
+    return AdminMLService(pool)
+
+
+def get_feedback_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> PredictionFeedbackService:
+    return PredictionFeedbackService(pool, faculty_service=None)
+
+
+@router.get("/ml-intelligence", response_model=AdminMlIntelligenceResponse)
+async def get_admin_ml_intelligence(
+    user: dict = Depends(require_admin_role),
+    service: AdminMLService = Depends(get_admin_ml_service),
+    department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
+    academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
+    semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
+):
+    """MD-08 / ML-11 Admin ML Intelligence.
+
+    Composes M1-M4 predictions into institution-level intelligence,
+    distributions, and grounded administrative decision-support insights.
+    M3 Future Risk is kept strictly separate from the current deterministic
+    Risk Register.
+    """
+    return await service.get_admin_ml_intelligence(
+        department_code=department_code,
+        academic_year=academic_year,
+        semester=semester,
+    )
+
+
+@router.get("/ml-feedback", response_model=AdminMlFeedbackHealth)
+async def get_ml_feedback_health(
+    user: dict = Depends(require_admin_role),
+    service: PredictionFeedbackService = Depends(get_feedback_service),
+):
+    """ML-12 §12.5 Admin health indicator: faculty feedback volume.
+
+    Counts follow "latest verdict wins" semantics and are derived only
+    from the append-only ``prediction_feedback`` rows plus the latest
+    per-student M3 predictions; the original predictions are never
+    modified.
+    """
+    return await service.get_admin_feedback_health()

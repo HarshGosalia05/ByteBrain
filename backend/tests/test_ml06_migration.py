@@ -31,7 +31,9 @@ class TestMigrationFile(unittest.TestCase):
         numbered = sorted(
             p for p in MIGRATIONS_DIR.glob("[0-9]*.sql")
         )
-        self.assertEqual(numbered[-1].name, "21_ml_predictions.sql")
+        # ML-12 adds 22_prediction_feedback.sql after the ML-06 migration.
+        self.assertIn("22_prediction_feedback.sql", [p.name for p in numbered])
+        self.assertEqual(numbered[-1].name, "22_prediction_feedback.sql")
 
     def test_creates_dedicated_table(self):
         self.assertIn("CREATE TABLE IF NOT EXISTS ml_predictions", self.sql)

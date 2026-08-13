@@ -7,6 +7,7 @@ from app.api.dependencies import get_db_pool, require_faculty_role
 from app.core.config import settings
 from app.services.faculty_service import FacultyService
 from app.services.prediction_insights_service import PredictionInsightsService
+from app.services.prediction_feedback_service import PredictionFeedbackService
 from app.services.settings_service import SettingsService, PreferenceValidationError
 from app.schemas.faculty import (
     FacultyProfile,
@@ -72,6 +73,12 @@ from app.schemas.settings import (
     SettingsBackupResponse,
     SettingsImportRequest,
 )
+from app.schemas.prediction_feedback import (
+    PredictionFeedbackCreate,
+    PredictionFeedbackDetail,
+    PredictionFeedbackItem,
+    StudentFeedbackContext,
+)
 
 router = APIRouter()
 
@@ -80,6 +87,9 @@ def get_faculty_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> FacultySer
 
 def get_insights_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> PredictionInsightsService:
     return PredictionInsightsService(pool)
+
+def get_feedback_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> PredictionFeedbackService:
+    return PredictionFeedbackService(pool, faculty_service=FacultyService(pool))
 
 def _faculty_id_or_error(user: dict) -> str:
     faculty_id = user.get("faculty_id")
@@ -322,6 +332,59 @@ async def get_student_ml_insights(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Insights failed: {str(e)}",
         )
+
+@router.post(
+    "/predictions/{prediction_id}/feedback",
+    response_model=PredictionFeedbackItem,
+)
+async def submit_prediction_feedback(
+    prediction_id: str,
+    payload: PredictionFeedbackCreate,
+    user: dict = Depends(require_faculty_role),
+    service: PredictionFeedbackService = Depends(get_feedback_service),
+):
+    """ML-12: record a faculty review of an M3 future-risk prediction.
+
+    Append-only: the judged ``ml_predictions`` row is never modified.
+    The student must be in this faculty's classes or mentees; the
+    judged prediction must be an ``m3`` row.
+    """
+    return await service.submit_feedback(
+        faculty_id=_faculty_id_or_error(user),
+        prediction_id=prediction_id,
+        feedback_action=payload.action,
+        note=payload.note,
+    )
+
+@router.get(
+    "/predictions/{prediction_id}/feedback",
+    response_model=PredictionFeedbackDetail,
+)
+async def get_prediction_feedback(
+    prediction_id: str,
+    user: dict = Depends(require_faculty_role),
+    service: PredictionFeedbackService = Depends(get_feedback_service),
+):
+    """ML-12: history and latest verdict for one judged M3 prediction."""
+    return await service.get_prediction_feedback(
+        faculty_id=_faculty_id_or_error(user),
+        prediction_id=prediction_id,
+    )
+
+@router.get(
+    "/students/{student_id}/feedback",
+    response_model=StudentFeedbackContext,
+)
+async def get_student_feedback_context(
+    student_id: str,
+    user: dict = Depends(require_faculty_role),
+    service: PredictionFeedbackService = Depends(get_feedback_service),
+):
+    """ML-12: faculty review context for a student's latest M3 prediction."""
+    return await service.get_student_feedback_context(
+        faculty_id=_faculty_id_or_error(user),
+        student_id=student_id,
+    )
 
 @router.get("/subjects", response_model=FacultySubjectsResponse)
 async def get_my_subjects(

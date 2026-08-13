@@ -370,3 +370,141 @@ test("facultyMlReadinessTone maps readiness levels to tones", () => {
   assert.equal(facultyApi.facultyMlReadinessTone("Medium"), "warning")
   assert.equal(facultyApi.facultyMlReadinessTone("Low"), "destructive")
 })
+
+// ---------------------------------------------------------------------------
+// ML-12 Faculty Feedback Loop — BFF layer
+// ---------------------------------------------------------------------------
+
+const FEEDBACK_CONTEXT_BODY = {
+  student_id: "STU-A",
+  latest_m3_prediction: {
+    prediction_id: "pred-1",
+    model_version: "3.2.1",
+    generated_at: "2026-08-13T06:00:00+00:00",
+    is_at_risk_next_sem: 1,
+    risk_probability: 0.82,
+  },
+  current_verdict: null,
+  feedback_history: [],
+}
+
+test("getStudentPredictionFeedbackContext fetches the feedback endpoint with auth", async () => {
+  route("/students/STU-A/feedback", 200, FEEDBACK_CONTEXT_BODY)
+
+  const result = await facultyApi.getStudentPredictionFeedbackContext("STU-A")
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.student_id, "STU-A")
+  assert.equal(result.data.latest_m3_prediction?.prediction_id, "pred-1")
+  assert.equal(result.data.latest_m3_prediction?.is_at_risk_next_sem, 1)
+  assert.equal(result.data.current_verdict, null)
+
+  const hit = getCalls("/students/STU-A/feedback")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/faculty/students/STU-A/feedback")
+})
+
+test("getStudentPredictionFeedbackContext URL-encodes the student id", async () => {
+  route("/students/STU%20A%2F1/feedback", 200, FEEDBACK_CONTEXT_BODY)
+
+  const result = await facultyApi.getStudentPredictionFeedbackContext("STU A/1")
+  assert.equal(result.ok, true)
+  const hit = getCalls("/feedback")
+  assert.equal(hit.length, 1)
+  assert.ok(hit[0].url.endsWith("/students/STU%20A%2F1/feedback"))
+})
+
+test("getPredictionFeedback maps 404 to not_found", async () => {
+  route("/predictions/pred-missing/feedback", 404, { detail: "Prediction not found" })
+
+  const result = await facultyApi.getPredictionFeedback("pred-missing")
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.error.code, "not_found")
+})
+
+test("submitPredictionFeedback POSTs the review body with auth", async () => {
+  route("/predictions/pred-1/feedback", 200, {
+    feedback_id: "fb-1",
+    prediction_id: "pred-1",
+    student_id: "STU-A",
+    faculty_id: "FAC-A",
+    feedback_action: "confirmed",
+    note: "solid prediction",
+    model_version: "3.2.1",
+    feedback_timestamp: "2026-08-13T06:00:00+00:00",
+  })
+
+  const result = await facultyApi.submitPredictionFeedback(
+    "pred-1",
+    { action: "confirmed", note: "solid prediction" },
+    "STU-A",
+  )
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.feedback_action, "confirmed")
+
+  const hit = getCalls("/predictions/pred-1/feedback")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].init?.method, "POST")
+  const body = JSON.parse(String(hit[0].init?.body))
+  assert.deepEqual(body, { action: "confirmed", note: "solid prediction" })
+  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const headers = hit[0].init?.headers as Record<string, string>
+  assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
+})
+
+test("submitPredictionFeedback sends null note (never an empty string)", async () => {
+  route("/predictions/pred-1/feedback", 200, { feedback_id: "fb-2" })
+
+  const result = await facultyApi.submitPredictionFeedback(
+    "pred-1",
+    { action: "dismissed", note: "" },
+    "STU-A",
+  )
+  assert.equal(result.ok, true)
+  const hit = getCalls("/feedback")
+  const body = JSON.parse(String(hit[0].init?.body))
+  assert.equal(body.action, "dismissed")
+  assert.equal(body.note, null)
+})
+
+test("submitPredictionFeedback invalidates the cached feedback context", async () => {
+  route("/students/STU-A/feedback", 200, FEEDBACK_CONTEXT_BODY)
+  route("/predictions/pred-1/feedback", 200, { feedback_id: "fb-3" })
+
+  // Prime the feedback-context cache.
+  const first = await facultyApi.getStudentPredictionFeedbackContext("STU-A")
+  assert.equal(first.ok, true)
+  assert.equal(getCalls("/students/STU-A/feedback").length, 1)
+
+  // Submit a review -> must invalidate that context cache.
+  const submit = await facultyApi.submitPredictionFeedback(
+    "pred-1",
+    { action: "confirmed" },
+    "STU-A",
+  )
+  assert.equal(submit.ok, true)
+
+  const second = await facultyApi.getStudentPredictionFeedbackContext("STU-A")
+  assert.equal(second.ok, true)
+  assert.equal(
+    getCalls("/students/STU-A/feedback").length,
+    2,
+    "feedback context must be re-fetched after a submit",
+  )
+})
+
+test("submitPredictionFeedback requires a session", async () => {
+  activeSession = null
+
+  const result = await facultyApi.submitPredictionFeedback(
+    "pred-1",
+    { action: "confirmed" },
+    "STU-A",
+  )
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.error.status, 401)
+  assert.equal(getCalls("/feedback").length, 0)
+})

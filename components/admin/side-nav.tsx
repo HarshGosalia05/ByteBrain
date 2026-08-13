@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Bell,
   BookOpen,
+  Brain,
   Building2,
   CalendarCheck,
   LayoutDashboard,
@@ -123,6 +124,7 @@ export function SideNav() {
       <div className="flex flex-col gap-1">
         <NavLink href="/admin/attendance" icon={CalendarCheck} label="Attendance" />
         <NavLink href="/admin/risk" icon={AlertTriangle} label="Risk & Early Warning" />
+        <NavLink href="/admin/ml-intelligence" icon={Brain} label="ML Intelligence" />
         <NavLink href="/admin/students" icon={Users} label="Students" />
         <NavLink href="/admin/faculty" icon={UserCog} label="Faculty" />
         <NavLink href="/admin/career" icon={Rocket} label="Career Readiness" />

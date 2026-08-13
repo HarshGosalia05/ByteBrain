@@ -12,6 +12,7 @@ import type {
 } from "@/lib/faculty-api"
 
 import { InsightUnavailable } from "./insight-unavailable"
+import { M3FacultyReview } from "./m3-faculty-review"
 
 type M3Prediction = Extract<FacultyMlPredictionResult, { model_id: "m3" }>
 
@@ -103,7 +104,13 @@ function M3Body({
   )
 }
 
-export function M3InsightsCard({ model }: { model: FacultyMlModelInsight }) {
+export function M3InsightsCard({
+  model,
+  studentId,
+}: {
+  model: FacultyMlModelInsight
+  studentId: string
+}) {
   return (
     <ModelCard
       id="faculty-ml-insights-m3"
@@ -115,10 +122,13 @@ export function M3InsightsCard({ model }: { model: FacultyMlModelInsight }) {
       {!model.available ? (
         <InsightUnavailable model={model} />
       ) : (
-        <M3Body
-          prediction={model.prediction as M3Prediction}
-          explanation={model.explanation}
-        />
+        <div className="flex flex-col gap-4">
+          <M3Body
+            prediction={model.prediction as M3Prediction}
+            explanation={model.explanation}
+          />
+          <M3FacultyReview studentId={studentId} />
+        </div>
       )}
     </ModelCard>
   )

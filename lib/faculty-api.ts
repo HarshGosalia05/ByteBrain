@@ -819,6 +819,83 @@ export type FacultyStudentMlInsights = {
   models: Record<FacultyMlModelKey, FacultyMlModelInsight>
 }
 
+// =============================================================================
+// ML-12 Faculty Feedback Loop — BFF layer
+// =============================================================================
+
+export type FacultyFeedbackAction = "confirmed" | "dismissed"
+
+export type FacultyFeedbackItem = {
+  feedback_id: string
+  prediction_id: string
+  student_id: string
+  faculty_id: string
+  feedback_action: FacultyFeedbackAction
+  note: string | null
+  model_version: string | null
+  feedback_timestamp: string
+}
+
+export type FacultyLatestM3Prediction = {
+  prediction_id: string
+  model_version: string | null
+  generated_at: string
+  is_at_risk_next_sem: 0 | 1
+  risk_probability: number | null
+}
+
+export type FacultyStudentFeedbackContext = {
+  student_id: string
+  latest_m3_prediction: FacultyLatestM3Prediction | null
+  current_verdict: FacultyFeedbackItem | null
+  feedback_history: FacultyFeedbackItem[]
+}
+
+export type FacultyPredictionFeedbackDetail = {
+  prediction_id: string
+  student_id: string
+  prediction_type: string
+  current_verdict: FacultyFeedbackItem | null
+  feedback_history: FacultyFeedbackItem[]
+}
+
+export function getStudentPredictionFeedbackContext(
+  studentId: string
+): Promise<BffResult<FacultyStudentFeedbackContext>> {
+  return callFastapi<FacultyStudentFeedbackContext>(
+    `students/${encodeURIComponent(studentId)}/feedback`,
+    BFF_TTL_MS,
+  )
+}
+
+export function getPredictionFeedback(
+  predictionId: string
+): Promise<BffResult<FacultyPredictionFeedbackDetail>> {
+  return callFastapi<FacultyPredictionFeedbackDetail>(
+    `predictions/${encodeURIComponent(predictionId)}/feedback`,
+    BFF_TTL_MS,
+  )
+}
+
+export function submitPredictionFeedback(
+  predictionId: string,
+  payload: { action: FacultyFeedbackAction; note?: string | null },
+  studentId: string,
+): Promise<BffResult<FacultyFeedbackItem>> {
+  return mutateFastapi<FacultyFeedbackItem>(
+    `predictions/${encodeURIComponent(predictionId)}/feedback`,
+    "POST",
+    {
+      action: payload.action,
+      // Missing or blank notes are sent as NULL (never an empty string), matching
+      // the ML-12 contract that absent context stays absent.
+      note:
+        typeof payload.note === "string" && payload.note.trim() ? payload.note : null,
+    },
+    [`students/${encodeURIComponent(studentId)}/feedback`],
+  )
+}
+
 export function getFacultyStudentMlInsights(
   studentId: string
 ): Promise<BffResult<FacultyStudentMlInsights>> {

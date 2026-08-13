@@ -56,7 +56,7 @@ export default async function FacultyStudentMlInsightsPage(props: {
         description={`${description} — predictions with the reasoning behind them and grounded next steps.`}
         fetchedAt={insights.ok ? insights.fetchedAt : null}
       />
-      <FacultyMlInsightsGrid data={insights.data} />
+      <FacultyMlInsightsGrid data={insights.data} studentId={studentId} />
     </div>
   )
 }

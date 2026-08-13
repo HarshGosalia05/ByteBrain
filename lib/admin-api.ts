@@ -746,3 +746,195 @@ export function getExecutiveSummary(): Promise<BffResult<ExecutiveSummaryData>> 
   return callFastapi<ExecutiveSummaryData>("executive-summary", BFF_TTL_MS)
 }
 
+// ---------------------------------------------------------------------------
+// ML-11 — Admin ML Intelligence
+// ---------------------------------------------------------------------------
+
+export type MlOverviewKpis = {
+  total_students: number
+  students_with_predictions: number
+  coverage_percentage: number | null
+  total_predictions: number
+  models_status: Record<string, string>
+}
+
+export type FutureRiskDepartmentItem = {
+  department_code: number
+  department_name: string
+  future_risk_count: number
+  total_students: number
+  risk_percentage: number | null
+}
+
+export type FutureRiskSemesterItem = {
+  semester_no: number
+  future_risk_count: number
+  total_students: number
+  risk_percentage: number | null
+}
+
+export type FutureRiskIntelligence = {
+  future_at_risk_count: number
+  future_at_risk_percentage: number | null
+  future_low_risk_count: number
+  current_deterministic_high_critical_count: number
+  future_risk_by_department: FutureRiskDepartmentItem[]
+  future_risk_by_semester: FutureRiskSemesterItem[]
+  disclaimer: string
+}
+
+export type SubjectPerformanceItem = {
+  subject_code: string
+  subject_name: string
+  department_name: string
+  predicted_avg_mark: number
+  students_count: number
+}
+
+export type DepartmentSubjectPerformanceItem = {
+  department_code: number
+  department_name: string
+  predicted_avg_mark: number | null
+}
+
+export type M1SubjectIntelligence = {
+  total_subject_predictions: number
+  predicted_avg_subject_mark: number | null
+  department_subject_performance: DepartmentSubjectPerformanceItem[]
+  subjects_needing_attention: SubjectPerformanceItem[]
+}
+
+export type SgpaDistributionItem = {
+  band: string
+  count: number
+}
+
+export type PercentageDistributionItem = {
+  band: string
+  count: number
+}
+
+export type DepartmentNextSemPerformanceItem = {
+  department_code: number
+  department_name: string
+  predicted_avg_sgpa: number | null
+  predicted_avg_percentage: number | null
+}
+
+export type M2NextSemPerformanceIntelligence = {
+  predicted_avg_next_sgpa: number | null
+  predicted_avg_next_percentage: number | null
+  sgpa_distribution: SgpaDistributionItem[]
+  percentage_distribution: PercentageDistributionItem[]
+  department_performance_distribution: DepartmentNextSemPerformanceItem[]
+  disclaimer: string
+}
+
+export type AcademicPredictionIntelligence = {
+  m1: M1SubjectIntelligence
+  m2: M2NextSemPerformanceIntelligence
+}
+
+export type DepartmentReadinessItem = {
+  department_code: number
+  department_name: string
+  avg_score: number | null
+  high_count: number
+  medium_count: number
+  low_count: number
+}
+
+export type FactorFrequencyItem = {
+  factor: string
+  frequency: number
+}
+
+export type CareerReadinessIntelligence = {
+  avg_career_readiness_score: number | null
+  readiness_level_counts: Record<string, number>
+  department_readiness_distribution: DepartmentReadinessItem[]
+  top_positive_factors: FactorFrequencyItem[]
+  top_risk_factors: FactorFrequencyItem[]
+  disclaimer: string
+}
+
+export type GroundedExecutiveInsight = {
+  category: string
+  title: string
+  detail: string
+  priority: "high" | "medium" | "low" | string
+}
+
+export type FilterDepartmentOption = {
+  department_code: number
+  department_name: string
+  student_count: number
+}
+
+export type FilterSemesterOption = {
+  semester_no: number
+  student_count: number
+}
+
+export type AdminMlIntelligenceFilterOptions = {
+  departments: FilterDepartmentOption[]
+  semesters: FilterSemesterOption[]
+}
+
+export type AdminMlIntelligenceData = {
+  overview: MlOverviewKpis
+  future_risk: FutureRiskIntelligence
+  academic_predictions: AcademicPredictionIntelligence
+  career_readiness: CareerReadinessIntelligence
+  executive_insights: GroundedExecutiveInsight[]
+  filter_options: AdminMlIntelligenceFilterOptions
+  generated_at: string
+}
+
+export function getAdminMLIntelligence(
+  filters?: AdminDashboardFilters
+): Promise<BffResult<AdminMlIntelligenceData>> {
+  return callFastapi<AdminMlIntelligenceData>("ml-intelligence", BFF_TTL_MS, {
+    query: filters as Record<string, string | number | null | undefined>,
+  })
+}
+
+// =============================================================================
+// ML-12 §12.5 Admin health indicator — Faculty Feedback Loop
+// =============================================================================
+
+export type AdminFeedbackActionItem = {
+  action: string
+  count: number
+}
+
+export type AdminFeedbackDepartmentItem = {
+  department_code: number
+  department_name: string
+  reviewed: number
+  confirmed: number
+  dismissed: number
+}
+
+export type AdminFeedbackSemesterItem = {
+  semester_no: number | null
+  reviewed: number
+  confirmed: number
+  dismissed: number
+}
+
+export type AdminMlFeedbackHealth = {
+  total: number
+  confirmed: number
+  dismissed: number
+  pending: number
+  by_action: AdminFeedbackActionItem[]
+  by_department: AdminFeedbackDepartmentItem[]
+  by_semester: AdminFeedbackSemesterItem[]
+  disclaimer: string
+}
+
+export function getAdminMlFeedbackHealth(): Promise<BffResult<AdminMlFeedbackHealth>> {
+  return callFastapi<AdminMlFeedbackHealth>("ml-feedback", BFF_TTL_MS)
+}
+

@@ -8,7 +8,13 @@ import { M2InsightsCard } from "./m2-insights-card"
 import { M3InsightsCard } from "./m3-insights-card"
 import { M4InsightsCard } from "./m4-insights-card"
 
-export function FacultyMlInsightsGrid({ data }: { data: FacultyStudentMlInsights }) {
+export function FacultyMlInsightsGrid({
+  data,
+  studentId,
+}: {
+  data: FacultyStudentMlInsights
+  studentId: string
+}) {
   const availableCount = facultyMlAvailableCount(data.models)
 
   if (availableCount === 0) {
@@ -26,7 +32,7 @@ export function FacultyMlInsightsGrid({ data }: { data: FacultyStudentMlInsights
       <M1InsightsCard model={data.models.m1} />
       <div className="grid gap-6 lg:grid-cols-2">
         <M2InsightsCard model={data.models.m2} />
-        <M3InsightsCard model={data.models.m3} />
+        <M3InsightsCard model={data.models.m3} studentId={studentId} />
       </div>
       <M4InsightsCard model={data.models.m4} />
     </div>
