@@ -11,6 +11,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   Settings,
+  Sparkles,
   User,
   type LucideIcon,
 } from "lucide-react"
@@ -24,6 +25,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/student/subjects", label: "Subjects", icon: BookOpen },
   { href: "/student/attendance", label: "Attendance", icon: CalendarCheck },
   { href: "/student/timetable", label: "Timetable", icon: CalendarDays },
+  { href: "/student/ml-insights", label: "ML Insights", icon: Sparkles },
   { href: "/student/profile", label: "Profile", icon: User },
   { href: "/student/notifications", label: "Notifications", icon: Bell },
   { href: "/student/settings", label: "Settings", icon: Settings },

@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from app.api.dependencies import get_db_pool, require_faculty_role
 from app.core.config import settings
 from app.services.faculty_service import FacultyService
+from app.services.prediction_insights_service import PredictionInsightsService
 from app.services.settings_service import SettingsService, PreferenceValidationError
 from app.schemas.faculty import (
     FacultyProfile,
@@ -76,6 +77,9 @@ router = APIRouter()
 
 def get_faculty_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> FacultyService:
     return FacultyService(pool)
+
+def get_insights_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> PredictionInsightsService:
+    return PredictionInsightsService(pool)
 
 def _faculty_id_or_error(user: dict) -> str:
     faculty_id = user.get("faculty_id")
@@ -292,6 +296,32 @@ async def get_student_profile(
     service: FacultyService = Depends(get_faculty_service)
 ):
     return await service.get_student_profile_view(_faculty_id_or_error(user), student_id)
+
+@router.get("/students/{student_id}/ml-insights")
+async def get_student_ml_insights(
+    student_id: str,
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service),
+    insights: PredictionInsightsService = Depends(get_insights_service),
+) -> dict:
+    """Return the ML-05/08 insights bundle for a student in this faculty's scope.
+
+    Scope is enforced exactly like the existing student overview/profile
+    endpoints (the student must be in this faculty's classes or mentees).
+    The M1-M4 bundle reuses the ML-09 ``PredictionInsightsService`` unchanged:
+    each model degrades independently (``available: false`` when data is
+    missing or the model fails) and nothing is persisted here.
+    """
+    await service.assert_student_in_scope(_faculty_id_or_error(user), student_id)
+    try:
+        return await insights.get_student_insights(student_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Insights failed: {str(e)}",
+        )
 
 @router.get("/subjects", response_model=FacultySubjectsResponse)
 async def get_my_subjects(

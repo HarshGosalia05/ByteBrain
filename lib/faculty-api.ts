@@ -1,4 +1,4 @@
-import { cookies } from "next/headers"
+import { getSessionUser } from "./student-session.ts"
 
 const FASTAPI_URL = (process.env.FASTAPI_URL ?? "http://localhost:8000").replace(/\/+$/, "")
 const BFF_TTL_MS = 60_000
@@ -465,18 +465,6 @@ function cached<T>(
   })
 }
 
-async function getSessionUser(): Promise<SessionUser | null> {
-  const cookieStore = await cookies()
-  const raw = cookieStore.get("session")?.value
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as SessionUser
-    return parsed && typeof parsed === "object" ? parsed : null
-  } catch {
-    return null
-  }
-}
-
 function toBffError(status: number): BffError {
   switch (status) {
     case 400:
@@ -674,6 +662,191 @@ export function getFacultyStudentProfile(
   studentId: string
 ): Promise<BffResult<FacultyStudentProfileView>> {
   return callFastapi<FacultyStudentProfileView>(`students/${studentId}/profile`, BFF_TTL_MS)
+}
+
+// ML-10 Faculty ML insights: M1-M4 predictions + ML-08 grounded explanations -----
+
+export type FacultyMlModelKey = "m1" | "m2" | "m3" | "m4"
+
+export type FacultyMlExplanationFactor = {
+  kind: "positive" | "concern"
+  source: "input" | "business_rule" | "model_metadata"
+  detail: string
+}
+
+export type FacultyMlExplanationInput = {
+  name: string
+  value: unknown
+  present: boolean
+}
+
+export type FacultyMlModelMetadata = {
+  model_id: string
+  model_type: string
+  algorithm: string
+  task: string
+  target: string
+}
+
+export type FacultyMlM1Prediction = {
+  student_id: string
+  subject_id: string
+  semester_no: number
+  predicted_end_sem_marks: number
+  clipped: boolean
+}
+
+export type FacultyMlM2Prediction = {
+  student_id: string
+  semester_no: number
+  predicted_next_semester_sgpa: number
+  predicted_next_semester_percentage: number
+}
+
+export type FacultyMlM3Prediction = {
+  student_id: string
+  semester_no: number
+  is_at_risk_next_sem: 0 | 1
+}
+
+export type FacultyMlM4Prediction = {
+  student_id: string
+  enrollment_no: string
+  full_name: string
+  department_name: string
+  current_semester: string | number
+  career_readiness_score: number
+  career_readiness_level: string
+  positive_factors: string
+  risk_factors: string
+}
+
+export type FacultyMlPredictionResult =
+  | {
+      model_id: "m1"
+      predictions: FacultyMlM1Prediction[]
+      input_row_count: number
+      prediction_count: number
+    }
+  | {
+      model_id: "m2"
+      predictions: FacultyMlM2Prediction[]
+      input_row_count: number
+      prediction_count: number
+    }
+  | {
+      model_id: "m3"
+      predictions: FacultyMlM3Prediction[]
+      input_row_count: number
+      prediction_count: number
+    }
+  | {
+      model_id: "m4"
+      predictions: FacultyMlM4Prediction[]
+      input_row_count: number
+      prediction_count: number
+    }
+
+export type FacultyMlM1Explanation = {
+  prediction_type: "m1"
+  subject_id: string
+  subject_name: string | null
+  semester_no: number
+  predicted_end_sem_marks: number
+  clipped: boolean
+  projected_percentage: number | null
+  projected_band: string | null
+  inputs: FacultyMlExplanationInput[]
+  factors: FacultyMlExplanationFactor[]
+  interpretation: string
+}
+
+export type FacultyMlM2Explanation = {
+  prediction_type: "m2"
+  semester_no: number
+  predicted_next_semester_sgpa: number
+  predicted_next_semester_percentage: number
+  current_percentage: number | null
+  projected_delta_percentage: number | null
+  inputs: FacultyMlExplanationInput[]
+  factors: FacultyMlExplanationFactor[]
+  interpretation: string
+}
+
+export type FacultyMlM3Explanation = {
+  prediction_type: "m3"
+  risk_scope: string
+  risk_label: 0 | 1
+  inputs: FacultyMlExplanationInput[]
+  factors: FacultyMlExplanationFactor[]
+  suggestions: string[]
+  interpretation: string
+}
+
+export type FacultyMlM4Explanation = {
+  prediction_type: "m4"
+  readiness_score: number
+  readiness_level: string
+  positive_factors: string[]
+  risk_factors: string[]
+  inputs: FacultyMlExplanationInput[]
+  interpretation: string
+}
+
+export type FacultyMlExplanationResult = {
+  model_id: FacultyMlModelKey
+  prediction_type: FacultyMlModelKey
+  student_id: string
+  explanation_kind: string
+  model_metadata: FacultyMlModelMetadata
+  model_version: string | null
+  not_supported: string[]
+  rule_context: Record<string, unknown>
+  explanations: unknown[]
+}
+
+export type FacultyMlModelInsight =
+  | {
+      available: true
+      prediction: FacultyMlPredictionResult
+      explanation: FacultyMlExplanationResult
+    }
+  | { available: false; reason: "no_data" | "error"; message: string }
+
+export type FacultyStudentMlInsights = {
+  student_id: string
+  generated_at: string
+  models: Record<FacultyMlModelKey, FacultyMlModelInsight>
+}
+
+export function getFacultyStudentMlInsights(
+  studentId: string
+): Promise<BffResult<FacultyStudentMlInsights>> {
+  return callFastapi<FacultyStudentMlInsights>(
+    `students/${encodeURIComponent(studentId)}/ml-insights`,
+    BFF_TTL_MS,
+  )
+}
+
+export function facultyMlAvailableCount(
+  models: Record<FacultyMlModelKey, FacultyMlModelInsight>
+): number {
+  return Object.values(models).filter((model) => model.available).length
+}
+
+export function facultyMlBandTone(
+  band: string | null | undefined
+): "success" | "secondary" | "warning" | "destructive" {
+  if (band === "Top Performer" || band === "Above Average") return "success"
+  if (band === "Average") return "secondary"
+  if (band === "Below Average") return "warning"
+  return "destructive"
+}
+
+export function facultyMlReadinessTone(level: string): "success" | "warning" | "destructive" {
+  if (level.toLowerCase() === "high") return "success"
+  if (level.toLowerCase() === "medium") return "warning"
+  return "destructive"
 }
 
 export function getFacultySubjects(params?: {

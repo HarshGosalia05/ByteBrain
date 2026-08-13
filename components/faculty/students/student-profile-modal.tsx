@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import {
   AlertTriangle,
   Award,
@@ -36,7 +37,7 @@ import {
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -332,19 +333,28 @@ export function StudentProfileModal({
                 </DialogDescription>
               </div>
             </div>
-            {data && (
-              <Badge
-                variant={
-                  data.relationship === "mentor"
-                    ? "success"
-                    : data.relationship === "class"
-                      ? "outline"
-                      : "muted"
-                }
-                className="hidden shrink-0 sm:inline-flex"
-              >
-                {data.relationship}
-              </Badge>
+            {data && studentId && (
+              <div className="flex shrink-0 items-center gap-2">
+                <Badge
+                  variant={
+                    data.relationship === "mentor"
+                      ? "success"
+                      : data.relationship === "class"
+                        ? "outline"
+                        : "muted"
+                  }
+                  className="hidden shrink-0 sm:inline-flex"
+                >
+                  {data.relationship}
+                </Badge>
+                <Link
+                  href={`/faculty/students/${encodeURIComponent(studentId)}/ml-insights`}
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  <BrainCircuit aria-hidden="true" />
+                  ML Insights
+                </Link>
+              </div>
             )}
           </div>
 
