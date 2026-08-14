@@ -45,7 +45,11 @@ from app.services.faculty_flagged_students_tool import FacultyFlaggedStudentsToo
 from app.services.faculty_prediction_insights_tool import FacultyPredictionInsightsTool
 from app.services.faculty_student_analytics_tool import FacultyStudentAnalyticsTool
 from app.services.faculty_subject_analytics_tool import FacultySubjectAnalyticsTool
-from app.services.genai_provider import GenAIError, GenAIRateLimitError
+from app.services.genai_provider import (
+    GenAIError,
+    GenAIRateLimitError,
+    GenAITimeoutError,
+)
 from app.services.genai_service import GenAIService
 from app.services.intent_router import IntentRouter
 from app.services.student_academic_tool import StudentAcademicTool
@@ -521,17 +525,45 @@ class ChatOrchestrator:
                 duration_ms,
                 exc,
             )
-            data_summary = _format_verified_data_summary(verified_ctx.data)
-            fallback_msg = (
-                f"AI explanation unavailable (rate-limited) — showing verified data:\n\n{data_summary}"
-                if verified_ctx and verified_ctx.data
-                else "The AI assistant is temporarily rate-limited. Your academic data is available, but the AI explanation cannot be generated right now. Please try again shortly."
-            )
+            if decision.intent == "general_conversation":
+                fallback_msg = self._build_general_conversation_fallback(request.message, user_role)
+            else:
+                data_summary = _format_verified_data_summary(verified_ctx.data)
+                fallback_msg = (
+                    f"AI explanation unavailable (rate-limited) — showing verified data:\n\n{data_summary}"
+                    if verified_ctx and verified_ctx.data
+                    else "The AI assistant is temporarily rate-limited. Your academic data is available, but the AI explanation cannot be generated right now. Please try again shortly."
+                )
             return ChatResponse(
                 message=fallback_msg,
                 intent=decision.intent,
                 tool_name=decision.tool_name,
                 status="rate_limited",
+                verified_sources=[verified_ctx.source] if verified_ctx else [],
+            )
+        except GenAITimeoutError as exc:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.warning(
+                "GenAI provider timed out | intent=%s tool=%s duration_ms=%.1f exc=%s",
+                decision.intent,
+                decision.tool_name,
+                duration_ms,
+                exc,
+            )
+            if decision.intent == "general_conversation":
+                fallback_msg = self._build_general_conversation_fallback(request.message, user_role)
+            else:
+                data_summary = _format_verified_data_summary(verified_ctx.data)
+                fallback_msg = (
+                    f"AI explanation unavailable (response timed out) — showing verified data:\n\n{data_summary}"
+                    if verified_ctx and verified_ctx.data
+                    else "The chat assistant took longer than usual to generate an explanation. Please try asking again shortly."
+                )
+            return ChatResponse(
+                message=fallback_msg,
+                intent=decision.intent,
+                tool_name=decision.tool_name,
+                status="unavailable",
                 verified_sources=[verified_ctx.source] if verified_ctx else [],
             )
         except GenAIError as exc:
@@ -543,12 +575,15 @@ class ChatOrchestrator:
                 duration_ms,
                 exc,
             )
-            data_summary = _format_verified_data_summary(verified_ctx.data)
-            fallback_msg = (
-                f"AI explanation unavailable (service unavailable) — showing verified data:\n\n{data_summary}"
-                if verified_ctx and verified_ctx.data
-                else "The AI chat service is temporarily unavailable. Please try again later."
-            )
+            if decision.intent == "general_conversation":
+                fallback_msg = self._build_general_conversation_fallback(request.message, user_role)
+            else:
+                data_summary = _format_verified_data_summary(verified_ctx.data)
+                fallback_msg = (
+                    f"AI explanation unavailable (service unavailable) — showing verified data:\n\n{data_summary}"
+                    if verified_ctx and verified_ctx.data
+                    else "The AI chat service is temporarily unavailable. Please try again later."
+                )
             return ChatResponse(
                 message=fallback_msg,
                 intent=decision.intent,

@@ -69,7 +69,7 @@ export function Chatbot({
     }
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 20000)
+    const timeoutId = setTimeout(() => controller.abort(), 35000)
 
     try {
       const res = await fetch("/api/chat", {
@@ -95,6 +95,8 @@ export function Chatbot({
           role: "assistant",
           content: res.status === 429 
             ? "The AI assistant is temporarily rate-limited. Please try again shortly." 
+            : res.status === 504 || res.status === 503
+            ? "The chat assistant is taking longer than usual to respond. Please try again in a moment."
             : errText,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           isError: true,
@@ -122,16 +124,16 @@ export function Chatbot({
     } catch (err: unknown) {
       clearTimeout(timeoutId)
       const isAbort = err instanceof Error && err.name === "AbortError"
-      const msg = isAbort
-        ? "Request timed out. The chat assistant took too long to respond. Please try again."
+      const content = isAbort
+        ? "The chat assistant took longer than usual to respond. Please try asking your question again."
         : err instanceof Error
-        ? err.message
-        : "Network error"
+        ? `Connection error: ${err.message}`
+        : "Network connection error. Please try again."
 
       const errorMessage: UIMessage = {
         id: `error-${Date.now()}`,
         role: "assistant",
-        content: isAbort ? msg : `Connection error: ${msg}`,
+        content,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         isError: true,
       }

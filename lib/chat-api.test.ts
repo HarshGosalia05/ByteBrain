@@ -128,12 +128,13 @@ test("sendChatMessage limits conversation_history to last 10 messages", async ()
   assert.equal(body.conversation_history[9].content, "Message 15")
 })
 
-test("error mapping: 401 unauthorized, 403 forbidden, 429 rate limited, 503 unavailable, 500 server error", async () => {
+test("error mapping: 401 unauthorized, 403 forbidden, 429 rate limited, 503 unavailable, 504 gateway timeout, 500 server error", async () => {
   const errorCodes = [
     { status: 401, code: "UNAUTHORIZED" },
     { status: 403, code: "FORBIDDEN" },
     { status: 429, code: "RATE_LIMITED" },
     { status: 503, code: "SERVICE_UNAVAILABLE" },
+    { status: 504, code: "GATEWAY_TIMEOUT" },
     { status: 500, code: "SERVER_ERROR" },
   ]
 
@@ -160,4 +161,6 @@ test("toChatBffError returns standardized safe messages", () => {
   assert.equal(err429.code, "RATE_LIMITED")
   const err503 = toChatBffError(503)
   assert.equal(err503.code, "SERVICE_UNAVAILABLE")
+  const err504 = toChatBffError(504)
+  assert.equal(err504.code, "GATEWAY_TIMEOUT")
 })

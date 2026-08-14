@@ -292,7 +292,23 @@ class TestChatOrchestrator(unittest.TestCase):
 
         resp = run(orchestrator.process_chat(user=user, request=req))
         self.assertEqual(resp.status, "unavailable")
-        self.assertIn("AI explanation unavailable", resp.message)
+        self.assertIn("AI explanation unavailable (response timed out)", resp.message)
+        self.assertEqual(len(timeout_provider.recorded_requests), 1)
+
+    def test_provider_timeout_on_general_conversation_returns_friendly_fallback(self):
+        timeout_provider = FakeProvider(timeout=True)
+        service = GenAIService(provider=timeout_provider)
+        orchestrator = ChatOrchestrator(
+            pool=None,
+            genai_service=service,
+            tools=self.tools,
+        )
+        user = {"role": "Student", "student_id": "STU001"}
+        req = ChatRequest(message="Hello there!")
+
+        resp = run(orchestrator.process_chat(user=user, request=req))
+        self.assertEqual(resp.status, "success")
+        self.assertIn("KenexAI Assistant", resp.message)
         self.assertEqual(len(timeout_provider.recorded_requests), 1)
 
     def test_exactly_one_genai_call_per_user_message(self):

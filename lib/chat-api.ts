@@ -67,6 +67,12 @@ export function toChatBffError(status: number, message?: string): ChatBffError {
         code: "SERVICE_UNAVAILABLE",
         message: message ?? "AI Chat service is temporarily unavailable. Please try again later.",
       }
+    case 504:
+      return {
+        status: 504,
+        code: "GATEWAY_TIMEOUT",
+        message: message ?? "The chat assistant took longer than usual to respond. Please try again in a moment.",
+      }
     default:
       return {
         status: status >= 400 && status < 600 ? status : 500,
@@ -122,6 +128,7 @@ export async function sendChatMessage(req: ChatApiRequest): Promise<ChatBffResul
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(30000),
     })
 
     if (!res.ok) {
@@ -141,6 +148,13 @@ export async function sendChatMessage(req: ChatApiRequest): Promise<ChatBffResul
     const data: ChatApiResponse = await res.json()
     return { success: true, data }
   } catch (err: unknown) {
+    const isTimeout = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")
+    if (isTimeout) {
+      return {
+        success: false,
+        error: toChatBffError(504, "Chat request timed out. Please try again."),
+      }
+    }
     const message = err instanceof Error ? err.message : "Network error"
     return {
       success: false,
