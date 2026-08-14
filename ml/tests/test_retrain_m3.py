@@ -1,14 +1,22 @@
-"""Focused unit tests for ML-13 Slice 1: Feedback Dataset Extraction & Validation."""
+"""Focused unit tests for ML-13: Feedback Dataset Extraction, Validation & M3 Retraining."""
 
 from __future__ import annotations
 
+from pathlib import Path
+import tempfile
+import joblib
+import numpy as np
 import pandas as pd
 import pytest
 
 from ml.src.features import M3_CONTRACT
 from ml.src.retrain_m3 import (
     FeedbackDatasetResult,
+    create_m3_pipeline,
+    encode_m3_features,
+    evaluate_cv,
     extract_and_validate_feedback_dataset,
+    EXPECTED_M3_COLS,
 )
 
 
@@ -275,3 +283,73 @@ def test_exact_m3_feature_contract_compatibility(sample_m3_features):
     )
 
     assert list(result.features_df.columns) == M3_CONTRACT.raw_features
+
+
+# =========================================================================
+# ML-13 Slice 2 Tests: Encoding, Training, CV Evaluation, Artifact Reload
+# =========================================================================
+
+
+def test_encode_m3_features(sample_m3_features):
+    """Verify feature encoding produces exactly the 12 expected columns."""
+    df = pd.DataFrame([sample_m3_features])
+    encoded = encode_m3_features(df)
+    assert list(encoded.columns) == EXPECTED_M3_COLS
+    assert encoded.loc[0, "department_name_CSE"] == 1
+    assert encoded.loc[0, "department_name_BBA"] == 0
+    assert encoded.loc[0, "is_male"] == 1
+
+
+def test_create_m3_pipeline():
+    """Verify pipeline structure and step names."""
+    pipeline = create_m3_pipeline()
+    step_names = [name for name, _ in pipeline.steps]
+    assert step_names == ["pre_0", "pre_1", "model"]
+
+
+def test_evaluate_cv():
+    """Verify cross-validation evaluation returns valid metric dict."""
+    np.random.seed(42)
+    X = pd.DataFrame(
+        np.random.randn(50, len(EXPECTED_M3_COLS)),
+        columns=EXPECTED_M3_COLS,
+    )
+    y = np.array([1] * 25 + [0] * 25)
+
+    metrics = evaluate_cv(create_m3_pipeline, X, y, n_splits=3)
+    assert "precision" in metrics
+    assert "recall" in metrics
+    assert "f1" in metrics
+    assert "roc_auc" in metrics
+    assert "pr_auc" in metrics
+    for v in metrics.values():
+        assert isinstance(v, float)
+        assert 0.0 <= v <= 1.0
+
+
+def test_artifact_persistence_and_prediction(sample_m3_features):
+    """Verify pipeline fit, joblib dump, reload, and prediction integrity."""
+    df = pd.DataFrame([sample_m3_features] * 10)
+    df.loc[5:, "semester_sgpa"] = 3.5
+    df.loc[5:, "backlog_count"] = 2
+
+    X = encode_m3_features(df)
+    y = np.array([0] * 5 + [1] * 5)
+
+    pipeline = create_m3_pipeline()
+    pipeline.fit(X.values, y)
+
+    with tempfile.NamedTemporaryFile(suffix=".joblib", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+
+    try:
+        joblib.dump(pipeline, tmp_path)
+        loaded = joblib.load(tmp_path)
+        assert loaded is not None
+
+        preds = loaded.predict(X.values)
+        assert len(preds) == 10
+        assert set(preds).issubset({0, 1})
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
