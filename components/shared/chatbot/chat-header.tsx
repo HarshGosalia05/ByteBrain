@@ -1,6 +1,9 @@
+"use client"
+
 import * as React from "react"
 import { Bot, Minimize2, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useTranslation } from "@/lib/i18n"
 import type { UserRole } from "./types"
 
 const ROLE_SUBTITLES: Record<UserRole, string> = {
@@ -22,6 +25,8 @@ export function ChatHeader({
   onClear: () => void
   messageCount: number
 }) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex items-center justify-between border-b border-border/80 bg-muted/40 px-4 py-3 select-none">
       <div className="flex items-center gap-2.5">
@@ -31,13 +36,13 @@ export function ChatHeader({
         </div>
         <div>
           <div className="flex items-center gap-1.5">
-            <h3 className="text-xs font-semibold tracking-tight text-foreground">KenexAI Assistant</h3>
+            <h3 className="text-xs font-semibold tracking-tight text-foreground">{t("KenexAI Assistant")}</h3>
             <span className="rounded-sm bg-primary/10 px-1 py-0.2 text-[9px] font-medium text-primary">
-              Grounded AI
+              {t("Grounded AI")}
             </span>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {ROLE_SUBTITLES[role] || "Grounded Guidance"}
+            {t(ROLE_SUBTITLES[role] || "Grounded Guidance")}
           </p>
         </div>
       </div>
@@ -49,9 +54,9 @@ export function ChatHeader({
             variant="ghost"
             size="icon-xs"
             onClick={onClear}
-            title="Clear conversation"
-            aria-label="Clear conversation history"
-            className="text-muted-foreground hover:text-destructive"
+            title={t("Clear conversation")}
+            aria-label={t("Clear conversation")}
+            className="text-muted-foreground hover:text-destructive cursor-pointer"
           >
             <Trash2 className="size-3.5" />
           </Button>
@@ -62,9 +67,9 @@ export function ChatHeader({
             variant="ghost"
             size="icon-xs"
             onClick={onMinimize}
-            title="Minimize"
-            aria-label="Minimize chatbot window"
-            className="text-muted-foreground hover:text-foreground"
+            title={t("Minimize")}
+            aria-label={t("Minimize")}
+            className="text-muted-foreground hover:text-foreground cursor-pointer"
           >
             <Minimize2 className="size-3.5" />
           </Button>
@@ -74,9 +79,9 @@ export function ChatHeader({
           variant="ghost"
           size="icon-xs"
           onClick={onClose}
-          title="Close"
-          aria-label="Close chatbot window"
-          className="text-muted-foreground hover:text-foreground"
+          title={t("Close")}
+          aria-label={t("Close")}
+          className="text-muted-foreground hover:text-foreground cursor-pointer"
         >
           <X className="size-4" />
         </Button>

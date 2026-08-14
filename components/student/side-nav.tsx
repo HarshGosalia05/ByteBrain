@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useTranslation } from "@/lib/i18n"
 
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/student/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -33,9 +34,10 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
 
 export function SideNav() {
   const pathname = usePathname()
+  const { t } = useTranslation()
 
   return (
-    <nav aria-label="Student navigation" className="flex min-h-0 flex-1 flex-col gap-6">
+    <nav aria-label={t("Student navigation", "Student navigation")} className="flex min-h-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-1">
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
@@ -57,7 +59,7 @@ export function SideNav() {
                   active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
                 )}
               />
-              {item.label}
+              {t(item.label)}
               {active && (
                 <span className="ml-auto size-1.5 rounded-full bg-primary" aria-hidden="true" />
               )}

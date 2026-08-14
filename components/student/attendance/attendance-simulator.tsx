@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useTranslation } from "@/lib/i18n"
 
 type Values = { present: string; absent: string }
 
@@ -47,6 +48,7 @@ export function AttendanceSimulator({
   subjects: AttendanceSimulatorSubject[]
   target: number
 }) {
+  const { t } = useTranslation()
   const withCounts = subjects.filter(
     (subject) => subject.total_classes !== null && subject.attended_classes !== null,
   )
@@ -99,29 +101,29 @@ export function AttendanceSimulator({
     <section className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold">Attendance simulator</h2>
+          <h2 className="text-sm font-semibold">{t("Attendance simulator")}</h2>
           <p className="mt-1 flex items-start gap-1.5 text-xs text-muted-foreground">
             <Info className="mt-0.5 size-3 shrink-0" />
-            Simulation only — does not change your attendance record.
+            {t("Simulation only — does not change your attendance record.")}
           </p>
         </div>
         <Badge variant="muted">
           <Calculator className="size-3" />
-          Hypothetical
+          {t("Hypothetical")}
         </Badge>
       </div>
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="sim-att-subject" className="text-xs font-medium text-muted-foreground">
-            Subject
+            {t("Subject")}
           </label>
           <Select value={activeSubject?.subject_id ?? null} onValueChange={changeSubject}>
             <SelectTrigger id="sim-att-subject" className="w-full sm:w-80">
               <SelectValue>
                 {(selected: string | null) =>
                   withCounts.find((subject) => subject.subject_id === selected)
-                    ?.subject_name ?? "Select subject"
+                    ?.subject_name ?? t("Select subject")
                 }
               </SelectValue>
               <SelectIcon />
@@ -141,7 +143,7 @@ export function AttendanceSimulator({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="sim-att-present" className="text-xs font-medium text-muted-foreground">
-              Attend next
+              {t("Attend next")}
             </label>
             <Input
               id="sim-att-present"
@@ -165,7 +167,7 @@ export function AttendanceSimulator({
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="sim-att-absent" className="text-xs font-medium text-muted-foreground">
-              Miss next
+              {t("Miss next")}
             </label>
             <Input
               id="sim-att-absent"
@@ -183,7 +185,7 @@ export function AttendanceSimulator({
               <p className="text-xs text-destructive">{parsedAbsent.error}</p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Classes you plan to skip (assumed absent, max {ATTENDANCE_SIMULATION_MAX_CLASSES}).
+                {t("Classes you plan to skip (assumed absent, max 100).")}
               </p>
             )}
           </div>
@@ -192,7 +194,7 @@ export function AttendanceSimulator({
         <div className="flex flex-col gap-3 rounded-lg bg-muted/40 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-              Simulated result
+              {t("Simulated result")}
             </p>
             {result.complete && (
               <p className="text-xs tabular-nums text-muted-foreground">
@@ -205,24 +207,24 @@ export function AttendanceSimulator({
             <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-xs font-medium text-destructive">
               <AlertCircle className="size-4 shrink-0" />
               <span>
-                Please enter valid whole numbers between 0 and {ATTENDANCE_SIMULATION_MAX_CLASSES} to simulate attendance.
+                {t("Please enter valid whole numbers between 0 and 100 to simulate attendance.")}
               </span>
             </div>
           ) : !result.complete ? (
             <p className="text-sm text-muted-foreground">
-              Attendance baseline is unavailable for this subject.
+              {t("Attendance baseline is unavailable for this subject.")}
             </p>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div>
-                  <p className="text-xs text-muted-foreground">Current attendance</p>
+                  <p className="text-xs text-muted-foreground">{t("Current attendance")}</p>
                   <p className="mt-0.5 text-xl font-semibold tabular-nums">
                     {result.current_attendance?.toFixed(1) ?? "—"}%
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Projected attendance</p>
+                  <p className="text-xs text-muted-foreground">{t("Projected attendance")}</p>
                   <p className="mt-0.5 flex items-center gap-1.5 text-xl font-semibold tabular-nums">
                     {result.resulting_attendance?.toFixed(1) ?? "—"}%
                     {hasDelta && delta !== null && (
@@ -239,22 +241,22 @@ export function AttendanceSimulator({
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
+                  <p className="text-xs text-muted-foreground">{t("Status")}</p>
                   <p className="mt-0.5">
                     <Badge variant={statusVariant(result.attendance_status)}>
-                      {result.attendance_status ?? "—"}
+                      {t(result.attendance_status ?? "—")}
                     </Badge>
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Eligibility</p>
+                  <p className="text-xs text-muted-foreground">{t("Eligibility", "Eligibility")}</p>
                   <p className="mt-0.5">
                     <Badge
                       variant={
                         result.eligibility_status === "Eligible" ? "success" : "destructive"
                       }
                     >
-                      {result.eligibility_status ?? "—"}
+                      {t(result.eligibility_status ?? "—")}
                     </Badge>
                   </p>
                 </div>

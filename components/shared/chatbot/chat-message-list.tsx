@@ -1,7 +1,10 @@
+"use client"
+
 import * as React from "react"
 import { Bot } from "lucide-react"
 import { ChatMessageItem } from "./chat-message"
 import { ChatSuggestions } from "./chat-suggestions"
+import { useTranslation } from "@/lib/i18n"
 import type { UIMessage, UserRole } from "./types"
 
 export function ChatMessageList({
@@ -17,6 +20,7 @@ export function ChatMessageList({
   onSelectSuggestion: (prompt: string) => void
   onRetry?: (lastUserMessage: string) => void
 }) {
+  const { t } = useTranslation()
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const bottomRef = React.useRef<HTMLDivElement>(null)
 
@@ -40,9 +44,9 @@ export function ChatMessageList({
             <Bot className="size-6" />
           </div>
           <div className="space-y-1 max-w-xs">
-            <h4 className="text-sm font-semibold text-foreground">KenexAI Assistant</h4>
+            <h4 className="text-sm font-semibold text-foreground">{t("KenexAI Assistant")}</h4>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Ask me about your academic performance, attendance, subjects, predictions, or career readiness.
+              {t("Ask me about your academic performance, attendance, subjects, predictions, or career readiness.")}
             </p>
           </div>
           <div className="w-full pt-2">
@@ -87,7 +91,7 @@ export function ChatMessageList({
               <span className="size-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
               <span className="size-1.5 rounded-full bg-primary animate-bounce" />
             </div>
-            <span className="text-xs font-medium">AI is thinking...</span>
+            <span className="text-xs font-medium">{t("Thinking...")}</span>
           </div>
         </div>
       )}

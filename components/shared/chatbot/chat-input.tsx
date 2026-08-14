@@ -1,6 +1,9 @@
+"use client"
+
 import * as React from "react"
 import { Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useTranslation } from "@/lib/i18n"
 
 export function ChatInput({
   input,
@@ -15,6 +18,7 @@ export function ChatInput({
   isLoading: boolean
   maxLength?: number
 }) {
+  const { t } = useTranslation()
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
 
   // Auto resize textarea height
@@ -44,10 +48,10 @@ export function ChatInput({
           value={input}
           onChange={(e) => setInput(e.target.value.slice(0, maxLength))}
           onKeyDown={handleKeyDown}
-          placeholder="Ask a question..."
+          placeholder={t("Ask a question...")}
           rows={1}
           disabled={isLoading}
-          aria-label="Chat query input"
+          aria-label={t("Ask a question...")}
           className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed leading-relaxed"
         />
 
@@ -56,7 +60,7 @@ export function ChatInput({
           size="icon-xs"
           onClick={onSend}
           disabled={!canSend}
-          aria-label="Send message"
+          aria-label={t("Send message")}
           className="size-7 shrink-0 rounded-lg cursor-pointer transition-transform active:scale-95 disabled:cursor-not-allowed"
         >
           <Send className="size-3.5" />

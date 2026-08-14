@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { signOut } from "@/lib/auth-actions"
+import { useTranslation, type SupportedLanguage } from "@/lib/i18n"
 import type { StudentSettingsResponse } from "@/lib/student-api"
 
 const THEME_OPTIONS: { value: string; label: string; icon: LucideIcon }[] = [
@@ -37,7 +38,7 @@ const THEME_OPTIONS: { value: string; label: string; icon: LucideIcon }[] = [
   { value: "system", label: "System", icon: Monitor },
 ]
 
-const LANGUAGE_OPTIONS = [
+const LANGUAGE_OPTIONS: { value: SupportedLanguage; label: string; native: string }[] = [
   { value: "en", label: "English (US)", native: "English" },
   { value: "hi", label: "Hindi", native: "हिन्दी" },
   { value: "gu", label: "Gujarati", native: "ગુજરાતી" },
@@ -61,6 +62,8 @@ function SectionCard({
   description: string
   children: React.ReactNode
 }) {
+  const { t } = useTranslation()
+
   return (
     <section className="rounded-xl bg-card ring-1 ring-foreground/10">
       <div className="flex items-start gap-3 border-b border-border/60 p-5">
@@ -68,8 +71,8 @@ function SectionCard({
           <Icon className="size-4" />
         </div>
         <div>
-          <h2 className="text-sm font-semibold">{title}</h2>
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <h2 className="text-sm font-semibold">{t(title)}</h2>
+          <p className="text-xs text-muted-foreground">{t(description)}</p>
         </div>
       </div>
       <div className="p-5">{children}</div>
@@ -90,6 +93,7 @@ export function SettingsView({
   initialSettings?: StudentSettingsResponse | null
 }) {
   const { theme, setTheme } = useTheme()
+  const { language, setLanguage, t } = useTranslation()
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
@@ -152,13 +156,33 @@ export function SettingsView({
             ...patch,
           },
         }))
-        setFeedback({ type: "success", message: `${keyDesc} preference saved.` })
+        setFeedback({ type: "success", message: `${keyDesc} ${t("preference saved.", "saved.")}` })
       } else {
         const msg = data.error?.message || "Failed to save setting."
         setFeedback({ type: "error", message: msg })
       }
     } catch {
       setFeedback({ type: "error", message: "Network error saving setting." })
+    } finally {
+      setSavingKey(null)
+    }
+  }
+
+  const handleLanguageChange = async (langValue: SupportedLanguage) => {
+    setSavingKey("language")
+    setFeedback(null)
+    try {
+      await setLanguage(langValue)
+      setSettings((prev) => ({
+        ...prev,
+        account: {
+          ...prev.account,
+          display_language: langValue,
+        },
+      }))
+      setFeedback({ type: "success", message: `${t("Display language")} ${t("preference saved.", "saved.")}` })
+    } catch {
+      setFeedback({ type: "error", message: "Failed to update language." })
     } finally {
       setSavingKey(null)
     }
@@ -247,8 +271,8 @@ export function SettingsView({
         setFeedback({
           type: "success",
           message: checked
-            ? "Two-factor authentication enabled via registered institutional email."
-            : "Two-factor authentication disabled.",
+            ? t("Two-factor authentication enabled via registered institutional email.")
+            : t("Two-factor authentication disabled."),
         })
       } else {
         setFeedback({ type: "error", message: data.error?.message || "Failed to update 2FA." })
@@ -275,6 +299,7 @@ export function SettingsView({
   const accountPrefs = settings.account ?? {}
   const notifPrefs = settings.notifications ?? {}
   const secPrefs = settings.security ?? {}
+  const activeLang = language || (accountPrefs.display_language as SupportedLanguage) || "en"
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -319,7 +344,7 @@ export function SettingsView({
                 )}
               >
                 <option.icon className="size-4" />
-                {option.label}
+                {t(option.label)}
                 {selected && <Check className="size-3 text-primary" />}
               </button>
             )
@@ -340,22 +365,22 @@ export function SettingsView({
               <div>
                 <p className="text-sm font-medium flex items-center gap-1.5">
                   <Globe className="size-4 text-muted-foreground" />
-                  Display language
+                  {t("Display language")}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Select the language used for interface labels and natural language summaries.
+                  {t("Select the language used for interface labels and natural language summaries.")}
                 </p>
               </div>
               {savingKey === "language" && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:max-w-md pt-1">
               {LANGUAGE_OPTIONS.map((lang) => {
-                const isSelected = (accountPrefs.display_language ?? "en") === lang.value
+                const isSelected = activeLang === lang.value
                 return (
                   <button
                     key={lang.value}
                     type="button"
-                    onClick={() => updateNamespace("account", { display_language: lang.value }, "language")}
+                    onClick={() => handleLanguageChange(lang.value)}
                     className={cn(
                       "flex flex-col items-start gap-1 rounded-lg border p-2.5 text-left text-xs transition-colors cursor-pointer",
                       isSelected
@@ -364,7 +389,7 @@ export function SettingsView({
                     )}
                   >
                     <span className="font-semibold text-foreground">{lang.native}</span>
-                    <span className="text-[10px] text-muted-foreground">{lang.label}</span>
+                    <span className="text-[10px] text-muted-foreground">{t(lang.label)}</span>
                   </button>
                 )
               })}
@@ -375,9 +400,9 @@ export function SettingsView({
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-medium">Name display format</p>
+                <p className="text-sm font-medium">{t("Name display format")}</p>
                 <p className="text-xs text-muted-foreground">
-                  Choose how your name appears in the top navigation bar, report cards, and headers.
+                  {t("Choose how your name appears in the top navigation bar, report cards, and headers.")}
                 </p>
               </div>
               {savingKey === "name_display" && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
@@ -398,7 +423,7 @@ export function SettingsView({
                     )}
                   >
                     <div>
-                      <p className="font-medium text-foreground">{format.label}</p>
+                      <p className="font-medium text-foreground">{t(format.label)}</p>
                       <p className="text-[11px] text-muted-foreground font-mono mt-0.5">{format.example}</p>
                     </div>
                     {isSelected && <Check className="size-4 text-primary shrink-0" />}
@@ -419,9 +444,9 @@ export function SettingsView({
         <div className="flex flex-col divide-y divide-border/60">
           <div className="flex items-center justify-between gap-4 py-3 first:pt-0">
             <div className="min-w-0">
-              <p className="text-sm font-medium">Grade alerts</p>
+              <p className="text-sm font-medium">{t("Grade alerts")}</p>
               <p className="text-xs text-muted-foreground">
-                Get notified when new midterm, internal, or evaluation grades are published.
+                {t("Get notified when new midterm, internal, or evaluation grades are published.")}
               </p>
             </div>
             <Switch
@@ -429,15 +454,15 @@ export function SettingsView({
               onCheckedChange={(checked) =>
                 updateNamespace("notifications", { grade_alerts: checked }, "Grade alerts")
               }
-              aria-label="Toggle grade alerts"
+              aria-label={t("Grade alerts")}
             />
           </div>
 
           <div className="flex items-center justify-between gap-4 py-3">
             <div className="min-w-0">
-              <p className="text-sm font-medium">Attendance warnings</p>
+              <p className="text-sm font-medium">{t("Attendance warnings")}</p>
               <p className="text-xs text-muted-foreground">
-                Alerts when subject attendance approaches or falls below the 75% eligibility threshold.
+                {t("Alerts when subject attendance approaches or falls below the 75% eligibility threshold.")}
               </p>
             </div>
             <Switch
@@ -445,15 +470,15 @@ export function SettingsView({
               onCheckedChange={(checked) =>
                 updateNamespace("notifications", { attendance_warnings: checked }, "Attendance warnings")
               }
-              aria-label="Toggle attendance warnings"
+              aria-label={t("Attendance warnings")}
             />
           </div>
 
           <div className="flex items-center justify-between gap-4 py-3 last:pb-0">
             <div className="min-w-0">
-              <p className="text-sm font-medium">Semester results</p>
+              <p className="text-sm font-medium">{t("Semester results")}</p>
               <p className="text-xs text-muted-foreground">
-                Be notified when end-semester summary cards and SGPA/CGPA calculations are finalized.
+                {t("Be notified when end-semester summary cards and SGPA/CGPA calculations are finalized.")}
               </p>
             </div>
             <Switch
@@ -461,7 +486,7 @@ export function SettingsView({
               onCheckedChange={(checked) =>
                 updateNamespace("notifications", { semester_results: checked }, "Semester results")
               }
-              aria-label="Toggle semester results"
+              aria-label={t("Semester results")}
             />
           </div>
         </div>
@@ -480,10 +505,10 @@ export function SettingsView({
               <div>
                 <p className="text-sm font-medium flex items-center gap-1.5">
                   <KeyRound className="size-4 text-muted-foreground" />
-                  Change password
+                  {t("Change password")}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Update your credentials securely. Password must be at least 6 characters.
+                  {t("Update your credentials securely. Password must be at least 6 characters.")}
                 </p>
               </div>
               {secPrefs.password_updated_at ? (
@@ -509,7 +534,7 @@ export function SettingsView({
             <form onSubmit={handlePasswordChange} className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:max-w-xl">
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                  Current password
+                  {t("Current password")}
                 </label>
                 <Input
                   type="password"
@@ -522,7 +547,7 @@ export function SettingsView({
               </div>
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                  New password
+                  {t("New password")}
                 </label>
                 <Input
                   type="password"
@@ -535,7 +560,7 @@ export function SettingsView({
               </div>
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                  Confirm new password
+                  {t("Confirm new password")}
                 </label>
                 <Input
                   type="password"
@@ -551,10 +576,10 @@ export function SettingsView({
                   {isChangingPassword ? (
                     <>
                       <Loader2 className="size-3.5 animate-spin mr-1.5" />
-                      Updating...
+                      {t("Updating...")}
                     </>
                   ) : (
-                    "Update password"
+                    t("Update password")
                   )}
                 </Button>
               </div>
@@ -567,20 +592,20 @@ export function SettingsView({
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium flex items-center gap-1.5">
                   <Smartphone className="size-4 text-muted-foreground" />
-                  Two-factor authentication
+                  {t("Two-factor authentication")}
                 </p>
                 <Badge variant={secPrefs.two_factor_enabled ? "success" : "muted"}>
-                  {secPrefs.two_factor_enabled ? "Enabled" : "Disabled"}
+                  {secPrefs.two_factor_enabled ? t("Enabled") : t("Disabled")}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Require email verification code sent to your student institutional address when signing in.
+                {t("Require email verification code sent to your student institutional address when signing in.")}
               </p>
             </div>
             <Switch
               checked={Boolean(secPrefs.two_factor_enabled)}
               onCheckedChange={handleToggleTwoFactor}
-              aria-label="Toggle two-factor authentication"
+              aria-label={t("Two-factor authentication")}
             />
           </div>
 
@@ -589,10 +614,10 @@ export function SettingsView({
             <div className="min-w-0">
               <p className="text-sm font-medium flex items-center gap-1.5">
                 <LogOut className="size-4 text-muted-foreground" />
-                Sign out all devices
+                {t("Sign out all devices")}
               </p>
               <p className="text-xs text-muted-foreground">
-                Terminates all active sessions across other browsers, tablets, and phones.
+                {t("Terminates all active sessions across other browsers, tablets, and phones.")}
               </p>
             </div>
             {showSignOutConfirm ? (
@@ -606,7 +631,7 @@ export function SettingsView({
                   className="h-8 text-xs cursor-pointer"
                 >
                   {isSigningOutAll ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <ShieldAlert className="size-3.5 mr-1" />}
-                  Confirm sign out all
+                  {t("Confirm sign out all")}
                 </Button>
                 <Button
                   type="button"
@@ -615,7 +640,7 @@ export function SettingsView({
                   onClick={() => setShowSignOutConfirm(false)}
                   className="h-8 text-xs cursor-pointer"
                 >
-                  Cancel
+                  {t("Cancel")}
                 </Button>
               </div>
             ) : (
@@ -626,7 +651,7 @@ export function SettingsView({
                 onClick={() => setShowSignOutConfirm(true)}
                 className="h-8 text-xs cursor-pointer text-destructive border-destructive/30 hover:bg-destructive/10"
               >
-                Sign out all devices
+                {t("Sign out all devices")}
               </Button>
             )}
           </div>
@@ -643,25 +668,25 @@ export function SettingsView({
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-sm font-medium">Signed in as {session.username}</p>
+                <p className="text-sm font-medium">{t("Signed in as")} {session.username}</p>
                 <p className="text-xs text-muted-foreground">
-                  {session.department ?? "No department"} · Student
+                  {session.department ?? t("No department")} · {t("Student")}
                 </p>
               </div>
-              <Badge variant="success">Active session</Badge>
+              <Badge variant="success">{t("Active session")}</Badge>
             </div>
             <div className="grid gap-x-6 gap-y-1 border-t border-border/60 pt-3 text-sm sm:grid-cols-2">
               <p className="text-muted-foreground">
-                Role: <span className="font-medium text-foreground">Student</span>
+                {t("Role:")} <span className="font-medium text-foreground">{t("Student")}</span>
               </p>
               {session.studentId && (
                 <p className="text-muted-foreground">
-                  Student ID: <span className="font-medium text-foreground">{session.studentId}</span>
+                  {t("Student ID:")} <span className="font-medium text-foreground">{session.studentId}</span>
                 </p>
               )}
               {session.department && (
                 <p className="text-muted-foreground">
-                  Department:{" "}
+                  {t("Department:")}{" "}
                   <span className="font-medium text-foreground">{session.department}</span>
                 </p>
               )}
@@ -669,14 +694,14 @@ export function SettingsView({
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Session details are unavailable right now.
+            {t("Session details are unavailable right now.")}
           </p>
         )}
       </SectionCard>
 
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <ShieldCheck className="size-4" />
-        You can sign out from the sidebar or the account menu in the header.
+        {t("You can sign out from the sidebar or the account menu in the header.")}
       </div>
     </div>
   )

@@ -7,15 +7,17 @@ import { Menu } from "@base-ui/react/menu"
 import { AvatarInitials } from "@/components/shared/data/avatar-initials"
 import { Button } from "@/components/ui/button"
 import { signOut } from "@/lib/auth-actions"
+import { useTranslation } from "@/lib/i18n"
 import type { StudentProfile } from "@/lib/student-api"
 import { cn } from "@/lib/utils"
 
 export function UserMenu({ profile }: { profile: StudentProfile | null }) {
   const router = useRouter()
+  const { t } = useTranslation()
 
   const firstName = profile?.first_name ?? ""
   const lastName = profile?.last_name ?? ""
-  const fullName = `${firstName} ${lastName}`.trim() || "Student"
+  const fullName = `${firstName} ${lastName}`.trim() || t("Student", "Student")
   const department = profile?.department_name ?? null
   const semester = profile?.current_semester ?? null
   const enrollment = profile?.enrollment_no ?? null
@@ -35,7 +37,7 @@ export function UserMenu({ profile }: { profile: StudentProfile | null }) {
         render={
           <Button variant="ghost" className="h-10 gap-2 rounded-full px-2 sm:px-2.5" />
         }
-        aria-label="Account menu"
+        aria-label={t("Account menu", "Account menu")}
       >
         <AvatarInitials firstName={firstName} lastName={lastName} />
         <span className="hidden min-w-0 flex-col text-left leading-tight sm:flex">
@@ -55,7 +57,7 @@ export function UserMenu({ profile }: { profile: StudentProfile | null }) {
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{fullName}</p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {studentId ?? (department ?? "Student")}
+                  {studentId ?? (department ?? t("Student", "Student"))}
                 </p>
               </div>
             </div>
@@ -65,27 +67,27 @@ export function UserMenu({ profile }: { profile: StudentProfile | null }) {
             <Menu.Separator className="my-1 h-px bg-border" />
             <Menu.Item
               className={cn(
-                "flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-muted data-[highlighted]:text-foreground",
+                "flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-muted data-[highlighted]:text-foreground cursor-pointer",
               )}
               onClick={() => router.push("/student/profile")}
             >
               <UserRound className="size-4 text-muted-foreground" />
-              View Profile
+              {t("View Profile", "View Profile")}
             </Menu.Item>
             <Menu.Item
-              className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-muted data-[highlighted]:text-foreground"
+              className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-muted data-[highlighted]:text-foreground cursor-pointer"
               onClick={() => router.push("/student/settings")}
             >
               <Settings className="size-4 text-muted-foreground" />
-              Settings
+              {t("Settings", "Settings")}
             </Menu.Item>
             <Menu.Separator className="my-1 h-px bg-border" />
             <Menu.Item
-              className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-destructive outline-none data-[highlighted]:bg-destructive/10"
+              className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-destructive outline-none data-[highlighted]:bg-destructive/10 cursor-pointer"
               onClick={() => signOut()}
             >
               <LogOut className="size-4" />
-              Sign Out
+              {t("Sign Out", "Sign Out")}
             </Menu.Item>
           </Menu.Popup>
         </Menu.Positioner>

@@ -7,6 +7,7 @@ import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import { UserMenu } from "@/components/student/user-menu"
 import { NotificationBell } from "@/components/student/notification-bell"
+import { useTranslation } from "@/lib/i18n"
 import type { StudentProfile } from "@/lib/student-api"
 
 export function TopBar({
@@ -19,6 +20,7 @@ export function TopBar({
   profile: StudentProfile | null
 }) {
   const { resolvedTheme, setTheme } = useTheme()
+  const { t } = useTranslation()
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
@@ -32,21 +34,21 @@ export function TopBar({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Open navigation menu"
+          aria-label={t("Open navigation menu", "Open navigation menu")}
           aria-expanded={menuOpen}
           className="lg:hidden"
           onClick={onMenu}
         >
           <Menu className="size-4" />
         </Button>
-        <p className="text-sm font-medium">Student Portal</p>
+        <p className="text-sm font-medium">{t("Student Portal", "Student Portal")}</p>
       </div>
       <div className="flex items-center gap-1">
         <NotificationBell />
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Toggle theme"
+          aria-label={t("Toggle theme", "Toggle theme")}
           onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         >
           {mounted ? (
