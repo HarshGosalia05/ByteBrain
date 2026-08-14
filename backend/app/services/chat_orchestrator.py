@@ -24,12 +24,14 @@ Rules & Invariants:
 """
 from __future__ import annotations
 
+import json
 import logging
+import time
 from typing import Any
 
-import asyncpg
 from fastapi import HTTPException, status
 
+from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.genai import GenAIRequest, UserRole, VerifiedContext
 from app.schemas.tools import IntentRequest, RouteDecision
@@ -43,7 +45,7 @@ from app.services.faculty_flagged_students_tool import FacultyFlaggedStudentsToo
 from app.services.faculty_prediction_insights_tool import FacultyPredictionInsightsTool
 from app.services.faculty_student_analytics_tool import FacultyStudentAnalyticsTool
 from app.services.faculty_subject_analytics_tool import FacultySubjectAnalyticsTool
-from app.services.genai_provider import GenAIError
+from app.services.genai_provider import GenAIError, GenAIRateLimitError
 from app.services.genai_service import GenAIService
 from app.services.intent_router import IntentRouter
 from app.services.student_academic_tool import StudentAcademicTool
@@ -74,10 +76,22 @@ AMBIGUOUS_INTENT_MSG = (
 UNAUTHORIZED_INTENT_MSG = (
     "This request targets information or features outside the permissions of your authenticated role."
 )
-
 TOOL_NOT_IMPLEMENTED_MSG = (
     "The requested tool or analytics feature is not currently available."
 )
+
+def _format_verified_data_summary(data: dict[str, Any]) -> str:
+    """Format structured verified tool data deterministically without LLM generation."""
+    if not isinstance(data, dict) or not data:
+        return "No structured data available."
+    lines = []
+    for k, v in data.items():
+        label = k.replace("_", " ").title()
+        if isinstance(v, (dict, list)):
+            lines.append(f"* **{label}**: {json.dumps(v, default=str)}")
+        else:
+            lines.append(f"* **{label}**: {v}")
+    return "\n".join(lines)
 
 
 class ChatOrchestrator:
@@ -204,7 +218,7 @@ class ChatOrchestrator:
             if tool_name == "student_career_coach_tool":
                 result = await tool_instance.execute(
                     student_id=user_context_id,
-                    intent=decision.intent,
+                    requested_intent=decision.intent,
                 )
             else:
                 result = await tool_instance.execute(student_id=user_context_id)
@@ -221,7 +235,7 @@ class ChatOrchestrator:
                 result = await tool_instance.execute(
                     faculty_id=user_context_id,
                     target_student_id=request.target_student_id,
-                    intent=decision.intent,
+                    intent=decision.intent or "student_performance",
                 )
                 return tool_instance.to_verified_context(result)
 
@@ -250,7 +264,7 @@ class ChatOrchestrator:
             if tool_name == "admin_trends_analytics_tool":
                 result = await tool_instance.execute(
                     admin_id=user_context_id,
-                    intent=decision.intent,
+                    intent=decision.intent or "academic_trends",
                 )
             elif tool_name in (
                 "admin_institution_analytics_tool",
@@ -273,16 +287,22 @@ class ChatOrchestrator:
 
     async def process_chat(self, user: dict, request: ChatRequest) -> ChatResponse:
         """Process a chat request through the full G0-G2 pipeline."""
+        start_time = time.perf_counter()
         role, user_context_id = self._extract_identity(user)
         clean_message = request.message.strip()
-
         if not clean_message:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Chat message cannot be empty",
             )
+        logger.info(
+            "Chat request started | role=%s context_id=%s msg_len=%d",
+            role,
+            user_context_id,
+            len(clean_message),
+        )
 
-        # 1. Route Intent
+        # 1. Route intent
         intent_request = IntentRequest(
             role=role,
             user_context_id=user_context_id,
@@ -294,6 +314,46 @@ class ChatOrchestrator:
         decision = self._router.route(intent_request)
 
         # 2. Handle non-ROUTED outcomes
+        if decision.status == "GENERAL_CONVERSATION":
+            genai_req = GenAIRequest(
+                role=role,
+                user_context_id=user_context_id,
+                intent=None,
+                verified_context=[],
+                conversation_history=request.conversation_history,
+                user_message=clean_message,
+            )
+            try:
+                genai_resp = await self._genai_service.generate(genai_req)
+                return ChatResponse(
+                    message=genai_resp.content,
+                    intent=None,
+                    tool_name=None,
+                    status="success",
+                    verified_sources=[],
+                    provider=genai_resp.provider,
+                    model=genai_resp.model,
+                )
+            except GenAIRateLimitError as exc:
+                logger.warning("General conversation rate-limited: %s", exc)
+                return ChatResponse(
+                    message="The AI assistant is temporarily rate-limited. Please try again shortly.",
+                    intent=None,
+                    tool_name=None,
+                    status="rate_limited",
+                    verified_sources=[],
+                )
+            except Exception as exc:
+                logger.warning("General conversation fallback triggered: %s", exc)
+                fallback_msg = self._build_general_conversation_fallback(clean_message, role)
+                return ChatResponse(
+                    message=fallback_msg,
+                    intent=None,
+                    tool_name=None,
+                    status="success",
+                    verified_sources=[],
+                )
+
         if decision.status == "UNKNOWN_INTENT":
             return ChatResponse(
                 message=UNKNOWN_INTENT_MSG,
@@ -344,6 +404,15 @@ class ChatOrchestrator:
                 detail="Tool returned invalid verified context boundary",
             )
 
+        tool_duration_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(
+            "Tool execution completed | tool=%s intent=%s source=%s duration_ms=%.1f",
+            decision.tool_name,
+            decision.intent,
+            verified_ctx.source,
+            tool_duration_ms,
+        )
+
         # 4. Generate Grounded GenAI Response
         genai_req = GenAIRequest(
             role=role,
@@ -354,27 +423,115 @@ class ChatOrchestrator:
             user_message=clean_message,
         )
 
+        logger.info(
+            "GenAI provider request started | provider=%s model=%s intent=%s",
+            settings.GENAI_PROVIDER,
+            settings.GENAI_MODEL,
+            decision.intent,
+        )
+
         try:
             genai_resp = await self._genai_service.generate(genai_req)
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.info(
+                "Chat request completed successfully | intent=%s tool=%s status=success duration_ms=%.1f",
+                decision.intent,
+                decision.tool_name,
+                duration_ms,
+            )
+            return ChatResponse(
+                message=genai_resp.content,
+                intent=decision.intent,
+                tool_name=decision.tool_name,
+                status="success",
+                verified_sources=[verified_ctx.source],
+                provider=genai_resp.provider,
+                model=genai_resp.model,
+            )
+        except GenAIRateLimitError as exc:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.warning(
+                "Chat request rate-limited (HTTP 429) | intent=%s tool=%s duration_ms=%.1f exc=%s",
+                decision.intent,
+                decision.tool_name,
+                duration_ms,
+                exc,
+            )
+            data_summary = _format_verified_data_summary(verified_ctx.data)
+            fallback_msg = (
+                f"AI explanation unavailable (rate-limited) — showing verified data:\n\n{data_summary}"
+                if verified_ctx and verified_ctx.data
+                else "The AI assistant is temporarily rate-limited. Your academic data is available, but the AI explanation cannot be generated right now. Please try again shortly."
+            )
+            return ChatResponse(
+                message=fallback_msg,
+                intent=decision.intent,
+                tool_name=decision.tool_name,
+                status="rate_limited",
+                verified_sources=[verified_ctx.source] if verified_ctx else [],
+            )
         except GenAIError as exc:
-            logger.warning("GenAI generation failed: %s", exc)
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="AI service is temporarily unavailable. Please try again later.",
-            ) from exc
-        except Exception as exc:
-            logger.error("Unexpected error during GenAI generation: %s", exc)
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="AI service encountered an unexpected error. Please try again later.",
-            ) from exc
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.warning(
+                "GenAI provider failed/unavailable | intent=%s tool=%s duration_ms=%.1f exc=%s",
+                decision.intent,
+                decision.tool_name,
+                duration_ms,
+                exc,
+            )
+            data_summary = _format_verified_data_summary(verified_ctx.data)
+            fallback_msg = (
+                f"AI explanation unavailable (service unavailable) — showing verified data:\n\n{data_summary}"
+                if verified_ctx and verified_ctx.data
+                else "The AI chat service is temporarily unavailable. Please try again later."
+            )
+            return ChatResponse(
+                message=fallback_msg,
+                intent=decision.intent,
+                tool_name=decision.tool_name,
+                status="unavailable",
+                verified_sources=[verified_ctx.source] if verified_ctx else [],
+            )
 
-        return ChatResponse(
-            message=genai_resp.content,
-            intent=decision.intent,
-            tool_name=decision.tool_name,
-            status="success",
-            verified_sources=[verified_ctx.source],
-            provider=genai_resp.provider,
-            model=genai_resp.model,
+    @staticmethod
+    def _build_general_conversation_fallback(message: str, role: UserRole) -> str:
+        lowered = message.lower()
+        is_hindi = any(
+            w in lowered
+            for w in (
+                "hindi", "kya", "samajhte", "samjte", "tum", "kaise",
+                "namaste", "pranam", "aati", "madad", "batao", "dikhao",
+            )
+        )
+        if is_hindi:
+            if role == "Student":
+                return (
+                    "Haan, main Hindi aur Hinglish samajhta hoon. Aap mujhse apni academic "
+                    "performance, attendance, subjects, predictions, ya career guidance ke "
+                    "baare mein pooch sakte hain."
+                )
+            if role == "Faculty":
+                return (
+                    "Haan, main Hindi aur Hinglish samajhta hoon. Aap mujhse student analytics, "
+                    "attendance records, subject performance, flagged students, ya department "
+                    "insights ke baare mein pooch sakte hain."
+                )
+            return (
+                "Haan, main Hindi aur Hinglish samajhta hoon. Aap mujhse institution analytics, "
+                "department comparisons, academic trends, ya ML insights ke baare mein pooch sakte hain."
+            )
+
+        if role == "Student":
+            return (
+                "Hello! I am your KenexAI Assistant. You can ask me about your academic "
+                "performance, attendance, subjects, predictions, or career readiness."
+            )
+        if role == "Faculty":
+            return (
+                "Hello! I am your KenexAI Assistant. You can ask me about student analytics, "
+                "attendance records, subject performance, flagged students, or department insights."
+            )
+        return (
+            "Hello! I am your KenexAI Assistant. You can ask me about institution-wide analytics, "
+            "department performance, academic trends, attendance trends, or ML insights."
         )

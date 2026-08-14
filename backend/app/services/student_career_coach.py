@@ -233,6 +233,7 @@ class StudentCareerCoachTool:
         *,
         student_id: str,
         target_student_id: str | None = None,
+        requested_intent: str | None = None,
     ) -> StudentCareerCoachResult:
         """Return the combined career coach result for the authenticated student.
 

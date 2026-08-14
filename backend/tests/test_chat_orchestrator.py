@@ -232,7 +232,7 @@ class TestChatOrchestrator(unittest.TestCase):
             run(self.orchestrator.process_chat(user=user, request=req))
         self.assertEqual(ctx.exception.status_code, 403)
 
-    def test_provider_failure_raises_503(self):
+    def test_provider_failure_returns_unavailable_status(self):
         failing_provider = FakeProvider(fail=True)
         service = GenAIService(provider=failing_provider)
         orchestrator = ChatOrchestrator(
@@ -243,9 +243,9 @@ class TestChatOrchestrator(unittest.TestCase):
         user = {"role": "Student", "student_id": "STU001"}
         req = ChatRequest(message="What is my SGPA?")
 
-        with self.assertRaises(HTTPException) as ctx:
-            run(orchestrator.process_chat(user=user, request=req))
-        self.assertEqual(ctx.exception.status_code, 503)
+        resp = run(orchestrator.process_chat(user=user, request=req))
+        self.assertEqual(resp.status, "unavailable")
+        self.assertIn("AI explanation unavailable", resp.message)
 
     def test_conversation_history_passed_to_provider(self):
         user = {"role": "Student", "student_id": "STU001"}
@@ -278,7 +278,7 @@ class TestChatOrchestrator(unittest.TestCase):
             ("Student", {"role": "Student", "student_id": "STU1"}, "my attendance", "attendance", None, "student_attendance_tool", {"student_id": "STU1"}),
             ("Student", {"role": "Student", "student_id": "STU1"}, "weak subjects", "subject_analysis", None, "student_subject_analysis_tool", {"student_id": "STU1"}),
             ("Student", {"role": "Student", "student_id": "STU1"}, "will i fail predicted at-risk", "prediction_explanation", None, "student_prediction_explanation_tool", {"student_id": "STU1"}),
-            ("Student", {"role": "Student", "student_id": "STU1"}, "career guidance job role", "career_guidance", None, "student_career_coach_tool", {"student_id": "STU1", "intent": "career_guidance"}),
+            ("Student", {"role": "Student", "student_id": "STU1"}, "career guidance job role", "career_guidance", None, "student_career_coach_tool", {"student_id": "STU1", "requested_intent": "career_guidance"}),
             # Faculty (5)
             ("Faculty", {"role": "Faculty", "faculty_id": "FAC1"}, "student performance", "student_performance", "STU2", "faculty_student_analytics_tool", {"faculty_id": "FAC1", "target_student_id": "STU2", "intent": "student_performance"}),
             ("Faculty", {"role": "Faculty", "faculty_id": "FAC1"}, "subject analytics", "subject_analytics", None, "faculty_subject_analytics_tool", {"faculty_id": "FAC1"}),

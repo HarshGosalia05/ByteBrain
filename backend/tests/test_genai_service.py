@@ -84,13 +84,15 @@ def _request(**overrides):
 
 class ConfigurationTests(unittest.TestCase):
     def test_configuration_loads_with_safe_defaults(self):
-        self.assertEqual(settings.GENAI_PROVIDER, "openai_compatible")
-        self.assertEqual(settings.GENAI_MODEL, "")
-        self.assertEqual(settings.GENAI_API_KEY, "")
-        self.assertEqual(settings.GENAI_BASE_URL, "https://api.openai.com/v1")
-        self.assertEqual(settings.GENAI_TEMPERATURE, 0.2)
-        self.assertEqual(settings.GENAI_MAX_TOKENS, 1024)
-        self.assertEqual(settings.GENAI_TIMEOUT_SECONDS, 30.0)
+        from app.core.config import Settings
+        fresh = Settings(_env_file=())
+        self.assertEqual(fresh.GENAI_PROVIDER, "openai_compatible")
+        self.assertEqual(fresh.GENAI_MODEL, "")
+        self.assertEqual(fresh.GENAI_API_KEY, "")
+        self.assertEqual(fresh.GENAI_BASE_URL, "https://api.openai.com/v1")
+        self.assertEqual(fresh.GENAI_TEMPERATURE, 0.2)
+        self.assertEqual(fresh.GENAI_MAX_TOKENS, 1024)
+        self.assertEqual(fresh.GENAI_TIMEOUT_SECONDS, 30.0)
 
     def test_missing_configuration_fails_closed(self):
         with mock.patch.object(settings, "GENAI_API_KEY", ""), mock.patch.object(

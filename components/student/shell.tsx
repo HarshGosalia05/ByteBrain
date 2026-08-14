@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import * as React from "react"
 import Link from "next/link"
@@ -7,6 +7,7 @@ import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SideNav } from "@/components/student/side-nav"
 import { TopBar } from "@/components/student/top-bar"
+import { Chatbot } from "@/components/shared/chatbot"
 import type { StudentProfile } from "@/lib/student-api"
 
 function Brand() {
@@ -92,6 +93,9 @@ export function StudentShell({
           </div>
         </div>
       )}
+
+      {/* Floating Chatbot Assistant */}
+      <Chatbot role="Student" />
     </div>
   )
 }

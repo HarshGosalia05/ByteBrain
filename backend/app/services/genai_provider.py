@@ -20,12 +20,49 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from abc import ABC, abstractmethod
 from typing import Any
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+def _rate_limit_retry_seconds(response: httpx.Response, default: float) -> float:
+    """Best-effort wait before retrying a rate-limited provider call.
+
+    Prefers an explicit ``Retry-After`` header, otherwise parses the safe
+    "Please retry in Ns" hint from the provider error body (used by Gemini).
+    Falls back to ``default`` when no hint is available.
+    """
+    headers = getattr(response, "headers", None)
+    if headers is not None:
+        try:
+            retry_after = headers.get("retry-after")
+        except (AttributeError, TypeError):
+            retry_after = None
+        if retry_after:
+            try:
+                return max(default, float(retry_after))
+            except (TypeError, ValueError):
+                pass
+    try:
+        body = response.json()
+    except Exception:
+        return default
+    if isinstance(body, list) and body:
+        body = body[0]
+    error = body.get("error") if isinstance(body, dict) else None
+    message = error.get("message") if isinstance(error, dict) else None
+    if isinstance(message, str):
+        match = re.search(r"retry in\s+([\d.]+)\s*s", message, re.IGNORECASE)
+        if match:
+            try:
+                return max(default, float(match.group(1)))
+            except ValueError:
+                return default
+    return default
 
 
 class GenAIError(Exception):
@@ -52,8 +89,19 @@ class GenAITimeoutError(GenAIProviderError):
     """Provider call exceeded the configured timeout."""
 
 
+MAX_RATE_LIMIT_WAIT_SECONDS: float = 3.0
+
+
 class GenAIRateLimitError(GenAIProviderError):
     """Provider returned a rate-limit / quota response."""
+
+    def __init__(
+        self,
+        message: str = "GenAI provider rate limit exceeded",
+        retry_after: float | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class GenAIInvalidResponseError(GenAIProviderError):
@@ -181,10 +229,34 @@ class OpenAICompatibleProvider(GenAIProvider):
                 break
 
             if response.status_code == 429:
+                wait_seconds = _rate_limit_retry_seconds(
+                    response, self._retry_backoff * (attempt + 1)
+                )
+                if wait_seconds > MAX_RATE_LIMIT_WAIT_SECONDS:
+                    logger.warning(
+                        "GenAI provider 429 rate limit retry-after (%.1fs) exceeds max wait threshold (%.1fs); failing fast.",
+                        wait_seconds,
+                        MAX_RATE_LIMIT_WAIT_SECONDS,
+                    )
+                    raise GenAIRateLimitError(
+                        "GenAI provider rate limit exceeded",
+                        retry_after=wait_seconds,
+                    )
+
                 if attempt < self._max_retries:
-                    await asyncio.sleep(self._retry_backoff * (attempt + 1))
+                    logger.warning(
+                        "GenAI provider rate limit (HTTP 429); retrying in %.1fs "
+                        "(attempt %d/%d)",
+                        wait_seconds,
+                        attempt + 1,
+                        self._max_retries,
+                    )
+                    await asyncio.sleep(wait_seconds)
                     continue
-                raise GenAIRateLimitError("GenAI provider rate limit exceeded")
+                raise GenAIRateLimitError(
+                    "GenAI provider rate limit exceeded",
+                    retry_after=wait_seconds,
+                )
             if response.status_code in (401, 403):
                 raise GenAIProviderError("GenAI provider rejected the credentials")
             if response.status_code >= 500:

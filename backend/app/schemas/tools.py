@@ -95,6 +95,7 @@ RouteStatus = Literal[
     "AMBIGUOUS_INTENT",
     "UNAUTHORIZED",
     "TOOL_NOT_IMPLEMENTED",
+    "GENERAL_CONVERSATION",
 ]
 
 

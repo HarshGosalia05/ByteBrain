@@ -73,6 +73,32 @@ class TestFacultyAdminGenAIRouter(unittest.TestCase):
         self.assertEqual(decision.intent, "subject_analytics")
         self.assertEqual(decision.scope_requirements.scope, "department_scope")
 
+    def test_faculty_subject_queries_variations(self):
+        queries = [
+            "subjects?",
+            "subject names",
+            "semester subjects",
+            "sem subjects",
+            "sem 7 subjects",
+            "sem 7 subject names",
+            "show my subjects",
+            "what subjects do I teach?",
+            "which subjects am I teaching?",
+            "subjects for semester 7",
+            "my semester 7 subjects",
+        ]
+        for q in queries:
+            decision = self.router.route(
+                IntentRequest(
+                    role="Faculty",
+                    user_context_id="FAC001",
+                    message=q,
+                )
+            )
+            self.assertEqual(decision.status, "ROUTED", f"Failed on query: {q}")
+            self.assertEqual(decision.tool_name, "faculty_subject_analytics_tool", f"Failed on query: {q}")
+            self.assertEqual(decision.intent, "subject_analytics", f"Failed on query: {q}")
+
     def test_faculty_flagged_students_routes(self):
         decision = self.router.route(
             IntentRequest(

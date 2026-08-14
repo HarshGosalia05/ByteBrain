@@ -311,8 +311,10 @@ class TestChatApi(unittest.TestCase):
             headers={"Authorization": f"Bearer {token}"},
             json={"message": "What is my SGPA?"},
         )
-        self.assertEqual(resp.status_code, 503)
-        self.assertIn("AI service is temporarily unavailable", resp.json()["detail"])
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["status"], "unavailable")
+        self.assertIn("AI explanation unavailable", body["message"])
 
     # -----------------------------------------------------------------------
     # Validation & Security Edge Cases

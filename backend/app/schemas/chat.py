@@ -20,6 +20,7 @@ ChatStatus = Literal[
     "clarification",
     "unauthorized",
     "unavailable",
+    "rate_limited",
     "error",
 ]
 

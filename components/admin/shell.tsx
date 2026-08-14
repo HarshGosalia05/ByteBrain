@@ -7,6 +7,7 @@ import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SideNav } from "@/components/admin/side-nav"
 import { TopBar } from "@/components/admin/top-bar"
+import { Chatbot } from "@/components/shared/chatbot"
 
 function Brand() {
   return (
@@ -93,6 +94,9 @@ export function AdminShell({
           </div>
         </div>
       )}
+
+      {/* Floating Chatbot Assistant */}
+      <Chatbot role="Admin" />
     </div>
   )
 }
