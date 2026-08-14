@@ -1,25 +1,61 @@
-"""ML-13 Slice 1: Feedback Dataset Extraction & Validation.
+"""ML-13 Slice 2: Feedback-Informed M3 Retraining & Evaluation.
 
-Provides pure, deterministic, READ-ONLY dataset extraction and safety validation
-for incorporating ML-12 faculty feedback into M3 retraining.
+Provides offline, pure, deterministic dataset extraction, cross-validation,
+evaluation, model retraining, and artifact persistence for incorporating
+ML-12 faculty feedback into M3 Next-Semester Risk Forecasting.
 
 Reuses the exact M3 feature contract from ``ml.src.features.M3_CONTRACT`` and
 feedback label semantics from ``ml.src.feedback_labels``.
 
-Does NOT run model training, alter model artifacts, or modify database state.
+Does NOT modify database schema, migrations, RLS, or mutate prediction rows.
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-import pandas as pd
 
-from ml.src.features import M3_CONTRACT
+import joblib
+import numpy as np
+import pandas as pd
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    average_precision_score,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+from sklearn.model_selection import StratifiedKFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+from ml.src.features import M3_CONTRACT, _one_hot_encode
 from ml.src.feedback_labels import ACTION_LABELS, latest_verdicts
 
+logger = logging.getLogger(__name__)
 
 MIN_RETRAINING_SAMPLES = 30
+RANDOM_STATE = 42
+
+EXPECTED_M3_COLS = [
+    "semester_no",
+    "subjects_registered",
+    "credits_registered",
+    "credits_earned",
+    "semester_total_marks",
+    "semester_percentage",
+    "semester_sgpa",
+    "semester_attendance_percentage",
+    "backlog_count",
+    "department_name_BBA",
+    "department_name_CSE",
+    "is_male",
+]
 
 
 @dataclass
@@ -35,6 +71,44 @@ class FeedbackDatasetResult:
     excluded_records: List[Dict[str, Any]] = field(default_factory=list)
 
 
+@dataclass
+class ModelMetrics:
+    """Evaluation metrics for M3 classification."""
+
+    precision: float
+    recall: float
+    f1: float
+    roc_auc: float
+    pr_auc: float
+
+
+@dataclass
+class RetrainingResult:
+    """Complete summary result of M3 retraining cycle."""
+
+    status: str
+    counts_summary: Dict[str, Any]
+    baseline_metrics: Dict[str, float]
+    retrained_metrics: Dict[str, float]
+    metric_deltas: Dict[str, float]
+    artifact_paths: List[str]
+    db_invariants_before: Dict[str, int]
+    db_invariants_after: Dict[str, int]
+    reload_verified: bool
+    predict_verified: bool
+    serving_verified: bool
+
+
+def encode_m3_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Encode categorical and binary features according to M3_CONTRACT."""
+    X_enc = _one_hot_encode(df, M3_CONTRACT)
+    X_aligned = pd.DataFrame(0, index=X_enc.index, columns=EXPECTED_M3_COLS)
+    for col in EXPECTED_M3_COLS:
+        if col in X_enc.columns:
+            X_aligned[col] = X_enc[col]
+    return X_aligned
+
+
 def extract_and_validate_feedback_dataset(
     feedback_rows: List[Dict[str, Any]],
     predictions_map: Dict[str, Dict[str, Any]],
@@ -42,24 +116,7 @@ def extract_and_validate_feedback_dataset(
     *,
     min_samples: int = MIN_RETRAINING_SAMPLES,
 ) -> FeedbackDatasetResult:
-    """Extract, validate, and shape feedback-informed dataset for M3.
-
-    Parameters
-    ----------
-    feedback_rows:
-        List of raw feedback dicts from ``prediction_feedback``.
-    predictions_map:
-        Dict mapping ``prediction_id`` -> prediction row dict (from ``ml_predictions``).
-    student_features_map:
-        Dict mapping ``student_id`` -> M3 raw feature dict.
-    min_samples:
-        Minimum eligible sample count required for safe retraining (default 30).
-
-    Returns
-    -------
-    FeedbackDatasetResult
-        Status, safety flags, detailed counts, and optional features/labels.
-    """
+    """Extract, validate, and shape feedback-informed dataset for M3."""
     total_feedback = len(feedback_rows)
     confirmed_count = sum(1 for r in feedback_rows if r.get("feedback_action") == "confirmed")
     dismissed_count = sum(1 for r in feedback_rows if r.get("feedback_action") == "dismissed")
@@ -245,11 +302,7 @@ async def extract_feedback_dataset_from_db(
     *,
     min_samples: int = MIN_RETRAINING_SAMPLES,
 ) -> FeedbackDatasetResult:
-    """Async READ-ONLY helper to extract and validate dataset from PostgreSQL.
-
-    Executes strictly SELECT queries on ``prediction_feedback``, ``ml_predictions``,
-    ``students``, and ``student_semester_summary``.
-    """
+    """Async READ-ONLY helper to extract and validate dataset from PostgreSQL."""
     async with pool.acquire() as conn:
         fb_rows = await conn.fetch(
             """
@@ -277,7 +330,6 @@ async def extract_feedback_dataset_from_db(
         student_ids = list(set(r["student_id"] for r in feedback_list if r.get("student_id")))
         student_features_map: Dict[str, Dict[str, Any]] = {}
         if student_ids:
-            # Query latest student_semester_summary joined with students
             feat_rows = await conn.fetch(
                 """
                 SELECT DISTINCT ON (st.student_id)
@@ -308,3 +360,245 @@ async def extract_feedback_dataset_from_db(
         student_features_map,
         min_samples=min_samples,
     )
+
+
+async def fetch_historical_training_dataset(pool: Any) -> pd.DataFrame:
+    """Fetch ground-truth historical training dataset from PostgreSQL."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT 
+                st.student_id,
+                st.department_code AS department_name,
+                st.gender,
+                ss.semester_no,
+                ss.subjects_registered,
+                ss.credits_registered,
+                ss.credits_earned,
+                ss.semester_total_marks,
+                ss.semester_percentage,
+                ss.semester_sgpa,
+                ss.semester_attendance_percentage,
+                ss.backlog_count
+            FROM student_semester_summary ss
+            JOIN students st ON st.student_id = ss.student_id
+            ORDER BY st.student_id, ss.semester_no ASC
+            """
+        )
+    df = pd.DataFrame([dict(r) for r in rows])
+    df["next_backlogs"] = df.groupby("student_id")["backlog_count"].shift(-1)
+    df["next_sgpa"] = df.groupby("student_id")["semester_sgpa"].shift(-1)
+
+    train_hist = df[df["next_backlogs"].notna()].copy()
+    train_hist["is_at_risk_next_sem"] = (
+        (train_hist["next_backlogs"] > 0) | (train_hist["next_sgpa"] < 4.0)
+    ).astype(int)
+    return train_hist
+
+
+def create_m3_pipeline() -> Pipeline:
+    """Create standard M3 sklearn pipeline with SimpleImputer, StandardScaler, and LogisticRegression."""
+    return Pipeline(
+        [
+            ("pre_0", SimpleImputer(strategy="median")),
+            ("pre_1", StandardScaler()),
+            (
+                "model",
+                LogisticRegression(
+                    class_weight="balanced",
+                    max_iter=1000,
+                    random_state=RANDOM_STATE,
+                ),
+            ),
+        ]
+    )
+
+
+def evaluate_cv(
+    pipeline_factory: Any,
+    X_df: pd.DataFrame,
+    y: np.ndarray,
+    *,
+    n_splits: int = 5,
+    random_state: int = RANDOM_STATE,
+) -> Dict[str, float]:
+    """Evaluate pipeline using StratifiedKFold cross-validation to prevent leakage."""
+    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+
+    prec_list: List[float] = []
+    rec_list: List[float] = []
+    f1_list: List[float] = []
+    roc_list: List[float] = []
+    pr_auc_list: List[float] = []
+
+    for train_idx, val_idx in cv.split(X_df, y):
+        X_tr, y_tr = X_df.iloc[train_idx].values, y[train_idx]
+        X_va, y_val = X_df.iloc[val_idx].values, y[val_idx]
+
+        pipe = pipeline_factory()
+        pipe.fit(X_tr, y_tr)
+        y_pred = pipe.predict(X_va)
+
+        if hasattr(pipe, "predict_proba"):
+            y_prob = pipe.predict_proba(X_va)[:, 1]
+        elif hasattr(pipe, "decision_function"):
+            y_prob = pipe.decision_function(X_va)
+        else:
+            y_prob = y_pred
+
+        prec_list.append(precision_score(y_val, y_pred, zero_division=0))
+        rec_list.append(recall_score(y_val, y_pred, zero_division=0))
+        f1_list.append(f1_score(y_val, y_pred, zero_division=0))
+
+        try:
+            roc_list.append(roc_auc_score(y_val, y_prob))
+        except Exception:
+            pass
+
+        try:
+            pr_auc_list.append(average_precision_score(y_val, y_prob))
+        except Exception:
+            pass
+
+    return {
+        "precision": round(float(np.nanmean(prec_list)), 4),
+        "recall": round(float(np.nanmean(rec_list)), 4),
+        "f1": round(float(np.nanmean(f1_list)), 4),
+        "roc_auc": round(float(np.nanmean(roc_list)), 4),
+        "pr_auc": round(float(np.nanmean(pr_auc_list)), 4),
+    }
+
+
+async def get_db_invariants(pool: Any) -> Dict[str, int]:
+    """Read counts of all related tables for safety verification."""
+    async with pool.acquire() as conn:
+        fb_cnt = await conn.fetchval("SELECT count(*) FROM prediction_feedback")
+        ml_cnt = await conn.fetchval("SELECT count(*) FROM ml_predictions")
+        risk_cnt = await conn.fetchval("SELECT count(*) FROM risk_predictions")
+    return {
+        "prediction_feedback": fb_cnt,
+        "ml_predictions": ml_cnt,
+        "risk_predictions": risk_cnt,
+    }
+
+
+async def retrain_m3_model(
+    pool: Any,
+    *,
+    artifact_paths: Optional[List[Path]] = None,
+    min_samples: int = MIN_RETRAINING_SAMPLES,
+) -> RetrainingResult:
+    """Main offline retraining orchestrator for M3 Next-Semester Risk Forecast."""
+    # 1. DB Invariants Before
+    invariants_before = await get_db_invariants(pool)
+
+    # 2. Extract and validate feedback dataset
+    fb_result = await extract_feedback_dataset_from_db(pool, min_samples=min_samples)
+    if not fb_result.can_retrain or fb_result.features_df is None or fb_result.labels_series is None:
+        raise RuntimeError(f"Cannot retrain M3: {fb_result.reason}")
+
+    # 3. Extract historical baseline training data
+    hist_df = await fetch_historical_training_dataset(pool)
+
+    # 4. Prepare aligned features
+    X_hist = encode_m3_features(hist_df)
+    y_hist = hist_df["is_at_risk_next_sem"].values
+
+    X_fb = encode_m3_features(fb_result.features_df)
+    y_fb = fb_result.labels_series.values
+
+    # Combine datasets
+    X_combined = pd.concat([X_hist, X_fb], ignore_index=True)
+    y_combined = np.concatenate([y_hist, y_fb])
+
+    # 5. Evaluate Baseline CV vs Retrained CV
+    baseline_metrics = evaluate_cv(create_m3_pipeline, X_hist, y_hist)
+    retrained_metrics = evaluate_cv(create_m3_pipeline, X_combined, y_combined)
+
+    metric_deltas = {
+        k: round(retrained_metrics[k] - baseline_metrics[k], 4) for k in baseline_metrics
+    }
+
+    # 6. Fit Final Retrained Pipeline on Combined Dataset
+    final_pipeline = create_m3_pipeline()
+    final_pipeline.fit(X_combined.values, y_combined)
+
+    # 7. Persist Artifact (Single canonical M3 artifact)
+    if artifact_paths is None:
+        root_dir = Path(__file__).resolve().parents[2]
+        artifact_paths = [
+            root_dir / "ml" / "artifacts" / "models" / "m3_next_semester_at_risk.joblib",
+        ]
+
+    saved_paths = []
+    for path in artifact_paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(final_pipeline, path)
+        saved_paths.append(str(path))
+        logger.info("Persisted M3 artifact to %s", path)
+
+    # 8. Reload & Predict Verification
+    reload_verified = False
+    predict_verified = False
+    for path in artifact_paths:
+        loaded = joblib.load(path)
+        if loaded is not None:
+            reload_verified = True
+        test_pred = loaded.predict(X_combined.iloc[:5].values)
+        if len(test_pred) == 5:
+            predict_verified = True
+
+    # 9. PredictionService Serving Verification
+    serving_verified = False
+    try:
+        from ml.src.prediction_service import PredictionService
+
+        service = PredictionService(pool)
+        # Verify M3 prediction for a student
+        sample_sid = str(hist_df.iloc[0]["student_id"])
+        pred_res = await service.predict_m3_for_student(sample_sid)
+        if pred_res and pred_res.model_id == "m3" and len(pred_res.predictions) > 0:
+            serving_verified = True
+    except Exception as exc:
+        logger.warning("PredictionService serving verification warning: %s", exc)
+
+    # 10. DB Invariants After
+    invariants_after = await get_db_invariants(pool)
+
+    return RetrainingResult(
+        status="retrained_successfully",
+        counts_summary=fb_result.counts_summary,
+        baseline_metrics=baseline_metrics,
+        retrained_metrics=retrained_metrics,
+        metric_deltas=metric_deltas,
+        artifact_paths=saved_paths,
+        db_invariants_before=invariants_before,
+        db_invariants_after=invariants_after,
+        reload_verified=reload_verified,
+        predict_verified=predict_verified,
+        serving_verified=serving_verified,
+    )
+
+
+if __name__ == "__main__":
+    from app.core.database import db
+
+    async def _run():
+        await db.connect()
+        try:
+            res = await retrain_m3_model(db.pool)
+            print("Retraining completed successfully!")
+            print(f"Status: {res.status}")
+            print(f"Artifact paths: {res.artifact_paths}")
+            print(f"Baseline metrics: {res.baseline_metrics}")
+            print(f"Retrained metrics: {res.retrained_metrics}")
+            print(f"Metric deltas: {res.metric_deltas}")
+            print(f"Reload verified: {res.reload_verified}")
+            print(f"Predict verified: {res.predict_verified}")
+            print(f"Serving verified: {res.serving_verified}")
+            print(f"DB Invariants Before: {res.db_invariants_before}")
+            print(f"DB Invariants After: {res.db_invariants_after}")
+        finally:
+            await db.disconnect()
+
+    asyncio.run(_run())
