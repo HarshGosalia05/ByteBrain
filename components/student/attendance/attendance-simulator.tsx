@@ -1,9 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { ArrowDownRight, ArrowUpRight, Calculator, Info } from "lucide-react"
+import { AlertCircle, ArrowDownRight, ArrowUpRight, Calculator, Info } from "lucide-react"
 
-import { simulateAttendance } from "@/lib/student/attendance-simulation"
+import {
+  parseAttendanceField,
+  simulateAttendance,
+  ATTENDANCE_SIMULATION_MAX_CLASSES,
+} from "@/lib/student/attendance-simulation"
 import type { AttendanceSimulatorSubject } from "@/lib/student-api"
 
 import { Badge } from "@/components/ui/badge"
@@ -20,14 +24,6 @@ import {
 } from "@/components/ui/select"
 
 type Values = { present: string; absent: string }
-
-function parseValue(raw: string): number {
-  const trimmed = raw.trim()
-  if (trimmed === "") return 0
-  const value = Number(trimmed)
-  if (!Number.isFinite(value)) return 0
-  return Math.max(0, Math.trunc(value))
-}
 
 function statusVariant(status: string | null): "success" | "warning" | "destructive" | "muted" {
   switch (status) {
@@ -60,12 +56,17 @@ export function AttendanceSimulator({
   const activeSubject =
     withCounts.find((subject) => subject.subject_id === selectedId) ?? withCounts[0]
 
+  const parsedPresent = parseAttendanceField(values.present, "present")
+  const parsedAbsent = parseAttendanceField(values.absent, "absent")
+  const isValid = parsedPresent.valid && parsedAbsent.valid
+
   // Pure, deterministic and synchronous — no network, no API, no persistence.
+  // When inputs are invalid, hypothetical values are passed as null to prevent calculation.
   const result = simulateAttendance({
     total_classes: activeSubject?.total_classes ?? null,
     attended_classes: activeSubject?.attended_classes ?? null,
-    hypothetical_present: parseValue(values.present),
-    hypothetical_absent: parseValue(values.absent),
+    hypothetical_present: isValid ? parsedPresent.value : null,
+    hypothetical_absent: isValid ? parsedAbsent.value : null,
     target_attendance: target,
   })
 
@@ -87,6 +88,12 @@ export function AttendanceSimulator({
         ? "text-chart-2"
         : "text-destructive"
       : "text-muted-foreground"
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (["-", "+", "e", "E", "."].includes(e.key)) {
+      e.preventDefault()
+    }
+  }
 
   return (
     <section className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
@@ -140,15 +147,21 @@ export function AttendanceSimulator({
               id="sim-att-present"
               type="number"
               min={0}
-              max={100}
+              max={ATTENDANCE_SIMULATION_MAX_CLASSES}
               inputMode="numeric"
               placeholder="0"
               value={values.present}
+              onKeyDown={handleKeyDown}
               onChange={(event) => setValues({ ...values, present: event.target.value })}
+              aria-invalid={!parsedPresent.valid}
             />
-            <p className="text-xs text-muted-foreground">
-              Classes you plan to attend (assumed present).
-            </p>
+            {parsedPresent.error ? (
+              <p className="text-xs text-destructive">{parsedPresent.error}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Classes you plan to attend (assumed present, max {ATTENDANCE_SIMULATION_MAX_CLASSES}).
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="sim-att-absent" className="text-xs font-medium text-muted-foreground">
@@ -158,15 +171,21 @@ export function AttendanceSimulator({
               id="sim-att-absent"
               type="number"
               min={0}
-              max={100}
+              max={ATTENDANCE_SIMULATION_MAX_CLASSES}
               inputMode="numeric"
               placeholder="0"
               value={values.absent}
+              onKeyDown={handleKeyDown}
               onChange={(event) => setValues({ ...values, absent: event.target.value })}
+              aria-invalid={!parsedAbsent.valid}
             />
-            <p className="text-xs text-muted-foreground">
-              Classes you plan to skip (assumed absent).
-            </p>
+            {parsedAbsent.error ? (
+              <p className="text-xs text-destructive">{parsedAbsent.error}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Classes you plan to skip (assumed absent, max {ATTENDANCE_SIMULATION_MAX_CLASSES}).
+              </p>
+            )}
           </div>
         </div>
 
@@ -182,7 +201,14 @@ export function AttendanceSimulator({
             )}
           </div>
 
-          {!result.complete ? (
+          {!isValid ? (
+            <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-xs font-medium text-destructive">
+              <AlertCircle className="size-4 shrink-0" />
+              <span>
+                Please enter valid whole numbers between 0 and {ATTENDANCE_SIMULATION_MAX_CLASSES} to simulate attendance.
+              </span>
+            </div>
+          ) : !result.complete ? (
             <p className="text-sm text-muted-foreground">
               Attendance baseline is unavailable for this subject.
             </p>

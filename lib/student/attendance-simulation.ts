@@ -21,6 +21,12 @@ export const ATTENDANCE_CRITICAL_PERCENTAGE = 60
 export const ATTENDANCE_GOOD_SPLIT = 80
 export const ATTENDANCE_EXCELLENT_PERCENTAGE = 90
 
+export const ATTENDANCE_SIMULATION_MIN_CLASSES = 0
+export const ATTENDANCE_SIMULATION_MAX_CLASSES = 100
+
+export type AttendanceSimulationFieldKey = "present" | "absent"
+export type AttendanceFieldErrors = Record<AttendanceSimulationFieldKey, string | null>
+
 export type AttendanceSimulationResult = {
   total_classes: number
   attended_classes: number
@@ -40,8 +46,61 @@ export type AttendanceSimulationResult = {
   message: string | null
 }
 
+export type AttendanceSimulationInput = {
+  total_classes: number | null
+  attended_classes: number | null
+  hypothetical_present?: number | null
+  hypothetical_absent?: number | null
+  target_attendance?: number
+  max_simulation_classes?: number
+}
+
 function round2(value: number): number {
   return Math.round(value * 100) / 100
+}
+
+/**
+ * Parse and strictly validate a single raw string input for attendance simulator.
+ *
+ * Rules:
+ *   * empty / whitespace-only  -> valid default 0 (no error)
+ *   * whole-number digits only -> parsed integer between 0 and maxClasses
+ *   * negatives, decimals, scientific notation, letters, symbols, NaN, Infinity -> invalid with error
+ */
+export function parseAttendanceField(
+  raw: string,
+  field: AttendanceSimulationFieldKey,
+  maxClasses: number = ATTENDANCE_SIMULATION_MAX_CLASSES,
+): { value: number | null; error: string | null; valid: boolean } {
+  const label = field === "present" ? "Attend next" : "Miss next"
+  const trimmed = raw.trim()
+  if (trimmed === "") {
+    return { value: 0, error: null, valid: true }
+  }
+
+  // Reject any non-digit character (e.g. -, +, ., e, E, spaces, symbols)
+  if (!/^\d+$/.test(trimmed)) {
+    return {
+      value: null,
+      error: `${label} must be a whole number between ${ATTENDANCE_SIMULATION_MIN_CLASSES} and ${maxClasses}.`,
+      valid: false,
+    }
+  }
+
+  const parsed = Number(trimmed)
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed < ATTENDANCE_SIMULATION_MIN_CLASSES ||
+    parsed > maxClasses
+  ) {
+    return {
+      value: null,
+      error: `${label} cannot exceed ${maxClasses} classes.`,
+      valid: false,
+    }
+  }
+
+  return { value: parsed, error: null, valid: true }
 }
 
 // Mirror of `attendance_aggregate_fields` in faculty_service.py.
@@ -71,13 +130,9 @@ function deriveAttendanceFields(
   }
 }
 
-export function simulateAttendance(input: {
-  total_classes: number | null
-  attended_classes: number | null
-  hypothetical_present?: number
-  hypothetical_absent?: number
-  target_attendance?: number
-}): AttendanceSimulationResult {
+export function simulateAttendance(
+  input: AttendanceSimulationInput,
+): AttendanceSimulationResult {
   const {
     total_classes,
     attended_classes,
@@ -85,12 +140,16 @@ export function simulateAttendance(input: {
     hypothetical_absent = 0,
   } = input
   const target = input.target_attendance ?? ATTENDANCE_TARGET_PERCENTAGE
+  const maxClasses = input.max_simulation_classes ?? ATTENDANCE_SIMULATION_MAX_CLASSES
+
+  const pres = hypothetical_present ?? 0
+  const abs = hypothetical_absent ?? 0
 
   const incomplete: AttendanceSimulationResult = {
     total_classes: total_classes ?? 0,
     attended_classes: attended_classes ?? 0,
-    hypothetical_present,
-    hypothetical_absent,
+    hypothetical_present: pres,
+    hypothetical_absent: abs,
     current_attendance: null,
     resulting_attendance: null,
     delta: null,
@@ -105,8 +164,7 @@ export function simulateAttendance(input: {
     message: null,
   }
 
-  // A missing baseline keeps every projected field null — never a partial
-  // percentage, never a COALESCE(0) projection.
+  // Baseline validation: A missing or invalid baseline keeps projected fields null
   if (
     total_classes === null ||
     attended_classes === null ||
@@ -117,9 +175,24 @@ export function simulateAttendance(input: {
     return incomplete
   }
 
+  // Hard hypothetical inputs validation:
+  // Disallow negative, decimal, NaN, Infinity, or excessive simulation classes
+  if (
+    hypothetical_present === null ||
+    hypothetical_absent === null ||
+    !Number.isInteger(pres) ||
+    !Number.isInteger(abs) ||
+    pres < ATTENDANCE_SIMULATION_MIN_CLASSES ||
+    abs < ATTENDANCE_SIMULATION_MIN_CLASSES ||
+    pres > maxClasses ||
+    abs > maxClasses
+  ) {
+    return incomplete
+  }
+
   const current = round2((attended_classes / total_classes) * 100)
-  const newTotal = total_classes + hypothetical_present + hypothetical_absent
-  const newAttended = attended_classes + hypothetical_present
+  const newTotal = total_classes + pres + abs
+  const newAttended = attended_classes + pres
   const resulting = newTotal > 0 ? round2((newAttended / newTotal) * 100) : current
 
   const fields = deriveAttendanceFields(resulting, target)
@@ -155,8 +228,8 @@ export function simulateAttendance(input: {
   return {
     total_classes,
     attended_classes,
-    hypothetical_present,
-    hypothetical_absent,
+    hypothetical_present: pres,
+    hypothetical_absent: abs,
     current_attendance: current,
     resulting_attendance: resulting,
     delta: round2(resulting - current),
