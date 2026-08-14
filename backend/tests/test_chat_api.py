@@ -206,15 +206,17 @@ class TestChatApi(unittest.TestCase):
             [{"faculty_id": "FAC501", "target_student_id": "STU202", "intent": "student_performance"}],
         )
 
-    def test_faculty_missing_target_student_id_returns_400(self):
+    def test_faculty_missing_target_student_id_returns_clarification(self):
         token = make_token({"role": "Faculty", "faculty_id": "FAC501"})
         resp = self.client.post(
             "/api/v1/chat",
             headers={"Authorization": f"Bearer {token}"},
-            json={"message": "Show academic performance result"},
+            json={"message": "Show student performance summary"},
         )
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn("target_student_id is required", resp.json()["detail"])
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["status"], "clarification")
+        self.assertIn("Which student would you like", data["message"])
 
     def test_faculty_unreachable_student_returns_404(self):
         unreachable_tool = FakeTool(

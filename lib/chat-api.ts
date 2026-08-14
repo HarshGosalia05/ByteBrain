@@ -109,8 +109,8 @@ export async function sendChatMessage(req: ChatApiRequest): Promise<ChatBffResul
     payload.intent = req.intent
   }
 
-  // Only forward target_student_id if faculty role
-  if (session.role === "Faculty" && req.target_student_id) {
+  // Forward target_student_id for faculty and admin roles
+  if ((session.role === "Faculty" || session.role === "Admin") && req.target_student_id) {
     payload.target_student_id = req.target_student_id
   }
 

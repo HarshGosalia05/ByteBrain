@@ -144,11 +144,18 @@ _KEYWORDS: dict[IntentType, tuple[str, ...]] = {
         "subjects do i teach", "subjects am i teaching", "what subjects",
         "which subjects", "teaching subjects", "subject", "subjects",
         "meri subjects", "mere subjects", "subjects batao", "vishay",
-        "subjects for semester", "subject name",
+        "subjects for semester", "subject name", "class performance",
+        "performance of my class", "performance of my students",
+        "performance for all my students", "performance summaries for my students",
+        "my students performance", "my students' performance",
+        "how is my class performing", "how are my students performing",
+        "teaching performance", "class overview", "my students", "all my students",
     ),
     "flagged_students": (
-        "flagged", "at-risk", "needs attention", "risk students", "flagged students",
-        "defaulters", "show flagged students", "at risk students",
+        "flagged", "at-risk", "at risk", "needs attention", "need attention",
+        "risk students", "flagged students", "defaulters", "show flagged students",
+        "at risk students", "struggling", "struggling students", "failing students",
+        "attendance defaulters", "low attendance students",
     ),
     "prediction_insights": (
         "prediction insight", "prediction insights", "ml insight", "ai insight",
@@ -156,28 +163,32 @@ _KEYWORDS: dict[IntentType, tuple[str, ...]] = {
     ),
     "department_analytics": (
         "department analytics", "my department", "dept-wide", "department",
-        "department performance", "dept analytics",
+        "department performance", "dept analytics", "department overview",
     ),
 
     # Admin intents (6)
     "institution_analytics": (
         "institution", "institution-wide", "college-wide", "overall college",
         "institution performance", "college performance", "overall performance",
+        "institution summary", "college summary", "college-wide summary",
+        "college executive summary", "executive summary",
     ),
     "department_analytics": (
         "compare departments", "department analytics", "dept comparison",
-        "department rankings", "department", "departments",
+        "department rankings", "department", "departments", "cse performance",
+        "it performance", "department performance",
     ),
     "academic_trends": (
         "academic trend", "academic trends", "performance trend", "performance trends",
-        "cgpa trend",
+        "cgpa trend", "sgpa trend",
     ),
     "attendance_trends": (
         "attendance trend", "attendance trends", "attendance over time", "attendance patterns",
     ),
     "flagged_students": (
         "flagged", "flagged students", "at-risk students", "institution risk",
-        "needs attention", "risk students",
+        "needs attention", "risk students", "struggling students", "struggling",
+        "failing students", "defaulters", "attendance defaulters",
     ),
     "ml_insights": (
         "ml insight", "ml insights", "model insight", "prediction accuracy",
@@ -271,6 +282,21 @@ class IntentRouter:
             specific_career_intents = {"roadmap", "skill_gap", "career_readiness"} & in_role
             if specific_career_intents:
                 in_role.discard("career_guidance")
+
+        # Disambiguate Faculty aggregate intents vs student-specific intents
+        if role == "Faculty" and len(in_role) > 1:
+            aggregate_markers = (
+                "my students", "all my students", "for my students", "of my students",
+                "our students", "my class", "my classes", "class performance",
+                "struggling students", "struggling", "failing", "defaulters",
+                "attendance defaulters", "who need attention", "needs attention",
+            )
+            has_aggregate_marker = any(marker in cleaned for marker in aggregate_markers)
+            if has_aggregate_marker:
+                if any(k in cleaned for k in ("struggling", "defaulters", "failing", "attention", "at risk", "at-risk", "flagged")):
+                    in_role = {"flagged_students"}
+                elif "subject_analytics" in in_role:
+                    in_role = {"subject_analytics"}
 
         # 4. If exactly one in-role intent matched
         if len(in_role) == 1:

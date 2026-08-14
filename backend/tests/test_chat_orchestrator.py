@@ -34,6 +34,8 @@ from app.services.chat_orchestrator import (
 )
 from app.services.genai_provider import (
     GenAIProvider,
+    GenAIRateLimitError,
+    GenAITimeoutError,
     GenAIProviderUnavailableError,
     ProviderCompletion,
 )
@@ -45,9 +47,17 @@ def run(coro):
 
 
 class FakeProvider(GenAIProvider):
-    def __init__(self, content: str = "Grounded AI answer", fail: bool = False):
+    def __init__(
+        self,
+        content: str = "Grounded AI answer",
+        fail: bool = False,
+        rate_limit: bool = False,
+        timeout: bool = False,
+    ):
         self._content = content
         self._fail = fail
+        self._rate_limit = rate_limit
+        self._timeout = timeout
         self.recorded_requests: list[dict] = []
 
     @property
@@ -59,7 +69,7 @@ class FakeProvider(GenAIProvider):
         *,
         system_instruction: str,
         user_message: str,
-        conversation_history: list[dict[str, str]],
+        conversation_history: list[dict[str, str]] | None = None,
     ) -> ProviderCompletion:
         self.recorded_requests.append(
             {
@@ -68,13 +78,17 @@ class FakeProvider(GenAIProvider):
                 "conversation_history": conversation_history,
             }
         )
+        if self._rate_limit:
+            raise GenAIRateLimitError("Provider 429 rate limit exceeded", retry_after=30.0)
+        if self._timeout:
+            raise GenAITimeoutError("Provider timed out after 30s")
         if self._fail:
             raise GenAIProviderUnavailableError("Provider offline")
         return ProviderCompletion(
             content=self._content,
             model="fake-model",
-            prompt_tokens=25,
-            completion_tokens=15,
+            prompt_tokens=20,
+            completion_tokens=10,
         )
 
 
@@ -154,14 +168,13 @@ class TestChatOrchestrator(unittest.TestCase):
             [{"faculty_id": "FAC001", "target_student_id": "STU002", "intent": "student_performance"}],
         )
 
-    def test_faculty_missing_target_student_id_raises_400(self):
+    def test_faculty_missing_target_student_id_returns_clarification(self):
         user = {"role": "Faculty", "faculty_id": "FAC001"}
-        req = ChatRequest(message="Show performance for this student")
+        req = ChatRequest(message="Show student performance summary")
 
-        with self.assertRaises(HTTPException) as ctx:
-            run(self.orchestrator.process_chat(user=user, request=req))
-        self.assertEqual(ctx.exception.status_code, 400)
-        self.assertIn("target_student_id is required", ctx.exception.detail)
+        resp = run(self.orchestrator.process_chat(user=user, request=req))
+        self.assertEqual(resp.status, "clarification")
+        self.assertIn("Which student would you like", resp.message)
 
     def test_admin_institution_chat_happy_path(self):
         user = {"role": "Admin", "admin_id": "ADM001"}
@@ -246,6 +259,49 @@ class TestChatOrchestrator(unittest.TestCase):
         resp = run(orchestrator.process_chat(user=user, request=req))
         self.assertEqual(resp.status, "unavailable")
         self.assertIn("AI explanation unavailable", resp.message)
+        self.assertEqual(len(failing_provider.recorded_requests), 1)
+
+    def test_provider_rate_limit_returns_rate_limited_status_and_verified_data(self):
+        rate_limited_provider = FakeProvider(rate_limit=True)
+        service = GenAIService(provider=rate_limited_provider)
+        orchestrator = ChatOrchestrator(
+            pool=None,
+            genai_service=service,
+            tools=self.tools,
+        )
+        user = {"role": "Faculty", "faculty_id": "FAC001"}
+        req = ChatRequest(message="Show performance for this student", target_student_id="STU001")
+
+        resp = run(orchestrator.process_chat(user=user, request=req))
+        self.assertEqual(resp.status, "rate_limited")
+        self.assertIn("AI explanation unavailable (rate-limited)", resp.message)
+        self.assertIn("Student Name", resp.message)
+        self.assertEqual(resp.tool_name, "faculty_student_analytics_tool")
+        self.assertEqual(len(rate_limited_provider.recorded_requests), 1)
+
+    def test_provider_timeout_returns_unavailable_status(self):
+        timeout_provider = FakeProvider(timeout=True)
+        service = GenAIService(provider=timeout_provider)
+        orchestrator = ChatOrchestrator(
+            pool=None,
+            genai_service=service,
+            tools=self.tools,
+        )
+        user = {"role": "Student", "student_id": "STU001"}
+        req = ChatRequest(message="What is my SGPA?")
+
+        resp = run(orchestrator.process_chat(user=user, request=req))
+        self.assertEqual(resp.status, "unavailable")
+        self.assertIn("AI explanation unavailable", resp.message)
+        self.assertEqual(len(timeout_provider.recorded_requests), 1)
+
+    def test_exactly_one_genai_call_per_user_message(self):
+        user = {"role": "Student", "student_id": "STU001"}
+        req = ChatRequest(message="What is my SGPA?")
+
+        resp = run(self.orchestrator.process_chat(user=user, request=req))
+        self.assertEqual(resp.status, "success")
+        self.assertEqual(len(self.fake_provider.recorded_requests), 1)
 
     def test_conversation_history_passed_to_provider(self):
         user = {"role": "Student", "student_id": "STU001"}

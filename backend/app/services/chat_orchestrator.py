@@ -54,6 +54,7 @@ from app.services.student_career_coach import StudentCareerCoachTool
 from app.services.student_prediction_explanation_tool import (
     StudentPredictionExplanationTool,
 )
+from app.services.student_resolver import StudentResolution, StudentResolver
 from app.services.student_subject_analysis_tool import StudentSubjectAnalysisTool
 from app.services.tool_registry import ToolRegistry, build_default_registry
 
@@ -87,8 +88,25 @@ def _format_verified_data_summary(data: dict[str, Any]) -> str:
     lines = []
     for k, v in data.items():
         label = k.replace("_", " ").title()
-        if isinstance(v, (dict, list)):
-            lines.append(f"* **{label}**: {json.dumps(v, default=str)}")
+        if isinstance(v, dict):
+            lines.append(f"**{label}**:")
+            for sub_k, sub_v in v.items():
+                sub_label = sub_k.replace("_", " ").title()
+                lines.append(f"  * {sub_label}: {sub_v}")
+        elif isinstance(v, list):
+            if v and isinstance(v[0], dict):
+                lines.append(f"**{label}** ({len(v)} records):")
+                for item in v[:5]:
+                    item_str = ", ".join(
+                        f"{sub_k.replace('_', ' ').title()}: {sub_v}"
+                        for sub_k, sub_v in item.items()
+                        if sub_v is not None
+                    )
+                    lines.append(f"  * {item_str}")
+                if len(v) > 5:
+                    lines.append(f"  * ... and {len(v) - 5} more records")
+            else:
+                lines.append(f"* **{label}**: {', '.join(str(x) for x in v)}")
         else:
             lines.append(f"* **{label}**: {v}")
     return "\n".join(lines)
@@ -96,7 +114,7 @@ def _format_verified_data_summary(data: dict[str, Any]) -> str:
 
 class ChatOrchestrator:
     """Orchestrates authenticated chat requests through IntentRouter, ToolRegistry,
-    verified tools, and GenAIService.
+    StudentResolver, verified tools, and GenAIService.
     """
 
     def __init__(
@@ -106,12 +124,14 @@ class ChatOrchestrator:
         registry: ToolRegistry | None = None,
         router: IntentRouter | None = None,
         genai_service: GenAIService | None = None,
+        student_resolver: StudentResolver | None = None,
         tools: dict[str, Any] | None = None,
     ) -> None:
         self._pool = pool
         self._registry = registry or build_default_registry()
         self._router = router or IntentRouter(self._registry)
         self._genai_service = genai_service or GenAIService()
+        self._student_resolver = student_resolver or StudentResolver(pool)
         self._tools = tools or {}
 
     def _get_tool(self, tool_name: str) -> Any:
@@ -195,6 +215,7 @@ class ChatOrchestrator:
         role: UserRole,
         user_context_id: str,
         request: ChatRequest,
+        resolved_target_student_id: str | None = None,
     ) -> VerifiedContext:
         """Execute the allowlisted tool with verified inputs and return VerifiedContext."""
         tool_name = decision.tool_name
@@ -227,27 +248,29 @@ class ChatOrchestrator:
         # 2. Faculty tools (authorized_student or department scope)
         if role == "Faculty":
             if tool_name == "faculty_student_analytics_tool":
-                if not request.target_student_id:
+                target_id = resolved_target_student_id or request.target_student_id
+                if not target_id:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="target_student_id is required to view student analytics",
                     )
                 result = await tool_instance.execute(
                     faculty_id=user_context_id,
-                    target_student_id=request.target_student_id,
+                    target_student_id=target_id,
                     intent=decision.intent or "student_performance",
                 )
                 return tool_instance.to_verified_context(result)
 
             if tool_name == "faculty_prediction_insights_tool":
-                if not request.target_student_id:
+                target_id = resolved_target_student_id or request.target_student_id
+                if not target_id:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="target_student_id is required to view prediction insights",
                     )
                 result = await tool_instance.execute(
                     faculty_id=user_context_id,
-                    target_student_id=request.target_student_id,
+                    target_student_id=target_id,
                 )
                 return tool_instance.to_verified_context(result)
 
@@ -390,12 +413,53 @@ class ChatOrchestrator:
                 verified_sources=[],
             )
 
-        # 3. Execute Tool
+        # 3. Resolve Target Student Scope for Student-specific tools / queries
+        resolved_target_student_id: str | None = None
+        is_student_scoped_tool = decision.tool_name in (
+            "faculty_student_analytics_tool",
+            "faculty_prediction_insights_tool",
+        ) or (
+            decision.scope_requirements
+            and decision.scope_requirements.scope in ("authorized_student", "own_student")
+        )
+
+        if is_student_scoped_tool:
+            resolution = await self._student_resolver.resolve(
+                role=role,
+                user_context_id=user_context_id,
+                message=clean_message,
+                conversation_history=request.conversation_history,
+                explicit_target_id=request.target_student_id,
+                intent=decision.intent,
+            )
+
+            if resolution.status in ("NO_TARGET_SPECIFIED", "NOT_FOUND", "AMBIGUOUS"):
+                return ChatResponse(
+                    message=resolution.clarification_message or UNKNOWN_INTENT_MSG,
+                    intent=decision.intent,
+                    tool_name=None,
+                    status="clarification",
+                    verified_sources=[],
+                )
+
+            if resolution.status == "UNAUTHORIZED":
+                return ChatResponse(
+                    message=resolution.clarification_message or UNAUTHORIZED_INTENT_MSG,
+                    intent=decision.intent,
+                    tool_name=None,
+                    status="unauthorized",
+                    verified_sources=[],
+                )
+
+            resolved_target_student_id = resolution.student_id
+
+        # 4. Execute Tool
         verified_ctx = await self._execute_tool(
             decision=decision,
             role=role,
             user_context_id=user_context_id,
             request=request,
+            resolved_target_student_id=resolved_target_student_id,
         )
 
         if not isinstance(verified_ctx, VerifiedContext) or not verified_ctx.source:

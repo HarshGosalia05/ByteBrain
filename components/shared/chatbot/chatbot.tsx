@@ -19,6 +19,7 @@ export function Chatbot({
   const [messages, setMessages] = React.useState<UIMessage[]>([])
   const [input, setInput] = React.useState("")
   const [isLoading, setIsLoading] = React.useState(false)
+  const isSendingRef = React.useRef(false)
 
   const handleToggle = () => {
     setIsOpen((prev) => !prev)
@@ -40,7 +41,10 @@ export function Chatbot({
 
   const sendMessage = async (rawMessage: string) => {
     const text = rawMessage.trim()
-    if (!text || isLoading) return
+    if (!text || isLoading || isSendingRef.current) return
+
+    isSendingRef.current = true
+    setIsLoading(true)
 
     const userMessage: UIMessage = {
       id: `user-${Date.now()}`,
@@ -51,7 +55,6 @@ export function Chatbot({
 
     setMessages((prev) => [...prev, userMessage])
     setInput("")
-    setIsLoading(true)
 
     // Build bounded conversation history payload
     const recentHistory = [...messages, userMessage].slice(-10).map((m) => ({
@@ -61,7 +64,7 @@ export function Chatbot({
 
     const reqPayload: ChatApiRequest = {
       message: text,
-      target_student_id: role === "Faculty" ? targetStudentId : null,
+      target_student_id: role === "Faculty" || role === "Admin" ? targetStudentId : null,
       conversation_history: recentHistory,
     }
 
@@ -134,6 +137,7 @@ export function Chatbot({
       }
       setMessages((prev) => [...prev, errorMessage])
     } finally {
+      isSendingRef.current = false
       setIsLoading(false)
     }
   }
