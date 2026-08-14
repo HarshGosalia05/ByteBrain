@@ -84,18 +84,28 @@ class GenAIService:
             )
         if not settings.GENAI_API_KEY:
             raise GenAIConfigurationError("GENAI_API_KEY is not configured")
-        if not settings.GENAI_MODEL:
-            raise GenAIConfigurationError("GENAI_MODEL is not configured")
+        primary_model = settings.GENAI_MODEL or settings.GENAI_PRIMARY_MODEL
+        if not primary_model:
+            raise GenAIConfigurationError("GENAI_MODEL or GENAI_PRIMARY_MODEL is not configured")
+
+        fallback_models = []
+        if settings.GENAI_FALLBACK_MODEL_1:
+            fallback_models.append(settings.GENAI_FALLBACK_MODEL_1)
+        if settings.GENAI_FALLBACK_MODEL_2:
+            fallback_models.append(settings.GENAI_FALLBACK_MODEL_2)
+        if settings.GENAI_FALLBACK_MODELS:
+            fallback_models.extend(settings.GENAI_FALLBACK_MODELS)
 
         return provider_cls(
             api_key=settings.GENAI_API_KEY,
-            model=settings.GENAI_MODEL,
+            model=primary_model,
             base_url=settings.GENAI_BASE_URL,
             temperature=settings.GENAI_TEMPERATURE,
             max_tokens=settings.GENAI_MAX_TOKENS,
             timeout_seconds=settings.GENAI_TIMEOUT_SECONDS,
             max_retries=settings.GENAI_MAX_RETRIES,
             retry_backoff_seconds=settings.GENAI_RETRY_BACKOFF_SECONDS,
+            fallback_models=fallback_models,
         )
 
     @staticmethod

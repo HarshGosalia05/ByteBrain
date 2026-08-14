@@ -191,6 +191,83 @@ class OpenAICompatibleProviderTests(unittest.TestCase):
         # the API key only ever appears in the Authorization header, never in payloads
         self.assertIsNotNone(provider._client)
 
+    def test_primary_429_triggers_fallback_1_success(self):
+        called_models = []
+
+        async def post(path, json=None, **kwargs):
+            model = json.get("model")
+            called_models.append(model)
+            if model == "primary-model":
+                return _Response(429)
+            return _Response(200, _body(content="fallback-1-content", model="fallback-1-model"))
+
+        with _Patched(AsyncMock(side_effect=post)):
+            provider = _provider(
+                model="primary-model",
+                fallback_models=["fallback-1-model", "fallback-2-model"],
+            )
+            result = run(provider.complete(system_instruction="s", user_message="u"))
+
+        self.assertEqual(result.content, "fallback-1-content")
+        self.assertEqual(result.model, "fallback-1-model")
+        self.assertEqual(called_models, ["primary-model", "fallback-1-model"])
+
+    def test_primary_and_fallback_1_429_triggers_fallback_2_success(self):
+        called_models = []
+
+        async def post(path, json=None, **kwargs):
+            model = json.get("model")
+            called_models.append(model)
+            if model in ("primary-model", "fallback-1-model"):
+                return _Response(429)
+            return _Response(200, _body(content="fallback-2-content", model="fallback-2-model"))
+
+        with _Patched(AsyncMock(side_effect=post)):
+            provider = _provider(
+                model="primary-model",
+                fallback_models=["fallback-1-model", "fallback-2-model"],
+            )
+            result = run(provider.complete(system_instruction="s", user_message="u"))
+
+        self.assertEqual(result.content, "fallback-2-content")
+        self.assertEqual(result.model, "fallback-2-model")
+        self.assertEqual(called_models, ["primary-model", "fallback-1-model", "fallback-2-model"])
+
+    def test_all_models_rate_limited_raises_rate_limit_error(self):
+        called_models = []
+
+        async def post(path, json=None, **kwargs):
+            called_models.append(json.get("model"))
+            return _Response(429)
+
+        with _Patched(AsyncMock(side_effect=post)):
+            provider = _provider(
+                model="primary-model",
+                fallback_models=["fallback-1-model", "fallback-2-model"],
+            )
+            with self.assertRaises(GenAIRateLimitError):
+                run(provider.complete(system_instruction="s", user_message="u"))
+
+        self.assertEqual(called_models, ["primary-model", "fallback-1-model", "fallback-2-model"])
+
+    def test_auth_error_fails_fast_without_trying_fallbacks(self):
+        called_models = []
+
+        async def post(path, json=None, **kwargs):
+            called_models.append(json.get("model"))
+            return _Response(401)
+
+        with _Patched(AsyncMock(side_effect=post)):
+            provider = _provider(
+                model="primary-model",
+                fallback_models=["fallback-1-model", "fallback-2-model"],
+            )
+            with self.assertRaises(GenAIProviderError):
+                run(provider.complete(system_instruction="s", user_message="u"))
+
+        # Exactly 1 call was made (no fallbacks attempted on credential rejection)
+        self.assertEqual(called_models, ["primary-model"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,12 +30,16 @@ class Settings(BaseSettings):
     # environment/secret management only - never from source code.
     GENAI_PROVIDER: str = "openai_compatible"
     GENAI_MODEL: str = ""
+    GENAI_PRIMARY_MODEL: str = ""
+    GENAI_FALLBACK_MODEL_1: str = ""
+    GENAI_FALLBACK_MODEL_2: str = ""
+    GENAI_FALLBACK_MODELS: List[str] = []
     GENAI_API_KEY: str = ""
     GENAI_BASE_URL: str = "https://api.openai.com/v1"
     GENAI_TEMPERATURE: float = 0.2
     GENAI_MAX_TOKENS: int = 1024
     GENAI_TIMEOUT_SECONDS: float = 30.0
-    GENAI_MAX_RETRIES: int = 2
+    GENAI_MAX_RETRIES: int = 1
     GENAI_RETRY_BACKOFF_SECONDS: float = 1.0
     
     # CORS

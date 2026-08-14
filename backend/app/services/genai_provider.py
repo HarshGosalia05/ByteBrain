@@ -161,17 +161,19 @@ class OpenAICompatibleProvider(GenAIProvider):
         temperature: float,
         max_tokens: int,
         timeout_seconds: float,
-        max_retries: int,
-        retry_backoff_seconds: float,
+        max_retries: int = 1,
+        retry_backoff_seconds: float = 1.0,
+        fallback_models: list[str] | None = None,
     ):
         self._api_key = api_key
         self._model = model
+        self._fallback_models = [m for m in (fallback_models or []) if m and m != model]
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._max_retries = max_retries
         self._retry_backoff = retry_backoff_seconds
         self._client = httpx.AsyncClient(
-            base_url=base_url.rstrip("/"),
+            base_url=base_url.strip().rstrip("/"),
             timeout=httpx.Timeout(timeout_seconds),
             headers={"Authorization": f"Bearer {api_key}"},
         )
@@ -202,98 +204,168 @@ class OpenAICompatibleProvider(GenAIProvider):
         user_message: str,
         conversation_history: list[dict[str, str]] | None = None,
     ) -> ProviderCompletion:
-        payload: dict[str, Any] = {
-            "model": self._model,
-            "messages": self._build_messages(
-                system_instruction=system_instruction,
-                user_message=user_message,
-                conversation_history=conversation_history,
-            ),
-            "temperature": self._temperature,
-            "max_tokens": self._max_tokens,
-        }
-
+        models_to_try = [self._model] + self._fallback_models
         last_error: Exception | None = None
-        for attempt in range(self._max_retries + 1):
-            try:
-                response = await self._client.post("/chat/completions", json=payload)
-            except httpx.TimeoutException as exc:
-                raise GenAITimeoutError(
-                    f"GenAI provider timed out after {self._client.timeout.connect}s"
-                ) from exc
-            except httpx.HTTPError as exc:
-                last_error = exc
-                if attempt < self._max_retries:
-                    await asyncio.sleep(self._retry_backoff * (attempt + 1))
-                    continue
-                break
+        rate_limit_occurred = False
 
-            if response.status_code == 429:
-                wait_seconds = _rate_limit_retry_seconds(
-                    response, self._retry_backoff * (attempt + 1)
+        for model_idx, target_model in enumerate(models_to_try):
+            is_fallback = model_idx > 0
+            if is_fallback:
+                logger.info(
+                    "Attempting GenAI fallback model '%s' (fallback %d/%d)",
+                    target_model,
+                    model_idx,
+                    len(models_to_try) - 1,
                 )
-                if wait_seconds > MAX_RATE_LIMIT_WAIT_SECONDS:
+
+            payload: dict[str, Any] = {
+                "model": target_model,
+                "messages": self._build_messages(
+                    system_instruction=system_instruction,
+                    user_message=user_message,
+                    conversation_history=conversation_history,
+                ),
+                "temperature": self._temperature,
+                "max_tokens": self._max_tokens,
+            }
+
+            model_succeeded = False
+            for attempt in range(self._max_retries + 1):
+                try:
+                    response = await self._client.post("/chat/completions", json=payload)
+                except httpx.TimeoutException as exc:
                     logger.warning(
-                        "GenAI provider 429 rate limit retry-after (%.1fs) exceeds max wait threshold (%.1fs); failing fast.",
-                        wait_seconds,
-                        MAX_RATE_LIMIT_WAIT_SECONDS,
+                        "GenAI provider timed out on model '%s' (attempt %d/%d)",
+                        target_model,
+                        attempt + 1,
+                        self._max_retries + 1,
                     )
-                    raise GenAIRateLimitError(
-                        "GenAI provider rate limit exceeded",
+                    last_error = GenAITimeoutError(
+                        f"GenAI provider timed out on model '{target_model}'"
+                    )
+                    if attempt < self._max_retries:
+                        await asyncio.sleep(self._retry_backoff * (attempt + 1))
+                        continue
+                    break
+                except httpx.HTTPError as exc:
+                    logger.warning(
+                        "GenAI HTTP network error on model '%s': %s",
+                        target_model,
+                        exc,
+                    )
+                    last_error = GenAIProviderUnavailableError(
+                        f"GenAI provider network failure on model '{target_model}'"
+                    )
+                    if attempt < self._max_retries:
+                        await asyncio.sleep(self._retry_backoff * (attempt + 1))
+                        continue
+                    break
+
+                # Permanent Authentication / Authorization Errors (401, 403) FAIL FAST without fallback
+                if response.status_code in (401, 403):
+                    logger.error(
+                        "GenAI provider authentication failed (HTTP %d). Check API key.",
+                        response.status_code,
+                    )
+                    raise GenAIProviderError("GenAI provider rejected the credentials")
+
+                # 429 Rate Limit / Quota Exceeded -> Retry if short wait, otherwise fallback
+                if response.status_code == 429:
+                    rate_limit_occurred = True
+                    wait_seconds = _rate_limit_retry_seconds(
+                        response, self._retry_backoff * (attempt + 1)
+                    )
+                    last_error = GenAIRateLimitError(
+                        f"GenAI model '{target_model}' rate limit exceeded",
                         retry_after=wait_seconds,
                     )
-
-                if attempt < self._max_retries:
+                    if wait_seconds <= MAX_RATE_LIMIT_WAIT_SECONDS and attempt < self._max_retries:
+                        logger.warning(
+                            "GenAI model '%s' 429; retrying in %.1fs (attempt %d/%d)",
+                            target_model,
+                            wait_seconds,
+                            attempt + 1,
+                            self._max_retries,
+                        )
+                        await asyncio.sleep(wait_seconds)
+                        continue
                     logger.warning(
-                        "GenAI provider rate limit (HTTP 429); retrying in %.1fs "
-                        "(attempt %d/%d)",
+                        "GenAI model '%s' rate-limited / quota exceeded (retry_after=%.1fs); moving to next model",
+                        target_model,
                         wait_seconds,
-                        attempt + 1,
-                        self._max_retries,
                     )
-                    await asyncio.sleep(wait_seconds)
-                    continue
-                raise GenAIRateLimitError(
-                    "GenAI provider rate limit exceeded",
-                    retry_after=wait_seconds,
+                    break
+
+                # 404 Model Not Available / 5xx Server Error -> Retry if transient, otherwise fallback
+                if response.status_code in (404, 500, 502, 503, 504):
+                    logger.warning(
+                        "GenAI model '%s' returned HTTP %d. Attempting fallback model...",
+                        target_model,
+                        response.status_code,
+                    )
+                    last_error = GenAIProviderUnavailableError(
+                        f"GenAI provider unavailable on model '{target_model}' (HTTP {response.status_code})"
+                    )
+                    if response.status_code >= 500 and attempt < self._max_retries:
+                        await asyncio.sleep(self._retry_backoff * (attempt + 1))
+                        continue
+                    break
+
+                if response.status_code >= 400:
+                    logger.warning(
+                        "GenAI provider rejected request on model '%s' (HTTP %d)",
+                        target_model,
+                        response.status_code,
+                    )
+                    last_error = GenAIProviderError(
+                        f"GenAI provider rejected the request with HTTP {response.status_code}"
+                    )
+                    break
+
+                # Successful response (HTTP 200)
+                try:
+                    body = response.json()
+                except Exception as exc:
+                    logger.warning("GenAI provider returned non-JSON for model '%s'", target_model)
+                    last_error = GenAIInvalidResponseError("GenAI provider returned a non-JSON response")
+                    break
+
+                try:
+                    content = body["choices"][0]["message"]["content"]
+                except (KeyError, IndexError, TypeError) as exc:
+                    logger.warning("GenAI provider response missing content for model '%s'", target_model)
+                    last_error = GenAIInvalidResponseError("GenAI provider response is missing message content")
+                    break
+
+                if not content or not content.strip():
+                    logger.warning("GenAI model '%s' returned empty content; trying fallback", target_model)
+                    last_error = GenAIInvalidResponseError("GenAI provider response was empty")
+                    break
+
+                usage = body.get("usage") or {}
+                final_model = body.get("model") or target_model
+                logger.info(
+                    "GenAI completion successful | model=%s (attempt %d/%d)",
+                    final_model,
+                    model_idx + 1,
+                    len(models_to_try),
                 )
-            if response.status_code in (401, 403):
-                raise GenAIProviderError("GenAI provider rejected the credentials")
-            if response.status_code >= 500:
-                last_error = GenAIProviderUnavailableError(
-                    f"GenAI provider server error (HTTP {response.status_code})"
-                )
-                if attempt < self._max_retries:
-                    await asyncio.sleep(self._retry_backoff * (attempt + 1))
-                    continue
-                break
-            if response.status_code >= 400:
-                raise GenAIProviderError(
-                    f"GenAI provider rejected the request (HTTP {response.status_code})"
+                return ProviderCompletion(
+                    content=content.strip(),
+                    model=final_model,
+                    prompt_tokens=usage.get("prompt_tokens"),
+                    completion_tokens=usage.get("completion_tokens"),
                 )
 
-            try:
-                body = response.json()
-            except Exception as exc:
-                raise GenAIInvalidResponseError(
-                    "GenAI provider returned a non-JSON response"
-                ) from exc
+            # If this model did not succeed and there are more models to try, pause slightly before next model
+            if model_idx < len(models_to_try) - 1:
+                await asyncio.sleep(0.1)
+                continue
 
-            try:
-                content = body["choices"][0]["message"]["content"]
-            except (KeyError, IndexError, TypeError) as exc:
-                raise GenAIInvalidResponseError(
-                    "GenAI provider response is missing message content"
-                ) from exc
-
-            usage = body.get("usage") or {}
-            return ProviderCompletion(
-                content=content,
-                model=body.get("model") or self._model,
-                prompt_tokens=usage.get("prompt_tokens"),
-                completion_tokens=usage.get("completion_tokens"),
-            )
-
+        if last_error is not None:
+            raise last_error
+        if rate_limit_occurred:
+            raise GenAIRateLimitError("All GenAI models in fallback chain were rate-limited")
         raise GenAIProviderUnavailableError(
-            f"GenAI provider unavailable after {self._max_retries + 1} attempt(s)"
-        ) from last_error
+            f"GenAI provider unavailable across all {len(models_to_try)} models"
+        )
