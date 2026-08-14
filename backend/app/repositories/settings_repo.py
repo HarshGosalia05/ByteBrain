@@ -42,3 +42,15 @@ class SettingsRepository:
             "SELECT user_id FROM users WHERE faculty_id = $1", faculty_id
         )
         return row["user_id"] if row else None
+
+    async def resolve_user_id_by_student(self, student_id: str) -> Optional[str]:
+        row = await self.pool.fetchrow(
+            "SELECT user_id FROM users WHERE student_id = $1", student_id
+        )
+        return row["user_id"] if row else None
+
+    async def resolve_user_id_by_username(self, username: str) -> Optional[str]:
+        row = await self.pool.fetchrow(
+            "SELECT user_id FROM users WHERE username = $1", username
+        )
+        return row["user_id"] if row else None

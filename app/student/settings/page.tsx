@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 
 import { requireRole } from "@/lib/session"
+import { getStudentSettings } from "@/lib/student-api"
 
 import { PageHeader } from "@/components/shared/layout/page-header"
 import { SettingsView } from "@/components/student/settings/settings-view"
@@ -38,7 +39,10 @@ async function readSessionInfo(): Promise<SessionInfo | null> {
 export default async function SettingsPage() {
   await requireRole("Student")
 
-  const session = await readSessionInfo()
+  const [session, settingsResult] = await Promise.all([
+    readSessionInfo(),
+    getStudentSettings(),
+  ])
 
   return (
     <div className="flex flex-col gap-6">
@@ -46,7 +50,10 @@ export default async function SettingsPage() {
         title="Settings"
         description="Manage your preferences, notifications, security and session."
       />
-      <SettingsView session={session} />
+      <SettingsView
+        session={session}
+        initialSettings={settingsResult.ok ? settingsResult.data : null}
+      />
     </div>
   )
 }

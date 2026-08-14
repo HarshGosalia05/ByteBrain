@@ -616,6 +616,10 @@ class StudentAnalyticsServiceTests(unittest.TestCase):
                 or path == "/me/notifications/read-all"
                 or path == "/me/notifications"
                 or path == "/me/notifications/{message_id}"
+                or path == "/me/settings/{namespace}"
+                or path == "/me/settings/change-password"
+                or path == "/me/settings/two-factor"
+                or path == "/me/settings/sign-out-all"
             )
 
         methods_by_path: dict = {}

@@ -53,3 +53,18 @@ class SettingsBackupResponse(BaseModel):
 
 class SettingsImportRequest(BaseModel):
     payload: Dict[str, Any]
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+class TwoFactorRequest(BaseModel):
+    enabled: bool
+    method: Optional[str] = "email"
+
+class SecurityActionResponse(BaseModel):
+    status: str
+    message: str
+    timestamp: Optional[str] = None
+    two_factor_enabled: Optional[bool] = None
+    two_factor_method: Optional[str] = None

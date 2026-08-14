@@ -13,11 +13,11 @@ class PreferenceValidationError(ValueError):
 # Namespaces whose changes are configuration-affecting for the faculty workspace
 # (bump `configuration_version` on write). Profile extras and personalization
 # only bump `preference_version`.
-_CONFIGURATION_NAMESPACES = {"analytics", "workspace", "export", "notifications", "dashboard"}
+_CONFIGURATION_NAMESPACES = {"analytics", "workspace", "export", "notifications", "dashboard", "account"}
 
 # Namespaces included in preference-only configuration backups/imports.
 # Security (session data) and profile_extra (identity extension) are excluded.
-_BACKUP_NAMESPACES = ("workspace", "dashboard", "analytics", "notifications", "export", "accessibility", "personalization")
+_BACKUP_NAMESPACES = ("workspace", "dashboard", "analytics", "notifications", "export", "accessibility", "personalization", "account")
 
 # Scoped reset levels. `factory` expands to every namespace (optionally including
 # profile_extra when explicitly confirmed by the caller).
@@ -27,6 +27,7 @@ _RESET_LEVELS = {
     "notifications": ("notifications",),
     "accessibility": ("accessibility",),
     "workspace": ("workspace",),
+    "account": ("account",),
     "factory": None,
 }
 
@@ -38,7 +39,7 @@ _AUTO_MANAGED = {
     "analytics": {"applied_bounds"},
     "notifications": {"history"},
     "personalization": {"recent_searches", "favorite_filters", "favorite_subjects", "pinned_students", "recent_pages", "quick_launch_shortcuts"},
-    "security": {"password_updated_at", "last_login", "current_session", "sessions"},
+    "security": {"password_updated_at", "last_login", "current_session", "sessions", "last_sign_out_all", "two_factor_updated_at"},
 }
 
 _NAMESPACE_SPECS: Dict[str, Dict[str, Any]] = {
@@ -107,7 +108,14 @@ _NAMESPACE_SPECS: Dict[str, Dict[str, Any]] = {
         "table_density": {"t": "enum", "values": ["compact", "default", "comfortable"], "default": "default"},
         "applied_bounds": {"t": "record", "fields": {}, "default": {}},
     },
+    "account": {
+        "display_language": {"t": "enum", "values": ["en", "hi", "gu"], "default": "en"},
+        "name_display": {"t": "enum", "values": ["full_name", "first_name", "formal", "with_id"], "default": "full_name"},
+    },
     "notifications": {
+        "grade_alerts": {"t": "bool", "default": True},
+        "attendance_warnings": {"t": "bool", "default": True},
+        "semester_results": {"t": "bool", "default": True},
         "rules": {"t": "list", "max_length": 50, "default": []},
         "quiet_hours": {
             "t": "record",
@@ -164,6 +172,10 @@ _NAMESPACE_SPECS: Dict[str, Dict[str, Any]] = {
         "quick_launch_shortcuts": {"t": "list", "default": []},
     },
     "security": {
+        "two_factor_enabled": {"t": "bool", "default": False},
+        "two_factor_method": {"t": "enum", "values": ["none", "email", "authenticator"], "default": "none"},
+        "two_factor_updated_at": {"t": "string", "max_length": 40, "default": ""},
+        "last_sign_out_all": {"t": "string", "max_length": 40, "default": ""},
         "password_updated_at": {"t": "string", "max_length": 40, "default": ""},
         "last_login": {"t": "string", "max_length": 40, "default": ""},
         "current_session": {
@@ -545,3 +557,86 @@ class SettingsService:
             detail="workspace restored from restore point.",
         )
         return persisted, ["Workspace restored to the previous restore point."]
+
+    async def change_password(
+        self, user_id: str, current_password: str, new_password: str
+    ) -> Dict[str, Any]:
+        row = await self.repo.pool.fetchrow(
+            "SELECT password FROM users WHERE user_id = $1", user_id
+        )
+        if not row:
+            raise KeyError(f"User {user_id} not found")
+        if row["password"] != current_password:
+            raise PreferenceValidationError("Current password is incorrect.")
+        if not new_password or len(new_password) < 6:
+            raise PreferenceValidationError("New password must be at least 6 characters.")
+        if new_password == current_password:
+            raise PreferenceValidationError("New password cannot be the same as the current password.")
+
+        now = self._now()
+        await self.repo.pool.execute(
+            "UPDATE users SET password = $1 WHERE user_id = $2",
+            new_password,
+            user_id,
+        )
+        doc = await self.get_document(user_id)
+        doc["namespaces"]["security"]["password_updated_at"] = now
+        await self._persist(
+            user_id,
+            doc,
+            namespace="security",
+            action="password_change",
+            summary="Updated account password.",
+            bump_configuration=False,
+            detail="Account password changed.",
+        )
+        return {
+            "status": "success",
+            "message": "Password updated successfully.",
+            "timestamp": now,
+        }
+
+    async def set_two_factor(
+        self, user_id: str, enabled: bool, method: str = "email"
+    ) -> Dict[str, Any]:
+        now = self._now()
+        doc = await self.get_document(user_id)
+        doc["namespaces"]["security"]["two_factor_enabled"] = bool(enabled)
+        doc["namespaces"]["security"]["two_factor_method"] = method if enabled else "none"
+        doc["namespaces"]["security"]["two_factor_updated_at"] = now
+        await self._persist(
+            user_id,
+            doc,
+            namespace="security",
+            action="two_factor_update",
+            summary=f"Two-factor authentication {'enabled' if enabled else 'disabled'}.",
+            bump_configuration=False,
+            detail=f"Two-factor set to {enabled} ({method}).",
+        )
+        return {
+            "status": "success",
+            "message": f"Two-factor authentication {'enabled' if enabled else 'disabled'}.",
+            "timestamp": now,
+            "two_factor_enabled": bool(enabled),
+            "two_factor_method": method if enabled else "none",
+        }
+
+    async def sign_out_all_devices(self, user_id: str) -> Dict[str, Any]:
+        now = self._now()
+        doc = await self.get_document(user_id)
+        doc["namespaces"]["security"]["sessions"] = []
+        doc["namespaces"]["security"]["last_sign_out_all"] = now
+        await self._persist(
+            user_id,
+            doc,
+            namespace="security",
+            action="sign_out_all",
+            summary="Signed out all active devices.",
+            bump_configuration=False,
+            detail="All active sessions terminated.",
+        )
+        return {
+            "status": "success",
+            "message": "All active sessions have been signed out.",
+            "timestamp": now,
+        }

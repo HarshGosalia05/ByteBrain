@@ -662,3 +662,97 @@ test("getStudentMlInsights maps 404 and is cached across reads", async () => {
   assert.equal(missing.ok, false)
   if (!missing.ok) assert.equal(missing.error.code, "not_found")
 })
+
+test("getStudentSettings fetches /settings with auth", async () => {
+  const settingsBody = {
+    namespaces: {
+      account: { display_language: "en", name_display: "full_name" },
+      notifications: { grade_alerts: true, attendance_warnings: true, semester_results: true },
+      security: { two_factor_enabled: false },
+    },
+    metadata: { schema_version: 1, preference_version: 0, configuration_version: 0 },
+    activity: [],
+  }
+  route("/api/v1/students/me/settings", 200, settingsBody)
+
+  const result = await studentApi.getStudentSettings()
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.namespaces.account?.display_language, "en")
+    assert.equal(result.data.namespaces.notifications?.grade_alerts, true)
+  }
+  const hit = getCalls("/settings")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/students/me/settings")
+})
+
+test("updateStudentSettings PATCHes namespace with auth and invalidates cache", async () => {
+  const updateBody = {
+    namespaces: {
+      account: { display_language: "hi", name_display: "formal" },
+    },
+    metadata: {},
+    activity: [],
+    highlights: ["account updated"],
+  }
+  route("/api/v1/students/me/settings/account", 200, updateBody)
+
+  const result = await studentApi.updateStudentSettings("account", { display_language: "hi" })
+  assert.equal(result.ok, true)
+  const hit = getCalls("/settings/account")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].init?.method, "PATCH")
+  assert.equal(hit[0].init?.body, JSON.stringify({ display_language: "hi" }))
+})
+
+test("changeStudentPassword POSTs credentials to backend", async () => {
+  route("/api/v1/students/me/settings/change-password", 200, {
+    status: "success",
+    message: "Password updated successfully.",
+    timestamp: "2026-08-14T10:00:00Z",
+  })
+
+  const result = await studentApi.changeStudentPassword("current_pwd", "new_secret_123")
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.status, "success")
+  }
+  const hit = getCalls("/change-password")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].init?.method, "POST")
+  const parsedBody = JSON.parse(String(hit[0].init?.body))
+  assert.equal(parsedBody.current_password, "current_pwd")
+  assert.equal(parsedBody.new_password, "new_secret_123")
+})
+
+test("setStudentTwoFactor POSTs 2FA status to backend", async () => {
+  route("/api/v1/students/me/settings/two-factor", 200, {
+    status: "success",
+    message: "Two-factor authentication enabled.",
+    two_factor_enabled: true,
+  })
+
+  const result = await studentApi.setStudentTwoFactor(true, "email")
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.two_factor_enabled, true)
+  }
+  const hit = getCalls("/two-factor")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].init?.method, "POST")
+  const parsedBody = JSON.parse(String(hit[0].init?.body))
+  assert.equal(parsedBody.enabled, true)
+})
+
+test("signOutAllStudentDevices POSTs to backend", async () => {
+  route("/api/v1/students/me/settings/sign-out-all", 200, {
+    status: "success",
+    message: "All active sessions have been signed out.",
+  })
+
+  const result = await studentApi.signOutAllStudentDevices()
+  assert.equal(result.ok, true)
+  const hit = getCalls("/sign-out-all")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].init?.method, "POST")
+})

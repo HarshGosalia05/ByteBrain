@@ -1,9 +1,18 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 import asyncpg
 from app.api.dependencies import get_db_pool, require_student_role
 from app.core.config import settings
 from app.services.student_service import StudentService
+from app.services.settings_service import SettingsService, PreferenceValidationError
+from app.repositories.settings_repo import SettingsRepository
+from app.schemas.settings import (
+    SettingsResponse,
+    SettingsUpdateResponse,
+    ChangePasswordRequest,
+    TwoFactorRequest,
+    SecurityActionResponse,
+)
 from app.schemas.student import (
     StudentProfile,
     SemesterSummaryResponse,
@@ -430,3 +439,99 @@ async def get_my_career_alignment(
             detail="No student_id found in user token",
         )
     return await service.get_career_alignment(student_id)
+
+
+async def _student_user_id_or_error(user: dict, pool: asyncpg.Pool) -> str:
+    user_id = user.get("user_id")
+    if user_id:
+        return user_id
+    repo = SettingsRepository(pool)
+    student_id = user.get("student_id")
+    if student_id:
+        user_id = await repo.resolve_user_id_by_student(student_id)
+        if user_id:
+            return user_id
+    username = user.get("username") or user.get("sub")
+    if username:
+        user_id = await repo.resolve_user_id_by_username(username)
+        if user_id:
+            return user_id
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="No student user account found in token",
+    )
+
+
+@router.get("/me/settings", response_model=SettingsResponse)
+async def get_my_settings(
+    user: dict = Depends(require_student_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    service = SettingsService(pool)
+    user_id = await _student_user_id_or_error(user, pool)
+    doc = await service.get_document(user_id)
+    return {
+        "namespaces": doc["namespaces"],
+        "metadata": doc["versions"],
+        "activity": doc["activity"],
+    }
+
+
+@router.patch("/me/settings/{namespace}", response_model=SettingsUpdateResponse)
+async def update_my_settings(
+    namespace: str,
+    patch: dict = Body(...),
+    user: dict = Depends(require_student_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    service = SettingsService(pool)
+    user_id = await _student_user_id_or_error(user, pool)
+    try:
+        doc, highlights = await service.update_namespace(user_id, namespace, patch)
+    except PreferenceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return {
+        "namespaces": doc["namespaces"],
+        "metadata": doc["versions"],
+        "activity": doc["activity"],
+        "highlights": highlights,
+    }
+
+
+@router.post("/me/settings/change-password", response_model=SecurityActionResponse)
+async def change_my_password(
+    request: ChangePasswordRequest,
+    user: dict = Depends(require_student_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    service = SettingsService(pool)
+    user_id = await _student_user_id_or_error(user, pool)
+    try:
+        return await service.change_password(
+            user_id, request.current_password, request.new_password
+        )
+    except PreferenceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post("/me/settings/two-factor", response_model=SecurityActionResponse)
+async def set_my_two_factor(
+    request: TwoFactorRequest,
+    user: dict = Depends(require_student_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    service = SettingsService(pool)
+    user_id = await _student_user_id_or_error(user, pool)
+    return await service.set_two_factor(
+        user_id, request.enabled, request.method or "email"
+    )
+
+
+@router.post("/me/settings/sign-out-all", response_model=SecurityActionResponse)
+async def sign_out_all_my_devices(
+    user: dict = Depends(require_student_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    service = SettingsService(pool)
+    user_id = await _student_user_id_or_error(user, pool)
+    return await service.sign_out_all_devices(user_id)

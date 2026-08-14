@@ -1053,6 +1053,17 @@ async function mutateStudent<T>(
       cache: "no-store",
     })
     if (!res.ok) {
+      if (res.status === 400) {
+        const errJson = (await res.json().catch(() => null)) as { detail?: string } | null
+        return {
+          ok: false,
+          error: {
+            status: 400,
+            code: "invalid",
+            message: typeof errJson?.detail === "string" ? errJson.detail : "Invalid request.",
+          },
+        }
+      }
       return { ok: false, error: toBffError(res.status) }
     }
     const data = (await res.json()) as T
@@ -1184,4 +1195,114 @@ export async function getStudentHealthData(): Promise<BffResult<StudentHealthDat
     },
     fetchedAt: health.fetchedAt,
   }
+}
+
+export type StudentSettingsResponse = {
+  namespaces: {
+    account?: {
+      display_language?: "en" | "hi" | "gu"
+      name_display?: "full_name" | "first_name" | "formal" | "with_id"
+      [key: string]: unknown
+    }
+    notifications?: {
+      grade_alerts?: boolean
+      attendance_warnings?: boolean
+      semester_results?: boolean
+      digest_frequency?: string
+      browser_enabled?: boolean
+      [key: string]: unknown
+    }
+    security?: {
+      two_factor_enabled?: boolean
+      two_factor_method?: string
+      two_factor_updated_at?: string
+      password_updated_at?: string
+      last_login?: string
+      last_sign_out_all?: string
+      sessions?: unknown[]
+      [key: string]: unknown
+    }
+    [key: string]: Record<string, unknown> | undefined
+  }
+  metadata: {
+    schema_version: number
+    preference_version: number
+    configuration_version: number
+    last_modified?: string | null
+    last_synced?: string | null
+  }
+  activity: Array<{
+    event: string
+    at: string
+    namespace?: string | null
+    detail?: string | null
+  }>
+}
+
+export type StudentSettingsUpdateResponse = {
+  namespaces: Record<string, Record<string, unknown>>
+  metadata: Record<string, unknown>
+  activity: unknown[]
+  highlights: string[]
+}
+
+export type SecurityActionResult = {
+  status: string
+  message: string
+  timestamp?: string
+  two_factor_enabled?: boolean
+  two_factor_method?: string
+}
+
+export function getStudentSettings(): Promise<BffResult<StudentSettingsResponse>> {
+  return callFastapi<StudentSettingsResponse>("settings", BFF_TTL_MS)
+}
+
+export async function updateStudentSettings(
+  namespace: string,
+  patch: Record<string, unknown>,
+): Promise<BffResult<StudentSettingsUpdateResponse>> {
+  const result = await mutateStudent<StudentSettingsUpdateResponse>(
+    `settings/${namespace}`,
+    "PATCH",
+    patch,
+    ["settings"],
+  )
+  if (result.ok) {
+    bffCache.delete("settings")
+  }
+  return result
+}
+
+export async function changeStudentPassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<BffResult<SecurityActionResult>> {
+  return mutateStudent<SecurityActionResult>(
+    "settings/change-password",
+    "POST",
+    { current_password: currentPassword, new_password: newPassword },
+    ["settings"],
+  )
+}
+
+export async function setStudentTwoFactor(
+  enabled: boolean,
+  method: string = "email",
+): Promise<BffResult<SecurityActionResult>> {
+  return mutateStudent<SecurityActionResult>(
+    "settings/two-factor",
+    "POST",
+    { enabled, method },
+    ["settings"],
+  )
+}
+
+export async function signOutAllStudentDevices(): Promise<BffResult<SecurityActionResult>> {
+  return mutateStudent<SecurityActionResult>(
+    "settings/sign-out-all",
+    "POST",
+    {},
+    ["settings"],
+  )
 }
