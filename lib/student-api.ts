@@ -356,6 +356,7 @@ async function fetchStudentApi<T>(
   cacheKey: string,
   ttlMs: number,
   useCache: boolean,
+  timeoutMs = 10000,
 ): Promise<BffResult<T>> {
   if (useCache) {
     const hit = bffCache.get(cacheKey)
@@ -369,7 +370,7 @@ async function fetchStudentApi<T>(
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(timeoutMs),
     })
     if (!res.ok) {
       return { ok: false, error: toBffError(res.status) }
@@ -402,6 +403,7 @@ async function callFastapi<T>(
   options?: {
     useCache?: boolean
     query?: Record<string, string | number | null | undefined>
+    timeoutMs?: number
   },
 ): Promise<BffResult<T>> {
   const auth = await requireStudentApiAccess()
@@ -416,6 +418,7 @@ async function callFastapi<T>(
     `${user.student_id}:${pathWithQuery}`,
     ttlMs,
     options?.useCache !== false,
+    options?.timeoutMs,
   )
 }
 
@@ -626,6 +629,84 @@ export function getStudentMlInsights(): Promise<BffResult<StudentMlInsights>> {
     (studentId) => `/predict/insights/${encodeURIComponent(studentId)}`,
     BFF_TTL_MS,
   )
+}
+
+// MD-06 career guidance: verified coach data + deterministic mapping + G0 GenAI
+
+export type CareerCoachReadiness = {
+  available: boolean
+  score: number | null
+  level: string | null
+  positive_factors: string[]
+  risk_factors: string[]
+  disclaimer: string | null
+}
+
+export type CareerDirection = {
+  available: boolean
+  domain: string | null
+  source: "declared_preference" | "mapped_subject_evidence" | "unavailable"
+  matched_count: number
+  note: string | null
+}
+
+export type SkillEvidenceItem = {
+  skill: string
+  evidence: "inferred_from_subject"
+  source_subject: string | null
+  detail: string | null
+}
+
+export type PrioritySkillGap = {
+  rank: number
+  skill_area: string
+  priority: "High" | "Medium"
+  detail: string
+  evidence: "not_verified"
+}
+
+export type CareerRoadmapStep = {
+  sequence: number
+  focus_area: string
+  current_evidence: string
+  priority: "High" | "Medium" | "Low"
+  recommended_step: string
+  milestone: string
+  next_action: string
+  progress_tracking: "available" | "not_available"
+  evidence: string
+}
+
+export type CareerAiGuidance = {
+  available: boolean
+  content: string | null
+  provider: string | null
+  model: string | null
+  error: "unavailable" | "rate_limited" | "timeout" | null
+}
+
+export type StudentCareerGuidance = {
+  student_id: string
+  data_available: boolean
+  career_preferences_available: boolean
+  career_readiness: CareerCoachReadiness
+  career_direction: CareerDirection
+  skill_strengths: SkillEvidenceItem[]
+  skill_gaps: PrioritySkillGap[]
+  roadmap: CareerRoadmapStep[]
+  ai_guidance: CareerAiGuidance
+  source: string
+  generated_at: string
+}
+
+export function getStudentCareerGuidance(): Promise<
+  BffResult<StudentCareerGuidance>
+> {
+  // Grounded GenAI generation can take longer than plain academic reads;
+  // mirror the chat timeout instead of the default 10s.
+  return callFastapi<StudentCareerGuidance>("career/guidance", BFF_TTL_MS, {
+    timeoutMs: 30000,
+  })
 }
 
 export type DashboardData = {

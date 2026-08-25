@@ -398,7 +398,9 @@ class StudentCareerCoachTool:
                 preferred_item.note = (
                     "Preferred domain; matched {n} of the student's subjects."
                 ).format(n=preferred_item.matched_count)
-            top = [preferred_item] + [item for item in top if item is not preferred_item]
+                top = [preferred_item] + [
+                    item for item in top if item is not preferred_item
+                ]
             top = top[:5]
         return top
 

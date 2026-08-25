@@ -32,6 +32,10 @@ from app.schemas.student_md06 import (
     CareerAlignmentResponse,
     CareerReadinessResponse,
 )
+from app.schemas.student_career_guidance import StudentCareerGuidanceResponse
+from app.services.student_career_guidance_service import (
+    StudentCareerGuidanceService,
+)
 from app.schemas.student_md05 import (
     ClearAllResponse,
     GoalCreate,
@@ -439,6 +443,28 @@ async def get_my_career_alignment(
             detail="No student_id found in user token",
         )
     return await service.get_career_alignment(student_id)
+
+
+@router.get("/me/career/guidance", response_model=StudentCareerGuidanceResponse)
+async def get_my_career_guidance(
+    pool: asyncpg.Pool = Depends(get_db_pool),
+    user: dict = Depends(require_student_role),
+):
+    """Combined career guidance for the ML Insights career section.
+
+    Reuses the verified G2.5 career coach (self-scoped), the approved
+    deterministic domain mapping, and an optional grounded G0 GenAI
+    narrative. M4 is never recomputed or modified; a GenAI failure degrades
+    to the deterministic payload.
+    """
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    service = StudentCareerGuidanceService(pool)
+    return await service.get_guidance(student_id)
 
 
 async def _student_user_id_or_error(user: dict, pool: asyncpg.Pool) -> str:

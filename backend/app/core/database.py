@@ -12,7 +12,7 @@ class Database:
             self.pool = await asyncpg.create_pool(
                 dsn=settings.database_url,
                 min_size=1,
-                max_size=10,
+                max_size=5,
                 ssl=ssl_mode,
                 statement_cache_size=0,
             )
