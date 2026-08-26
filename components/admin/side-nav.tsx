@@ -11,6 +11,7 @@ import {
   CalendarCheck,
   LayoutDashboard,
   Library,
+  LineChart,
   Rocket,
   Smile,
   UserCog,
@@ -118,6 +119,15 @@ export function SideNav() {
           <NavLink href="/admin/academic" icon={Library} label="Overview" />
           <NavLink href="/admin/academic/subjects" icon={BookOpen} label="Subjects" />
           <NavLink href="/admin/academic/departments" icon={Building2} label="Departments" />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <GroupLabel>Analytics</GroupLabel>
+        <div className="flex flex-col gap-1 pl-4">
+          <NavLink href="/admin/analytics" icon={LineChart} label="Overview" />
+          <NavLink href="/admin/analytics/departments" icon={Building2} label="Departments" />
+          <NavLink href="/admin/analytics/at-risk" icon={AlertTriangle} label="At-Risk" />
         </div>
       </div>
 

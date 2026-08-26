@@ -544,9 +544,13 @@ class TestCliStageSelection(unittest.TestCase):
     def test_cli_default_run_includes_both_sources(self):
         code, out, _ = self.capture(lambda: cli.main(["run", "--dry-run"]))
         self.assertEqual(code, EXIT_SUCCESS)
-        self.assertIn("stages_run=2", out)
+        self.assertIn("stages_run=7", out)
         self.assertIn("extract", out)
         self.assertIn("validate", out)
+        self.assertIn("stage", out)
+        self.assertIn("stitch", out)
+        self.assertIn("transform", out)
+        self.assertIn("load", out)
 
     def test_cli_single_extract_stage(self):
         code, out, _ = self.capture(lambda: cli.main(["run", "--stage", "extract"]))
@@ -558,17 +562,17 @@ class TestCliStageSelection(unittest.TestCase):
         self.assertEqual(code, EXIT_SUCCESS)
         self.assertIn("validate: status=success", out)
 
-    def test_cli_downstream_stage_not_implemented(self):
-        code, out, err = self.capture(lambda: cli.main(["run", "--stage", "load"]))
-        self.assertEqual(code, EXIT_LOAD_DERIVE_FAILURE)
-        self.assertIn("not implemented in this slice", err)
+    def test_cli_downstream_stage_now_implemented(self):
+        code, out, _ = self.capture(lambda: cli.main(["run", "--stage", "derive"]))
+        self.assertEqual(code, EXIT_SUCCESS)
+        self.assertIn("derive: status=success", out)
 
     def test_cli_sources_flag_scopes_run(self):
         code, out, _ = self.capture(
             lambda: cli.main(["run", "--dry-run", "--sources", "weekly_timetable"])
         )
         self.assertEqual(code, EXIT_SUCCESS)
-        self.assertIn("stages_run=2", out)
+        self.assertIn("stages_run=7", out)
 
 
 if __name__ == "__main__":

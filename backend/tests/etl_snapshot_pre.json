@@ -1,0 +1,36 @@
+{
+  "group_a_counts": {
+    "departments": 2,
+    "faculty": 25,
+    "subjects": 99,
+    "student_subject_enrollment": 3850,
+    "faculty_student_map": 80,
+    "lifestyle_survey": 80,
+    "career_preferences": 80,
+    "risk_predictions": 80,
+    "users": 106,
+    "student_messages": 0,
+    "student_goals": 0,
+    "ml_predictions": 5072,
+    "prediction_feedback": 35,
+    "performance_change_log": 33,
+    "attendance_change_log": 104,
+    "student_subject_performance": 3850,
+    "students": 80
+  },
+  "group_a_hashes": {
+    "departments": "b25b0ee814cf9a6f8e63340a7137fe6e",
+    "faculty": "123b3bd3a5771cced29a527c5f480485",
+    "subjects": "81e43928424beea82c8b38563c67c2ab",
+    "student_subject_enrollment": "cbe73a82763647fbfa87197de2dda927",
+    "faculty_student_map": "78f8f26fd58549648139c6cdeb70c67d",
+    "student_subject_performance": "6938100d98d4b64ff75863a7664e3c28",
+    "students_nonderived": "06a11abf93c9250aa6e1e23dbb84b4fc"
+  },
+  "group_b": {
+    "daily_attendance_07": 6250,
+    "weekly_timetable_07": 15,
+    "attendance": 3850,
+    "student_semester_summary": 500
+  }
+}

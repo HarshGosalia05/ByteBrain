@@ -29,6 +29,7 @@ async def create_pool(min_size: int = 1, max_size: int = 10) -> asyncpg.Pool:
             dsn=etl_config.database_url,
             min_size=min_size,
             max_size=max_size,
+            statement_cache_size=0,
         )
     except Exception as exc:  # noqa: BLE001 - fail loudly on any connect error
         raise EtlDatabaseError(f"Failed to create database pool: {exc}") from exc

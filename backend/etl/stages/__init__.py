@@ -8,6 +8,8 @@ later slices; this package defines the interface every future stage must follow:
 The canonical stage names are declared so all future slices register under the
 same contract (plan `01` §3.1: Extract, Validate, Stage, Stitch, Transform,
 Load, Derive).
+
+Implemented: Extract, Validate, Stage, Stitch, Transform, Load, Derive.
 """
 
 from abc import ABC, abstractmethod

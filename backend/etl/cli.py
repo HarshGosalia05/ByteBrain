@@ -13,9 +13,9 @@ Run from the ``backend/`` directory (the repo convention used by
 is the only mode that may write (plan `01` §5.3). No scheduling, workers, or
 API endpoints exist in V1.
 
-Implemented stages: Extract + Validate. Downstream stages
-(Stage/Stitch/Transform/Load/Derive) are later slices; requesting one fails
-cleanly rather than faking success.
+Implemented stages: Extract + Validate + Stage + Stitch. Downstream stages
+(Transform/Load/Derive) are later slices; requesting one fails
+ cleanly rather than faking success.
 """
 
 import argparse
@@ -27,19 +27,24 @@ from typing import List, Optional, Sequence
 from etl.exceptions import EXIT_LOAD_DERIVE_FAILURE, EXIT_SUCCESS
 from etl.runner import EtlRunner
 from etl.sources import DATASET_SOURCES
-from etl.stages import STAGE_EXTRACT, STAGE_NAMES, STAGE_VALIDATE
+from etl.stages import STAGE_DERIVE, STAGE_EXTRACT, STAGE_LOAD, STAGE_NAMES, STAGE_STAGE, STAGE_STITCH, STAGE_TRANSFORM, STAGE_VALIDATE
+from etl.stages.derive import DeriveStage
 from etl.stages.extract import ExtractStage
+from etl.stages.load import LoadStage
+from etl.stages.stage import StageStage
+from etl.stages.stitch import StitchStage
+from etl.stages.transform import TransformStage
 from etl.stages.validate import ValidateStage
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m etl",
-        description="KenexAI KDAC-3 reusable ETL pipeline (implemented: extract + validate).",
+        description="KenexAI KDAC-3 reusable ETL pipeline (implemented: extract, validate, stage, stitch, transform, load, derive).",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    run = sub.add_parser("run", help="Run the ETL pipeline (implemented: extract + validate).")
+    run = sub.add_parser("run", help="Run the ETL pipeline (implemented: extract, validate, stage, stitch, transform, load, derive).")
     run.add_argument(
         "--sources",
         default="",
@@ -64,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--stage",
         default=None,
         choices=STAGE_NAMES,
-        help="Run a single named stage (implemented: extract, validate).",
+        help="Run a single named stage (implemented: extract, validate, stage, stitch, transform, load, derive).",
     )
     run.add_argument(
         "--json",
@@ -90,17 +95,51 @@ def _run_command(args: argparse.Namespace) -> int:
             runner.register(ExtractStage(sources=sources, shared=shared))
         elif args.stage == STAGE_VALIDATE:
             runner.register(ValidateStage(sources=sources, shared=shared))
+        elif args.stage == STAGE_STAGE:
+            runner.register(ExtractStage(sources=sources, shared=shared))
+            runner.register(ValidateStage(sources=sources, shared=shared))
+            runner.register(StageStage(sources=sources, shared=shared))
+        elif args.stage == STAGE_STITCH:
+            runner.register(ExtractStage(sources=sources, shared=shared))
+            runner.register(ValidateStage(sources=sources, shared=shared))
+            runner.register(StageStage(sources=sources, shared=shared))
+            runner.register(StitchStage(sources=sources, shared=shared))
+        elif args.stage == STAGE_TRANSFORM:
+            runner.register(ExtractStage(sources=sources, shared=shared))
+            runner.register(ValidateStage(sources=sources, shared=shared))
+            runner.register(StageStage(sources=sources, shared=shared))
+            runner.register(StitchStage(sources=sources, shared=shared))
+            runner.register(TransformStage(sources=sources, shared=shared))
+        elif args.stage == STAGE_LOAD:
+            runner.register(ExtractStage(sources=sources, shared=shared))
+            runner.register(ValidateStage(sources=sources, shared=shared))
+            runner.register(StageStage(sources=sources, shared=shared))
+            runner.register(StitchStage(sources=sources, shared=shared))
+            runner.register(TransformStage(sources=sources, shared=shared))
+            runner.register(LoadStage(sources=sources, shared=shared))
+        elif args.stage == STAGE_DERIVE:
+            runner.register(ExtractStage(sources=sources, shared=shared))
+            runner.register(ValidateStage(sources=sources, shared=shared))
+            runner.register(StageStage(sources=sources, shared=shared))
+            runner.register(StitchStage(sources=sources, shared=shared))
+            runner.register(TransformStage(sources=sources, shared=shared))
+            runner.register(LoadStage(sources=sources, shared=shared))
+            runner.register(DeriveStage(sources=sources, shared=shared))
         else:
             print(
                 f"error: stage '{args.stage}' is part of the canonical contract but is not "
-                "implemented in this slice (Extract and Validate only; "
-                "Stage/Stitch/Transform/Load/Derive are later slices)",
+                "implemented in this slice",
                 file=sys.stderr,
             )
             return EXIT_LOAD_DERIVE_FAILURE
     else:
         runner.register(ExtractStage(sources=sources, shared=shared))
         runner.register(ValidateStage(sources=sources, shared=shared))
+        runner.register(StageStage(sources=sources, shared=shared))
+        runner.register(StitchStage(sources=sources, shared=shared))
+        runner.register(TransformStage(sources=sources, shared=shared))
+        runner.register(LoadStage(sources=sources, shared=shared))
+        runner.register(DeriveStage(sources=sources, shared=shared))
 
     summary = asyncio.run(
         runner.run(

@@ -94,10 +94,25 @@ class TestCliCommands(unittest.TestCase):
         self.assertEqual(code, EXIT_SUCCESS)
         self.assertIn("mode=dry-run", out)
 
-    def test_run_unknown_stage_not_implemented(self):
-        code, out, err = self.capture(lambda: cli.main(["run", "--stage", "stitch"]))
-        self.assertEqual(code, EXIT_LOAD_DERIVE_FAILURE)
-        self.assertIn("not implemented in this slice", err)
+    def test_run_derive_stage_implemented(self):
+        code, out, _ = self.capture(lambda: cli.main(["run", "--stage", "derive"]))
+        self.assertEqual(code, EXIT_SUCCESS)
+        self.assertIn("derive: status=success", out)
+
+    def test_run_stitch_stage_implemented(self):
+        code, out, _ = self.capture(lambda: cli.main(["run", "--stage", "stitch"]))
+        self.assertEqual(code, EXIT_SUCCESS)
+        self.assertIn("stitch: status=success", out)
+
+    def test_run_transform_stage_implemented(self):
+        code, out, _ = self.capture(lambda: cli.main(["run", "--stage", "transform"]))
+        self.assertEqual(code, EXIT_SUCCESS)
+        self.assertIn("transform: status=success", out)
+
+    def test_run_load_stage_implemented(self):
+        code, out, _ = self.capture(lambda: cli.main(["run", "--stage", "load"]))
+        self.assertEqual(code, EXIT_SUCCESS)
+        self.assertIn("load: status=success", out)
 
     def test_run_help_exits_zero(self):
         with self.assertRaises(SystemExit) as ctx:

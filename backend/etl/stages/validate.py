@@ -127,4 +127,5 @@ class ValidateStage(Stage):
             key: outcome.quarantine_ratio for key, outcome in outcomes.items()
         }
         result.metadata["warnings"] = warnings
+        self._shared["validated"] = outcomes
         return result
