@@ -1,188 +1,206 @@
-# ML Feature Engineering Layer — Final Report
+# ML Feature Engineering Report — V1
 
-## 1. Existing ML Specifications Discovered
+## 1. ML Use Case
 
-The project already specifies **4 ML models** with complete feature contracts:
+**Next-Semester Risk Prediction (M3)**
 
-| Model | Purpose | Algorithm | Grain |
-|---|---|---|---|
-| **M1** | Subject end-semester marks prediction | hist_gbm (selected) | (student_id, subject_id, semester_no) |
-| **M2** | Next-semester SGPA/percentage prediction | hist_gbm (selected) | (student_id, semester_no) |
-| **M3** | Next-semester at-risk binary classification | logistic regression (selected) | (student_id, semester_no) |
-| **M4** | Career readiness scoring | Rule-based engine | (student_id) |
+For each student-semester N: given completed semester N features, predict whether semester N+1 will be at-risk (FAIL/ATKT or new backlogs).
 
-Existing code: `ml/src/m1-m4/` (config, data, train, evaluate), `ml/src/features.py` (inference features), `ml/tests/test_features.py` (40 tests).
+This is a rolling prediction pattern, not semester-7-specific. The model generalizes across all semesters.
 
-## 2. Prediction Grain
+## 2. Prediction Target
 
-| Model | Grain | Rows (live DB) |
-|---|---|---|
-| M1 | (student_id, subject_id, semester_no) | 3,850 |
-| M2 | (student_id, semester_no) | 500 |
-| M3 | (student_id, semester_no) | 500 |
-| M4 | (student_id) | 80 |
+| Property | Value |
+|----------|-------|
+| Target column | `is_at_risk_next_sem` |
+| Data type | Binary (0 = safe, 1 = at-risk) |
+| Construction | `(next_result IN ('FAIL','ATKT')) OR (next_backlogs > 0)` |
+| Source columns | `student_semester_summary.semester_result`, `student_semester_summary.backlog_count` |
+| Derivation | `shift(-1)` within `groupby("student_id")` |
+| Positive rate (live) | 3.33% (10/300 training rows) |
 
-## 3. Target Definition
+## 3. Feature Definitions
 
-| Model | Target | Type | Training rows | Deployment rows |
-|---|---|---|---|---|
-| M1 | `end_sem_marks` | Numeric (0-70) | 3,291 | 559 |
-| M2 | `next_semester_percentage`, `next_semester_sgpa` | Numeric | 420 | 80 |
-| M3 | `is_at_risk_next_sem` | Binary (0/1) | 420 | 80 |
-| M4 | `placement_readiness_level` | Categorical (Low/Medium/High) | 80 | 0 |
+### 3.1 Selected Features (11)
 
-M3 positive rate: 6.2% (26/420 at-risk students).
+| # | Feature | Source Table | Source Column | Type | Availability |
+|---|---------|-------------|---------------|------|-------------|
+| 1 | `semester_no` | `student_semester_summary` | `semester_no` | Numeric | END_OF_SEMESTER |
+| 2 | `subjects_registered` | `student_semester_summary` | `subjects_registered` | Numeric | END_OF_SEMESTER |
+| 3 | `credits_registered` | `student_semester_summary` | `credits_registered` | Numeric | END_OF_SEMESTER |
+| 4 | `credits_earned` | `student_semester_summary` | `credits_earned` | Numeric | END_OF_SEMESTER |
+| 5 | `semester_total_marks` | `student_semester_summary` | `semester_total_marks` | Numeric | END_OF_SEMESTER |
+| 6 | `semester_percentage` | `student_semester_summary` | `semester_percentage` | Numeric | END_OF_SEMESTER |
+| 7 | `semester_sgpa` | `student_semester_summary` | `semester_sgpa` | Numeric | END_OF_SEMESTER |
+| 8 | `semester_attendance_percentage` | `student_semester_summary` | `semester_attendance_percentage` | Numeric | END_OF_SEMESTER |
+| 9 | `backlog_count` | `student_semester_summary` | `backlog_count` | Numeric | END_OF_SEMESTER |
+| 10 | `department_name` | `students` | `department_name` | Categorical | END_OF_SEMESTER |
+| 11 | `gender` | `students` | `gender` | Binary | END_OF_SEMESTER |
 
-## 4. Feature Groups
+All features are direct column reads with no aggregation needed.
 
-### M1 (8 features)
-- **Academic performance**: internal_marks, mid_sem_marks
-- **Attendance**: attendance_percentage
-- **Metadata**: subject_type, credits, semester_no, department_name, gender
+### 3.2 Feature Sources
 
-### M2/M3 (11 features)
-- **Semester history**: semester_no, subjects_registered, credits_registered, credits_earned, semester_total_marks, semester_percentage, semester_sgpa, semester_attendance_percentage, backlog_count
-- **Metadata**: department_name, gender
+| Source Table | Grain | Used For | Row Count |
+|-------------|-------|----------|-----------|
+| `student_semester_summary` | (student_id, semester_no) | 9 numeric features + target derivation | 500 |
+| `students` | student_id | department_name, gender (2 features) | 80 |
 
-### M4 (12 features)
-- **Career preferences**: preferred_domain, dream_job_role, preferred_industry, preferred_work_mode, higher_studies_interest, entrepreneurship_interest, certification_interest, internship_completed
-- **Academic aggregates**: avg_prior_percentage, avg_prior_sgpa, avg_prior_attendance, total_prior_backlogs
+### 3.3 Excluded Feature Sources
 
-## 5. Final Feature List
+| Source | Reason Excluded |
+|--------|----------------|
+| `student_subject_performance` | Different grain (student-subject-semester). Used by M1 only. |
+| `attendance` | M2/M3 uses `semester_attendance_percentage` from `student_semester_summary` instead. |
+| `lifestyle_survey` | Used by M4 only (career readiness). Not part of M2/M3 design. |
+| `career_preferences` | Used by M4 only. Career intent data, not relevant to academic risk. |
+| `daily_attendance_07` | Semester 7 only — no training equivalent. |
 
-### M1 Raw Features
-1. internal_marks (numeric, 0-20)
-2. mid_sem_marks (numeric, 0-50)
-3. attendance_percentage (numeric, 0-100)
-4. subject_type (categorical: Theory/Laboratory/Project/Internship)
-5. credits (numeric, >0)
-6. semester_no (numeric, 1-8)
-7. department_name (categorical: CSE/BBA)
-8. gender (binary: Male/Female -> is_male)
+### 3.4 Explicitly Excluded Columns (Leakage)
 
-### M2/M3 Raw Features
-1. semester_no (numeric, 1-8)
-2. subjects_registered (numeric)
-3. credits_registered (numeric)
-4. credits_earned (numeric)
-5. semester_total_marks (numeric)
-6. semester_percentage (numeric, 0-100)
-7. semester_sgpa (numeric, 0-10)
-8. semester_attendance_percentage (numeric, 0-100)
-9. backlog_count (numeric, >=0)
-10. department_name (categorical)
-11. gender (binary -> is_male)
+| Column | Reason |
+|--------|--------|
+| `semester_result` | Target-derived (shifted to create target) |
+| `latest_sgpa`, `overall_cgpa`, `overall_percentage`, `overall_attendance_percentage`, `total_backlogs`, `academic_standing` | Cumulative student-level (includes future semester data) |
+| `total_marks`, `percentage`, `grade`, `grade_point`, `result_status`, `performance_category`, `ct1_marks`, `ct2_marks` | Subject-level performance (different grain) |
+| `end_sem_marks`, `internal_marks`, `mid_sem_marks` | M1-specific features |
 
-### M4 Raw Features
-1-8. Career preference fields (categorical/binary)
-9-12. Academic aggregate fields (numeric)
+## 4. Feature Grain
 
-## 6. Leakage Rules
+**One row = one student at one completed semester.**
 
-| Rule | Affected Models | Detail |
-|---|---|---|
-| No target-derived features | M1 | Forbidden: total_marks, percentage, grade, grade_point, result_status, performance_category, ct1_marks, ct2_marks, attempt_number, latest_sgpa, overall_cgpa, overall_percentage, overall_attendance_percentage, total_backlogs, academic_standing |
-| No future semester data | M2, M3 | Targets computed via shift(-1) within student; features only use current semester |
-| No placement outcomes | M4 | Forbidden: target_package_lpa, placement_readiness_level |
-| Grain uniqueness | All | No duplicate prediction rows per grain |
-| Temporal separation | M2, M3 | Last semester per student = deployment (no target available) |
+- Training rows: student-semester pairs where the NEXT semester's data exists
+- Deployment rows: student-semester pairs where the NEXT semester's data does NOT exist
 
-## 7. ML Dataset Schema
+## 5. Temporal Boundary
 
 ```
-M1: student_id | subject_id | semester_no | internal_marks | mid_sem_marks | 
-    attendance_percentage | subject_type | credits | department_name | gender | 
-    end_sem_marks (target)
-
-M2: student_id | semester_no | subjects_registered | credits_registered | 
-    credits_earned | semester_total_marks | semester_percentage | semester_sgpa |
-    semester_attendance_percentage | backlog_count | department_name | gender |
-    next_semester_percentage (target) | next_semester_sgpa (target)
-
-M3: student_id | semester_no | [same features as M2] |
-    is_at_risk_next_sem (target: binary)
-
-M4: student_id | preferred_domain | dream_job_role | preferred_industry |
-    preferred_work_mode | higher_studies_interest | entrepreneurship_interest |
-    certification_interest | internship_completed | avg_prior_percentage |
-    avg_prior_sgpa | avg_prior_attendance | total_prior_backlogs |
-    placement_readiness_level (target)
+Features:     Available AFTER semester N completes (SGPA, total marks, backlog_count, etc.)
+Target:       Derived from semester N+1 data (shifted forward by 1 semester)
+Leakage rule: NO semester N+1 information may appear in semester N features
 ```
 
-## 8. Files Created
+### Example
 
-| File | Description |
-|---|---|
-| `ml/src/feature_config.py` | Feature definitions, grain, leakage rules, null handling, forbidden features |
-| `ml/src/feature_data.py` | Database-backed dataset builders for M1-M4 |
-| `ml/tests/test_feature_engineering.py` | 54 unit tests (all pass) |
-| `ml/verify_feature_engineering.py` | Live Supabase verification (24/24 checks pass) |
+For a semester-6 training row predicting semester-7 risk:
 
-## 9. Files Modified
+| Allowed (features from sem 6) | Forbidden (from sem 7+) |
+|-------------------------------|------------------------|
+| semester_sgpa = 8.2 | semester_sgpa of sem 7 |
+| backlog_count = 1 | backlog_count of sem 7 |
+| semester_attendance_percentage = 85 | semester_result of sem 7 |
 
-None. No existing files were modified.
+## 6. Leakage Prevention Rules
 
-## 10. Tests Added
+1. **No future semester data**: Features from semester N must NOT contain any information from semester N+1 or later.
+2. **No cumulative student-level features**: `latest_sgpa`, `overall_cgpa`, etc. are forbidden — they include future semester data.
+3. **No target-derived columns**: `semester_result` is used to compute the target but must not appear as a feature.
+4. **No subject-level data**: `student_subject_performance` columns are at a different grain.
+5. **Temporal split**: The last semester per student is ALWAYS deployment (no target available).
+6. **No data augmentation**: Feature values come from the actual database state.
 
-54 tests in `ml/tests/test_feature_engineering.py`:
-- Feature definition completeness (8 tests)
-- Feature group coverage (3 tests)
-- Target definitions (4 tests)
-- M1 dataset builder (4 tests)
-- M2 dataset builder (4 tests)
-- M3 dataset builder (3 tests)
-- M4 dataset builder (5 tests)
-- Determinism (2 tests)
-- Null handling (3 tests)
-- Referential integrity (3 tests)
-- No database writes (2 tests)
-- Leakage prevention (6 tests)
-- Training/deployment split (3 tests)
-- Feature data types (3 tests)
+## 7. Training/Deployment Split
 
-## 11. Test Results
+| Split | Definition | Row Count (Live) |
+|-------|-----------|-----------------|
+| Training | semesters where shift(-1) produced NOT NULL values | 300 |
+| Deployment | last semester per student (no next-semester data) | 50 |
 
-- **Feature engineering unit tests**: 54/54 pass
-- **Analytics tests**: 41/41 pass (no regression)
-- **Live verification**: 24/24 checks pass against live Supabase
+## 8. Missing-Value Strategy
 
-## 12. Live Verification Results
+- **Null values in features**: Preserved as-is. No imputation at feature-engineering time.
+- **Missing optional data sources**: Students without certain data get NULL for those features.
+- **Threshold**: Features with >5% nulls trigger a validation warning.
+- **Live result**: 0% nulls across all 11 features (complete data for V1 scope).
 
-| Check | Result | Detail |
-|---|---|---|
-| M1 total rows | PASS | 3,850 |
-| M1 grain unique | PASS | 0 duplicates |
-| M1 training rows | PASS | 3,291 |
-| M1 deployment rows | PASS | 559 |
-| M1 feature columns present | PASS | all present |
-| M1 null checks (3) | PASS | 0 nulls in key features |
-| M1 no forbidden columns | PASS | clean |
-| M2 total rows | PASS | 500 |
-| M2 grain unique | PASS | 0 duplicates |
-| M2 training rows | PASS | 420 |
-| M2 deployment rows | PASS | 80 |
-| M2 target range | PASS | mean 63.97% |
-| M3 total rows | PASS | 500 |
-| M3 both classes | PASS | positive rate 6.2% |
-| M4 total rows | PASS | 80 |
-| M4 grain unique | PASS | 0 duplicates |
-| M4 target classes | PASS | Medium=65, Low=15 |
-| M4 aggregates (4) | PASS | 0 nulls |
+## 9. Feature Storage
 
-## 13. Confirmation: ETL and Analytics Unchanged
+Features are generated on demand from PostgreSQL. No persistent feature table is created. The same query + same config = same output.
 
-- **ETL pipeline**: No files modified
-- **Analytics repository**: No files modified
-- **Analytics schemas**: No files modified
-- **Analytics tests**: 41/41 still pass
+## 10. Reproducibility Strategy
 
-## 14. Remaining Work for Actual ML Model
+- Same DB state + same V1Config = same feature values
+- No random behavior in feature engineering
+- Deterministic SQL queries with fixed ORDER BY
+- Target construction uses pandas shift(-1) which is deterministic
 
-1. **Model training**: Run `ml/src/m1/train_m1.py`, `m2/train_m2.py`, `m3/train_m3.py`, `m4/build_m4.py`
-2. **Model evaluation**: Evaluate metrics against acceptance criteria
-3. **Prediction service**: Connect DB-backed features to existing inference pipeline
-4. **API integration**: Wire up existing `predict.py` endpoints
-5. **Dashboard**: Frontend ML insights pages (ML-09, ML-10, ML-11)
-6. **Feedback loop**: Faculty feedback → M3 retraining
+## 11. Validation Rules
 
-**STOP.** Feature engineering layer complete. No model training performed.
+34 validation checks implemented:
+
+| Category | Checks |
+|----------|--------|
+| Student IDs | All 50 expected IDs present |
+| Grain | No duplicate (student_id, semester_no) rows |
+| Row counts | Expected 350 total, 300 training, 50 deployment |
+| Numeric ranges | All 9 numeric features within valid bounds |
+| Categorical | Gender ∈ {Male, Female}, department ∈ {CSE} |
+| Nulls | All features ≤5% nulls |
+| Leakage | No forbidden columns in feature set |
+| Temporal | Training semesters = [1-6], deployment = [7] |
+| Target | Binary values, non-degenerate distribution |
+| Referential | All rows have department_name (JOIN succeeded) |
+| Determinism | Metadata consistent across runs |
+
+## 12. Test Results
+
+### Unit Tests: 55/55 PASSED
+
+| Test Category | Count |
+|--------------|-------|
+| Configuration | 14 |
+| Feature Correctness | 5 |
+| Join Correctness | 3 |
+| Missing Data | 3 |
+| Leakage Prevention | 6 |
+| Grain Integrity | 3 |
+| Determinism | 2 |
+| Scope Filtering | 3 |
+| Training/Deployment Split | 4 |
+| Target Construction | 2 |
+| Validation | 3 |
+| No DB Writes | 1 |
+| Feature Data Types | 3 |
+| Config Container | 2 |
+
+### Existing ML Tests: 54/54 PASSED
+
+No regressions in existing feature engineering tests.
+
+### Live Verification: 34/34 CHECKS PASSED
+
+```
+Students:              50 (STU000001-STU000050)
+Total rows:            350
+Training rows:         300
+Deployment rows:       50
+Feature columns:       11
+Positive rate:         3.33% (10 at-risk)
+Build time:            0.26s
+Validation time:       0.00s
+```
+
+## Files Changed
+
+| Action | File | Lines |
+|--------|------|-------|
+| NEW | `ml/src/features/__init__.py` | 18 |
+| NEW | `ml/src/features/v1_config.py` | 211 |
+| NEW | `ml/src/features/v1_dataset.py` | 171 |
+| NEW | `ml/src/features/v1_validation.py` | 210 |
+| NEW | `ml/tests/test_v1_feature_engineering.py` | 550 |
+| NEW | `ml/verify_v1_dataset.py` | 201 |
+
+**Total: 6 new files, 0 modified files.**
+
+## Scope Constraints
+
+- Department: CSE
+- Students: STU000001–STU000050
+- Semesters: 1–6 (training), 7 (deployment)
+- Academic year: 2026-27
+- No models trained
+- No predictions generated
+- No ETL modifications
+- No API changes
+- No dashboard changes
