@@ -839,7 +839,7 @@ export type FacultyMlModelInsight =
       prediction: FacultyMlPredictionResult
       explanation: FacultyMlExplanationResult
     }
-  | { available: false; reason: "no_data" | "error"; message: string }
+  | { available: false; reason: "no_data" | "error" | "blocked"; message: string }
 
 export type FacultyStudentMlInsights = {
   student_id: string

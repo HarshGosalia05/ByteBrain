@@ -18,6 +18,9 @@ from ml.src import inference
 from ml.src.prediction_service import PredictionService, fetch_m1_raw_data, fetch_m2m3_raw_data, fetch_m4_raw_data
 from app.services.prediction_generation_service import PredictionGenerationService
 from app.services.prediction_insights_service import PredictionInsightsService
+from app.services.prediction_contract_service import (
+    PredictionContractService,
+)
 from app.services.faculty_service import FacultyService
 
 router = APIRouter(prefix="/predict", tags=["predictions"])
@@ -27,6 +30,12 @@ _ALLOWED_PREDICTION_TYPES = ("m1", "m2", "m3", "m4")
 
 def get_prediction_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> PredictionService:
     return PredictionService(pool)
+
+
+def get_contract_prediction_service(
+    pool: asyncpg.Pool = Depends(get_db_pool),
+) -> PredictionContractService:
+    return PredictionContractService(pool)
 
 
 def get_generation_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> PredictionGenerationService:
@@ -90,26 +99,25 @@ async def authorize_prediction_access(
 
 @router.get(
     "/m1/{student_id}",
-    response_model=inference.PredictionResult,
     tags=["predictions"],
 )
 async def predict_m1(
     student_id: str,
-    service: PredictionService = Depends(get_prediction_service),
+    contract_service: PredictionContractService = Depends(get_contract_prediction_service),
     faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
-) -> inference.PredictionResult:
-    """Predict end-semester marks for a student's subject enrollments.
+) -> dict:
+    """Predict end-semester marks per subject via the unified inference contract.
 
-    Returns structured prediction results with predicted marks clipped to [0, 70].
-    Students can only predict for their own student_id; Faculty only within their
-    authorized scope; Admin for any student.
+    Reads real student data from the database (read-only), builds per-subject
+    feature rows, and returns readiness-aware contract results. Students can
+    only predict for their own student_id; Faculty only within their authorized
+    scope; Admin for any student.
     """
     await authorize_prediction_access(user, student_id, faculty_service)
 
     try:
-        result = await service.predict_m1_for_student(student_id)
-        return result
+        return await contract_service.predict_m1(student_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -121,24 +129,23 @@ async def predict_m1(
 
 @router.get(
     "/m2/{student_id}",
-    response_model=inference.PredictionResult,
     tags=["predictions"],
 )
 async def predict_m2(
     student_id: str,
-    service: PredictionService = Depends(get_prediction_service),
+    contract_service: PredictionContractService = Depends(get_contract_prediction_service),
     faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
-) -> inference.PredictionResult:
-    """Predict next-semester SGPA and percentage for a student.
+) -> dict:
+    """Predict next-semester SGPA and percentage via the unified inference contract.
 
-    Uses real data from the database via read-only repositories.
+    Uses real data from the database (read-only) for the student's latest
+    completed semester and returns a readiness-aware contract result.
     """
     await authorize_prediction_access(user, student_id, faculty_service)
 
     try:
-        result = await service.predict_m2_for_student(student_id)
-        return result
+        return await contract_service.predict_m2(student_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -150,24 +157,25 @@ async def predict_m2(
 
 @router.get(
     "/m3/{student_id}",
-    response_model=inference.PredictionResult,
     tags=["predictions"],
 )
 async def predict_m3(
     student_id: str,
-    service: PredictionService = Depends(get_prediction_service),
+    contract_service: PredictionContractService = Depends(get_contract_prediction_service),
     faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
-) -> inference.PredictionResult:
-    """Predict next-semester at-risk/ATKT status for a student.
+) -> dict:
+    """Expose M3 as BLOCKED via the unified inference contract.
 
-    Returns structured prediction results (binary: 0 = not at risk, 1 = at risk).
+    M3 is not approved for production prediction. Reads real student data
+    (read-only), calls the contract, and returns a readiness-aware result with
+    ``readiness_status=BLOCKED`` and ``prediction_available=False``. No real
+    at-risk prediction is returned.
     """
     await authorize_prediction_access(user, student_id, faculty_service)
 
     try:
-        result = await service.predict_m3_for_student(student_id)
-        return result
+        return await contract_service.predict_m3(student_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:

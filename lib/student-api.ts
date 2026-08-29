@@ -616,7 +616,7 @@ export type MlModelInsight =
       prediction: MlPredictionResult
       explanation: MlExplanationResult
     }
-  | { available: false; reason: "no_data" | "error"; message: string }
+  | { available: false; reason: "no_data" | "error" | "blocked"; message: string }
 
 export type StudentMlInsights = {
   student_id: string

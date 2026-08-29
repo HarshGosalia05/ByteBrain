@@ -1,8 +1,14 @@
 "use client"
 
-import { Brain, Cpu, Database, Users, CheckCircle2, AlertCircle } from "lucide-react"
+import { Brain, Cpu, Database, Users, CheckCircle2, AlertCircle, ShieldAlert } from "lucide-react"
 import type { MlOverviewKpis } from "@/lib/admin-api"
 import { StatCard } from "@/components/shared/data/stat-card"
+
+function statusLabel(modelKey: string, status: string) {
+  if (status === "active") return `${modelKey.toUpperCase()} Active`
+  if (status === "blocked") return `${modelKey.toUpperCase()} Blocked`
+  return `${modelKey.toUpperCase()} No Data`
+}
 
 export function MlOverviewCard({ kpis }: { kpis: MlOverviewKpis }) {
   const hasPredictions = kpis.total_predictions > 0
@@ -18,28 +24,33 @@ export function MlOverviewCard({ kpis }: { kpis: MlOverviewKpis }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-foreground">
-            ML Coverage & Active Engines
+            ML Coverage & Model Status
           </h2>
           <p className="text-xs text-muted-foreground">
-            Institution prediction coverage across M1-M4 models
+            Institution prediction coverage and production validation status across M1-M4
           </p>
         </div>
         <div className="flex items-center gap-2">
           {Object.entries(kpis.models_status).map(([modelKey, status]) => (
             <span
               key={modelKey}
+              title={status === "blocked" ? "Validation gate not satisfied" : undefined}
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${
                 status === "active"
                   ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400"
-                  : "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400"
+                  : status === "blocked"
+                    ? "bg-red-500/10 text-red-600 border-red-500/20 dark:text-red-400"
+                    : "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400"
               }`}
             >
               {status === "active" ? (
                 <CheckCircle2 className="size-3 text-emerald-500" />
+              ) : status === "blocked" ? (
+                <ShieldAlert className="size-3 text-red-500" />
               ) : (
                 <AlertCircle className="size-3 text-amber-500" />
               )}
-              {modelKey.toUpperCase()} {status === "active" ? "Active" : "No Data"}
+              {statusLabel(modelKey, status)}
             </span>
           ))}
         </div>

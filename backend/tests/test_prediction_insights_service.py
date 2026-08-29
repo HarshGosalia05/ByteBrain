@@ -117,11 +117,11 @@ class InsightsServiceTestCase(unittest.TestCase):
 
 
 class TestInsightsBundle(InsightsServiceTestCase):
-    def test_all_models_available_with_prediction_and_explanation(self):
+    def test_ready_models_available_with_prediction_and_explanation(self):
         result = run(self.service.get_student_insights("STU000001"))
         self.assertEqual(result["student_id"], "STU000001")
         self.assertEqual(sorted(result["models"]), ["m1", "m2", "m3", "m4"])
-        for prediction_type in pis.PREDICTION_TYPES:
+        for prediction_type in ("m1", "m2", "m4"):
             model = result["models"][prediction_type]
             self.assertTrue(model["available"], prediction_type)
             self.assertEqual(model["prediction"]["model_id"], prediction_type)
@@ -130,23 +130,36 @@ class TestInsightsBundle(InsightsServiceTestCase):
             )
             self.assertEqual(model["explanation"]["model_id"], prediction_type)
 
-    def test_every_model_was_predicted_then_explained(self):
-        run(self.service.get_student_insights("STU000001"))
+    def test_every_ready_model_was_predicted_then_explained(self):
+        result = run(self.service.get_student_insights("STU000001"))
+        self.assertEqual(result["models"]["m3"]["available"], False)
+        self.assertEqual(result["models"]["m3"]["reason"], "blocked")
+        self.assertIn("validation gate", result["models"]["m3"]["message"].lower())
         self.assertEqual(
             [call[0] for call in self.fake_prediction.calls],
-            ["m1", "m2", "m3", "m4"],
+            ["m1", "m2", "m4"],
         )
         self.assertEqual(
             [call[0] for call in self.fake_explanation.calls],
-            ["m1", "m2", "m3", "m4"],
+            ["m1", "m2", "m4"],
         )
 
     def test_model_version_resolved_and_passed_to_explanation(self):
         run(self.service.get_student_insights("STU000001"))
         self.assertEqual(
             self.fake_explanation.calls,
-            [(prediction_type, "1") for prediction_type in pis.PREDICTION_TYPES],
+            [(prediction_type, "1") for prediction_type in ("m1", "m2", "m4")],
         )
+
+    def test_m3_blocked_even_when_data_available(self):
+        # Even with full data present, M3 is never exposed as production
+        # because its validation gate is blocked.
+        result = run(self.service.get_student_insights("STU000001"))
+        self.assertEqual(result["models"]["m3"]["available"], False)
+        self.assertEqual(result["models"]["m3"]["reason"], "blocked")
+        self.assertEqual(result["models"]["m1"]["available"], True)
+        self.assertEqual(result["models"]["m2"]["available"], True)
+        self.assertEqual(result["models"]["m4"]["available"], True)
 
     def test_generated_at_is_iso8601(self):
         result = run(self.service.get_student_insights("STU000001"))
@@ -156,15 +169,16 @@ class TestInsightsBundle(InsightsServiceTestCase):
 class TestGracefulDegradation(InsightsServiceTestCase):
     def test_missing_data_model_degrades_without_failing_others(self):
         self.fake_prediction.errors = {
-            "m3": ValueError("No data found for student STU000001")
+            "m2": ValueError("No data found for student STU000001")
         }
         result = run(self.service.get_student_insights("STU000001"))
         self.assertTrue(result["models"]["m1"]["available"])
-        self.assertTrue(result["models"]["m2"]["available"])
-        self.assertFalse(result["models"]["m3"]["available"])
-        self.assertEqual(result["models"]["m3"]["reason"], "no_data")
-        self.assertIn("No data found", result["models"]["m3"]["message"])
+        self.assertFalse(result["models"]["m2"]["available"])
+        self.assertEqual(result["models"]["m2"]["reason"], "no_data")
+        self.assertIn("No data found", result["models"]["m2"]["message"])
         self.assertTrue(result["models"]["m4"]["available"])
+        # m3 stays blocked regardless of data errors.
+        self.assertEqual(result["models"]["m3"]["reason"], "blocked")
 
     def test_unexpected_error_degrades_with_generic_message(self):
         self.fake_prediction.errors = {"m4": RuntimeError("boom")}

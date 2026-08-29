@@ -212,16 +212,39 @@ class AdminMLService:
         )
         total_predictions_count = sum(len(v) for v in preds_by_type.values())
 
+        # models_status reports each model's PRODUCTION validation status,
+        # sourced from the authoritative readiness contract (single source
+        # of truth). M3 is always BLOCKED for production regardless of how
+        # many historical M3 rows exist; historical future-risk rows are
+        # reported separately in the Future Risk Intelligence section.
+        try:
+            from ml.src.features import v1_inference_contract as _contract  # noqa: PLC0415
+
+            def _readiness(ptype: str) -> str:
+                try:
+                    return _contract.get_readiness(ptype)
+                except Exception:  # pragma: no cover
+                    return "READY"
+
+            _status_blocked = _readiness("m3") == _contract.BLOCKED
+        except Exception:  # pragma: no cover - contract unobtainable
+            _status_blocked = True
+
+        def _m_status(ptype: str, preds: List[Any]) -> str:
+            if ptype == "m3" and _status_blocked:
+                return "blocked"
+            return "active" if preds else "no_data"
+
         overview_kpis = MlOverviewKpis(
             total_students=total_students_count,
             students_with_predictions=students_with_preds_count,
             coverage_percentage=coverage_pct,
             total_predictions=total_predictions_count,
             models_status={
-                "m1": "active" if preds_by_type["m1"] else "no_data",
-                "m2": "active" if preds_by_type["m2"] else "no_data",
-                "m3": "active" if preds_by_type["m3"] else "no_data",
-                "m4": "active" if preds_by_type["m4"] else "no_data",
+                "m1": _m_status("m1", preds_by_type["m1"]),
+                "m2": _m_status("m2", preds_by_type["m2"]),
+                "m3": _m_status("m3", preds_by_type["m3"]),
+                "m4": _m_status("m4", preds_by_type["m4"]),
             },
         )
 

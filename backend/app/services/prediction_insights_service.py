@@ -185,8 +185,29 @@ class PredictionInsightsService:
         prediction_service = self._prediction_service()
         explanation_service = self._explanation_service()
 
+        # M3 is BLOCKED for production: honor the unified offline inference
+        # contract and never expose a raw M3 prediction as a trustworthy
+        # production risk output. The insights bundle reports M3 as blocked
+        # so the UI shows the validation-gate state instead of a risk badge.
+        # (Persisted *legacy* M3 predictions remain reviewable through the
+        # separate faculty feedback flow, which labels them clearly.)
+        try:
+            from ml.src.features import v1_inference_contract as _contract  # noqa: PLC0415
+            _m3_blocked = _contract.get_readiness("m3") == _contract.BLOCKED
+            _m3_reason = _contract.readiness_reason("m3") if _m3_blocked else None
+        except Exception:  # pragma: no cover - contract is unobtainable
+            _m3_blocked = True
+            _m3_reason = "M3 validation gate is currently blocked."
+
         models: dict[str, Any] = {}
         for prediction_type in PREDICTION_TYPES:
+            if prediction_type == "m3" and _m3_blocked:
+                models["m3"] = {
+                    "available": False,
+                    "reason": "blocked",
+                    "message": _m3_reason or "M3 validation gate is currently blocked.",
+                }
+                continue
             try:
                 raw = raw_inputs[prediction_type]
                 method = getattr(prediction_service, _GENERATION_METHODS[prediction_type])

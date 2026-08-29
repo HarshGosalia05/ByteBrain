@@ -51,6 +51,19 @@ from etl.validation import (
     validate_attendance,
     validate_timetable,
 )
+from etl.second_cohort import (
+    SecondCohortPayload,
+    SecondCohortValidation,
+    SecondCohortValidationError,
+    SecondCohortWritePlan,
+    WritePlan,
+    guard_apply,
+    plan_enrollment_upsert,
+    plan_second_cohort_write,
+    plan_student_upsert,
+    plan_semester_summary_upsert,
+    validate_second_cohort_payload,
+)
 
 __all__ = [
     "__version__",
@@ -93,4 +106,15 @@ __all__ = [
     "assert_within_quarantine_ratio",
     "validate_attendance",
     "validate_timetable",
+    "SecondCohortPayload",
+    "SecondCohortValidation",
+    "SecondCohortValidationError",
+    "SecondCohortWritePlan",
+    "WritePlan",
+    "guard_apply",
+    "plan_enrollment_upsert",
+    "plan_second_cohort_write",
+    "plan_student_upsert",
+    "plan_semester_summary_upsert",
+    "validate_second_cohort_payload",
 ]

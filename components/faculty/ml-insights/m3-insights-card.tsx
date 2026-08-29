@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, ShieldCheck } from "lucide-react"
+import { AlertTriangle, ArrowRight, History, ShieldCheck } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { FactorList } from "@/components/student/ml-insights/factor-list"
@@ -120,15 +120,29 @@ export function M3InsightsCard({
       badge={<Badge variant="warning">M3 · Future risk</Badge>}
     >
       {!model.available ? (
-        <InsightUnavailable model={model} />
-      ) : (
         <div className="flex flex-col gap-4">
-          <M3Body
-            prediction={model.prediction as M3Prediction}
-            explanation={model.explanation}
-          />
-          <M3FacultyReview studentId={studentId} />
+          <InsightUnavailable model={model} />
+          <div className="rounded-lg border border-dashed border-foreground/20 bg-muted/20 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="muted">
+                <History aria-hidden="true" />
+                Historical / legacy
+              </Badge>
+              <p className="text-xs text-muted-foreground">
+                Any earlier recorded future-risk predictions below are historical/legacy and are
+                NOT current validated ML output. The current M3 model is blocked.
+              </p>
+            </div>
+            <div className="mt-3">
+              <M3FacultyReview studentId={studentId} />
+            </div>
+          </div>
         </div>
+      ) : (
+        <M3Body
+          prediction={model.prediction as M3Prediction}
+          explanation={model.explanation}
+        />
       )}
     </ModelCard>
   )

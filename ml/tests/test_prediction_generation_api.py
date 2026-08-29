@@ -31,6 +31,7 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import get_db_pool
 from app.api.v1 import predict
 from app.api.v1.predict import (
+    get_contract_prediction_service,
     get_current_user,
     get_faculty_service,
     get_generation_service,
@@ -49,6 +50,26 @@ class FakeGeneration:
     async def predict_m1_for_student(self, student_id):
         self.calls.append(student_id)
         return self.result
+
+
+class FakeContractService:
+    """Stand-in for PredictionContractService (unified inference contract)."""
+
+    def __init__(self, response=None):
+        self.response = response
+        self.calls = []
+
+    async def predict_m1(self, student_id):
+        self.calls.append(("m1", student_id))
+        return self.response
+
+    async def predict_m2(self, student_id):
+        self.calls.append(("m2", student_id))
+        return self.response
+
+    async def predict_m3(self, student_id):
+        self.calls.append(("m3", student_id))
+        return self.response
 
 
 class FakeGenPersist:
@@ -117,6 +138,32 @@ class APITestCase(unittest.TestCase):
     def setUp(self):
         self.user = {"role": "Admin", "student_id": "STU000001"}
         self.generation = FakeGeneration(m1_result())
+        self.contract_service = FakeContractService(
+            response={
+                "model_id": "m1",
+                "readiness_status": "READY",
+                "student_id": "STU000001",
+                "predictions": [
+                    {
+                        "model_id": "m1",
+                        "readiness_status": "READY",
+                        "prediction_available": True,
+                        "prediction": 58.5,
+                        "target": "end_sem_marks",
+                        "student_id": "STU000001",
+                        "subject_id": "SUB0050",
+                        "semester_no": 7,
+                        "feature_count": 12,
+                        "feature_contract": "12-feature-hist_gbm-m1",
+                        "model_algorithm": "hist_gbm",
+                        "artifact_hash": "ABC",
+                        "reason": "READY",
+                        "validation_ok": True,
+                    }
+                ],
+                "prediction_count": 1,
+            }
+        )
         self.gen_persist = FakeGenPersist(
             response={
                 "model_id": "m1", "student_id": "STU000001", "model_version": "1",
@@ -129,6 +176,7 @@ class APITestCase(unittest.TestCase):
         app.dependency_overrides[get_db_pool] = lambda: FakePool()
         app.dependency_overrides[get_current_user] = lambda: self.user
         app.dependency_overrides[get_prediction_service] = lambda: self.generation
+        app.dependency_overrides[get_contract_prediction_service] = lambda: self.contract_service
         app.dependency_overrides[get_generation_service] = lambda: self.gen_persist
         app.dependency_overrides[get_faculty_service] = lambda: FakeFacultyService()
         self.app = app
@@ -246,9 +294,11 @@ class TestExistingGETReadOnly(APITestCase):
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertEqual(body["model_id"], "m1")
+        self.assertEqual(body["readiness_status"], "READY")
         self.assertEqual(body["predictions"][0]["student_id"], "STU000001")
-        # Read-only contract: the generation service was used, persistence never
-        self.assertEqual(self.generation.calls, ["STU000001"])
+        self.assertTrue(body["predictions"][0]["prediction_available"])
+        # Read-only contract: the contract service was used, persistence never
+        self.assertEqual(self.contract_service.calls, [("m1", "STU000001")])
         self.assertEqual(self.gen_persist.persist_calls, [])
 
 

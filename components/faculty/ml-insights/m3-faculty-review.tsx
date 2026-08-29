@@ -122,7 +122,8 @@ export function M3FacultyReview({ studentId }: { studentId: string }) {
   if (!context?.latest_m3_prediction) {
     return (
       <p className="text-sm text-muted-foreground">
-        No future-risk prediction has been recorded yet, so there is nothing to review.
+        No historical future-risk prediction has been recorded yet, so there is nothing to
+        review.
       </p>
     )
   }
