@@ -130,6 +130,7 @@ export function ChartsView({
   const subjectAvg = subjectRows.map((s) => ({
     label: s.subject_code,
     subject_id: s.subject_id,
+    subject_name: s.subject_name,
     value: s.average_attendance ?? 0,
   }))
   const topSubjects = [...subjectAvg].sort((a, b) => b.value - a.value)

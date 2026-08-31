@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { CURRENT_ACADEMIC_YEAR } from "@/lib/config"
 import { ClassesTab } from "./classes-tab"
 import { MenteesTab } from "./mentees-tab"
 import type { FacultyClassesResponse, FacultyMenteesResponse } from "@/lib/faculty-api"
@@ -26,7 +27,7 @@ export function StudentsView({
     params.delete("page")
     params.delete("search")
     params.delete("semester")
-    params.delete("academic_year")
+    params.set("academic_year", CURRENT_ACADEMIC_YEAR)
     params.delete("subject_id")
     params.delete("standing")
     params.delete("flagged_only")

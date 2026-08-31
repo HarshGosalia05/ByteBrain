@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Filter, FilterX } from "lucide-react"
 
+import { CURRENT_ACADEMIC_YEAR } from "@/lib/config"
 import type { AttendanceFilters } from "@/lib/faculty-api"
 import { cn } from "@/lib/utils"
 
@@ -32,7 +33,7 @@ export function AttendanceFilterBar({ filters, hasPreviousTerm }: AttendanceFilt
   const handleResetFilters = () => {
     const params = new URLSearchParams(searchParams.toString())
     params.delete("semester")
-    params.delete("academic_year")
+    params.set("academic_year", CURRENT_ACADEMIC_YEAR)
     params.delete("subject_id")
     params.delete("compare")
     router.push(`${pathname}?${params.toString()}`)
@@ -59,7 +60,7 @@ export function AttendanceFilterBar({ filters, hasPreviousTerm }: AttendanceFilt
       <div className="flex flex-wrap items-center gap-3">
         <select
           className={selectClassName}
-          value={academicYear}
+          value={academicYear || CURRENT_ACADEMIC_YEAR}
           onChange={(e) => handleFilterChange("academic_year", e.target.value)}
           aria-label="Academic year"
         >

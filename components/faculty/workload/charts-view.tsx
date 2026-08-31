@@ -105,6 +105,7 @@ export function ChartsView({
   const creditsData = subjectItems.map((s) => ({
     label: s.subject_code,
     subject_id: s.subject_id,
+    subject_name: s.subject_name,
     value: s.credits ?? 0,
   }))
   const hoursData = subjectItems
@@ -112,11 +113,13 @@ export function ChartsView({
     .map((s) => ({
       label: s.subject_code,
       subject_id: s.subject_id,
+      subject_name: s.subject_name,
       value: s.weekly_hours ?? 0,
     }))
   const studentsData = subjectItems.map((s) => ({
     label: s.subject_code,
     subject_id: s.subject_id,
+    subject_name: s.subject_name,
     value: s.students,
   }))
   const subjectMixData = (subjectBreakdown.data?.type_distribution ?? []).map((t) => ({

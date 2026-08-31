@@ -17,18 +17,22 @@ import { ChartContainer } from "@/components/shared/charts/chart-container"
 type ChartTooltipProps = {
   active?: boolean
   label?: string | number
-  payload?: Array<{ name?: string; value?: number | string; color?: string }>
+  payload?: ReadonlyArray<{ name?: string | number; value?: number | string | number; color?: string }>
+  subject_name?: string
 }
 
-function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
+function ChartTooltip({ active, payload, label, subject_name }: ChartTooltipProps) {
   if (!active || !payload?.length) return null
   return (
     <div className="max-w-56 rounded-lg border border-border bg-popover/95 px-3 py-2 text-xs shadow-lg backdrop-blur-sm">
       <p className="font-medium text-foreground">{label}</p>
+      {subject_name && (
+        <p className="mt-0.5 text-muted-foreground">{subject_name}</p>
+      )}
       <div className="mt-1.5 flex flex-col gap-1">
-        {payload.map((item) => (
+        {payload.map((item, i) => (
           <p
-            key={item.name}
+            key={`${item.name}-${i}`}
             className="flex items-center justify-between gap-4 text-muted-foreground"
           >
             <span className="flex items-center gap-1.5">
@@ -166,7 +170,17 @@ export function SubjectBarChart({
             tickMargin={6}
           />
           <Tooltip
-            content={<ChartTooltip />}
+            content={({ active, payload, label }) => {
+              const subjectName = payload?.[0]?.payload?.subject_name as string | undefined
+              return (
+                <ChartTooltip
+                  active={active}
+                  payload={payload as ChartTooltipProps["payload"]}
+                  label={label}
+                  subject_name={subjectName}
+                />
+              )
+            }}
             cursor={{ fill: "var(--muted)", opacity: 0.5 }}
             wrapperStyle={{ outline: "none" }}
           />

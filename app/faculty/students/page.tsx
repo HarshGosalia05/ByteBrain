@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/session"
+import { CURRENT_ACADEMIC_YEAR } from "@/lib/config"
 import { getFacultyClasses, getFacultyMentees } from "@/lib/faculty-api"
 import { ErrorState } from "@/components/shared/state/error-state"
 import { StudentsView } from "@/components/faculty/students/students-view"
@@ -21,7 +22,7 @@ export default async function StudentsPage(props: {
   let menteesData = null
 
   if (tab === "classes") {
-    const academic_year = typeof searchParams.academic_year === "string" ? searchParams.academic_year : undefined
+    const academic_year = typeof searchParams.academic_year === "string" ? searchParams.academic_year : CURRENT_ACADEMIC_YEAR
     const subject_id = typeof searchParams.subject_id === "string" ? searchParams.subject_id : undefined
     const attendance_range = typeof searchParams.attendance_range === "string" ? searchParams.attendance_range : undefined
     const sgpa_range = typeof searchParams.sgpa_range === "string" ? searchParams.sgpa_range : undefined

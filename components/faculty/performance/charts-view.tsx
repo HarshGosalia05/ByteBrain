@@ -170,6 +170,7 @@ export function ChartsView({
     filteredSubjectRows.map((s) => ({
       label: s.subject_code,
       subject_id: s.subject_id,
+      subject_name: s.subject_name,
       value: (s[valueKey] as number | null) ?? 0,
     }))
 
