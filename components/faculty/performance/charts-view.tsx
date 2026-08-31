@@ -264,102 +264,110 @@ export function ChartsView({
           <h3 className="mb-3 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
             Subject comparison
           </h3>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <ChartCard
-              title="Average performance by subject"
-              subtitle="Subject average percentage"
-              status={subjError ? "error" : subjectRows.length ? "ready" : "empty"}
-              errorDescription={subjError ?? undefined}
-              emptyIcon={Gauge}
-              emptyTitle="No subjects in this scope"
-              emptyDescription="Subjects you teach will appear here once enrollments are recorded."
-              exportFileName={`faculty_performance_${scope}_subject_performance.csv`}
-              exportColumns={[
-                { key: "label", label: "Subject" },
-                { key: "value", label: "Avg %" },
-              ]}
-              exportRows={subjectChart("average_performance")}
-            >
-              <SubjectBarChart
-                data={subjectChart("average_performance")}
-                xKey="label"
-                dataKey="value"
-                color="var(--chart-1)"
-                onBarClick={handleSubjectClick}
-              />
-            </ChartCard>
+          <div className="flex flex-col gap-4">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ChartCard
+                title="Average performance by subject"
+                subtitle="Subject average percentage"
+                status={subjError ? "error" : subjectRows.length ? "ready" : "empty"}
+                errorDescription={subjError ?? undefined}
+                emptyIcon={Gauge}
+                emptyTitle="No subjects in this scope"
+                emptyDescription="Subjects you teach will appear here once enrollments are recorded."
+                exportFileName={`faculty_performance_${scope}_subject_performance.csv`}
+                exportColumns={[
+                  { key: "label", label: "Subject" },
+                  { key: "value", label: "Avg %" },
+                ]}
+                exportRows={subjectChart("average_performance")}
+              >
+                <SubjectBarChart
+                  data={subjectChart("average_performance")}
+                  xKey="label"
+                  dataKey="value"
+                  color="var(--chart-1)"
+                  onBarClick={handleSubjectClick}
+                  height={320}
+                />
+              </ChartCard>
 
-            <ChartCard
-              title="Average attendance by subject"
-              subtitle="Subject average attendance %"
-              status={subjError ? "error" : subjectRows.length ? "ready" : "empty"}
-              errorDescription={subjError ?? undefined}
-              emptyIcon={CalendarCheck}
-              emptyTitle="No subjects in this scope"
-              emptyDescription="Subjects you teach will appear here once enrollments are recorded."
-              exportFileName={`faculty_performance_${scope}_subject_attendance.csv`}
-              exportColumns={[
-                { key: "label", label: "Subject" },
-                { key: "value", label: "Avg %" },
-              ]}
-              exportRows={subjectChart("average_attendance")}
-            >
-              <SubjectBarChart
-                data={subjectChart("average_attendance")}
-                xKey="label"
-                dataKey="value"
-                color="var(--chart-2)"
-                onBarClick={handleSubjectClick}
-              />
-            </ChartCard>
+              <ChartCard
+                title="Average attendance by subject"
+                subtitle="Subject average attendance %"
+                status={subjError ? "error" : subjectRows.length ? "ready" : "empty"}
+                errorDescription={subjError ?? undefined}
+                emptyIcon={CalendarCheck}
+                emptyTitle="No subjects in this scope"
+                emptyDescription="Subjects you teach will appear here once enrollments are recorded."
+                exportFileName={`faculty_performance_${scope}_subject_attendance.csv`}
+                exportColumns={[
+                  { key: "label", label: "Subject" },
+                  { key: "value", label: "Avg %" },
+                ]}
+                exportRows={subjectChart("average_attendance")}
+              >
+                <SubjectBarChart
+                  data={subjectChart("average_attendance")}
+                  xKey="label"
+                  dataKey="value"
+                  color="var(--chart-2)"
+                  onBarClick={handleSubjectClick}
+                  height={320}
+                />
+              </ChartCard>
+            </div>
 
-            <ChartCard
-              title="Pass rate by subject"
-              subtitle="Subject pass percentage"
-              status={subjError ? "error" : subjectRows.length ? "ready" : "empty"}
-              errorDescription={subjError ?? undefined}
-              emptyIcon={BookOpen}
-              emptyTitle="No subjects in this scope"
-              emptyDescription="Subjects you teach will appear here once enrollments are recorded."
-              exportFileName={`faculty_performance_${scope}_subject_pass_rate.csv`}
-              exportColumns={[
-                { key: "label", label: "Subject" },
-                { key: "value", label: "Pass %" },
-              ]}
-              exportRows={subjectChart("pass_percentage")}
-            >
-              <SubjectBarChart
-                data={subjectChart("pass_percentage")}
-                xKey="label"
-                dataKey="value"
-                color="var(--chart-3)"
-                onBarClick={handleSubjectClick}
-              />
-            </ChartCard>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ChartCard
+                title="Pass rate by subject"
+                subtitle="Subject pass percentage"
+                status={subjError ? "error" : subjectRows.length ? "ready" : "empty"}
+                errorDescription={subjError ?? undefined}
+                emptyIcon={BookOpen}
+                emptyTitle="No subjects in this scope"
+                emptyDescription="Subjects you teach will appear here once enrollments are recorded."
+                exportFileName={`faculty_performance_${scope}_subject_pass_rate.csv`}
+                exportColumns={[
+                  { key: "label", label: "Subject" },
+                  { key: "value", label: "Pass %" },
+                ]}
+                exportRows={subjectChart("pass_percentage")}
+              >
+                <SubjectBarChart
+                  data={subjectChart("pass_percentage")}
+                  xKey="label"
+                  dataKey="value"
+                  color="var(--chart-3)"
+                  onBarClick={handleSubjectClick}
+                  height={320}
+                />
+              </ChartCard>
 
-            <ChartCard
-              title="Enrollment by subject"
-              subtitle="Students per subject"
-              status={subjError ? "error" : subjectRows.length ? "ready" : "empty"}
-              errorDescription={subjError ?? undefined}
-              emptyIcon={Users}
-              emptyTitle="No subjects in this scope"
-              emptyDescription="Subjects you teach will appear here once enrollments are recorded."
-              exportFileName={`faculty_performance_${scope}_subject_enrollments.csv`}
-              exportColumns={[
-                { key: "label", label: "Subject" },
-                { key: "value", label: "Students" },
-              ]}
-              exportRows={subjectChart("enrollments")}
-            >
-              <SubjectBarChart
-                data={subjectChart("enrollments")}
-                xKey="label"
-                dataKey="value"
-                color="var(--chart-4)"
-                onBarClick={handleSubjectClick}
-              />
-            </ChartCard>
+              <ChartCard
+                title="Enrollment by subject"
+                subtitle="Students per subject"
+                status={subjError ? "error" : subjectRows.length ? "ready" : "empty"}
+                errorDescription={subjError ?? undefined}
+                emptyIcon={Users}
+                emptyTitle="No subjects in this scope"
+                emptyDescription="Subjects you teach will appear here once enrollments are recorded."
+                exportFileName={`faculty_performance_${scope}_subject_enrollments.csv`}
+                exportColumns={[
+                  { key: "label", label: "Subject" },
+                  { key: "value", label: "Students" },
+                ]}
+                exportRows={subjectChart("enrollments")}
+              >
+                <SubjectBarChart
+                  data={subjectChart("enrollments")}
+                  xKey="label"
+                  dataKey="value"
+                  color="var(--chart-4)"
+                  onBarClick={handleSubjectClick}
+                  height={320}
+                />
+              </ChartCard>
+            </div>
           </div>
         </div>
 

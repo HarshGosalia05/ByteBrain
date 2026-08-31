@@ -66,6 +66,7 @@ export function SubjectBarChart({
   onBarClick,
   bars,
   referenceLines,
+  compact = false,
 }: {
   data: Array<Record<string, string | number | null>>
   xKey: string
@@ -75,6 +76,7 @@ export function SubjectBarChart({
   onBarClick?: (entry: Record<string, string | number>) => void
   bars?: ChartBar[]
   referenceLines?: ChartReferenceLine[]
+  compact?: boolean
 }) {
   const uid = React.useId()
   const frameRef = React.useRef<HTMLDivElement>(null)
@@ -90,11 +92,22 @@ export function SubjectBarChart({
     return () => observer.disconnect()
   }, [])
 
-  const maxChars = width >= 900 ? 20 : width >= 560 ? 14 : 10
+  const dataCount = data.length
   const series: ChartBar[] =
     bars ?? (dataKey && color ? [{ dataKey, name: "Count", color }] : [])
   const perCategoryColors =
     !!bars && bars.length > 1 && bars.every((b) => b.dataKey === bars[0].dataKey)
+
+  // Adaptive label settings based on data count and container width
+  const isDense = dataCount > 20
+  const isVeryDense = dataCount > 35
+
+  const maxChars = isVeryDense ? 8 : isDense ? 10 : width >= 900 ? 20 : width >= 560 ? 14 : 10
+  const angle = isVeryDense ? -65 : isDense ? -50 : -35
+  const labelHeight = isVeryDense ? 110 : isDense ? 96 : 88
+  const bottomMargin = isVeryDense ? 20 : isDense ? 12 : 4
+  const tickFontSize = isVeryDense ? 9 : isDense ? 10 : 11
+  const barGap = isVeryDense ? "12%" : isDense ? "18%" : "28%"
 
   function formatTick(value: string | number): string {
     const text = String(value)
@@ -121,7 +134,7 @@ export function SubjectBarChart({
         </div>
       )}
       <ChartContainer height={height}>
-        <BarChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 0 }} barCategoryGap="28%">
+        <BarChart data={data} margin={{ top: 8, right: 16, bottom: bottomMargin, left: 0 }} barCategoryGap={barGap}>
           <defs>
             <linearGradient id={`${uid}-bar`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={series[0].color} stopOpacity={0.9} />
@@ -131,14 +144,14 @@ export function SubjectBarChart({
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
           <XAxis
             dataKey={xKey}
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: tickFontSize }}
             tickLine={false}
             axisLine={false}
             stroke="var(--muted-foreground)"
             interval={0}
-            angle={-35}
+            angle={angle}
             textAnchor="end"
-            height={88}
+            height={labelHeight}
             tickMargin={10}
             tickFormatter={formatTick}
           />
@@ -183,7 +196,7 @@ export function SubjectBarChart({
               name={s.name}
               fill={bars ? s.color : `url(#${uid}-bar)`}
               radius={[6, 6, 2, 2]}
-              maxBarSize={48}
+              maxBarSize={compact ? 32 : 48}
               isAnimationActive
               animationDuration={600}
               animationEasing="ease-out"

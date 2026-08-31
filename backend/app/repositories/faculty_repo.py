@@ -232,7 +232,7 @@ class FacultyRepository:
                 sse.subject_id, sse.subject_code, sse.subject_name, sse.credits,
                 sse.semester_no, sse.academic_year,
                 count(DISTINCT sse.student_id) AS class_strength,
-                AVG(a.attendance_percentage) AS average_attendance,
+                AVG(COALESCE(a.attendance_percentage, sss.semester_attendance_percentage)) AS average_attendance,
                 AVG(sp.percentage) AS average_percentage,
                 MAX(sp.total_marks) AS highest_marks,
                 MIN(sp.total_marks) AS lowest_marks,
@@ -242,6 +242,8 @@ class FacultyRepository:
             FROM student_subject_enrollment sse
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             LEFT JOIN student_subject_performance sp 
                 ON sp.enrollment_record_id = sse.enrollment_record_id
             WHERE sse.faculty_id = $1 AND sse.semester_no = $2 AND sse.academic_year = $3
@@ -276,6 +278,8 @@ class FacultyRepository:
             FROM student_subject_enrollment sse
             JOIN students st ON st.student_id = sse.student_id
             LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             LEFT JOIN student_subject_performance sp ON sp.enrollment_record_id = sse.enrollment_record_id
             {where}
         """
@@ -309,11 +313,13 @@ class FacultyRepository:
                 sse.subject_id, sse.subject_code, sse.subject_name, sse.enrollment_status,
                 st.first_name, st.last_name, st.email,
                 sp.internal_marks, sp.end_sem_marks AS external_marks, sp.total_marks, sp.grade,
-                a.attendance_percentage,
+                COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) AS attendance_percentage,
                 st.latest_sgpa, st.academic_standing
             FROM student_subject_enrollment sse
             JOIN students st ON st.student_id = sse.student_id
             LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             LEFT JOIN student_subject_performance sp ON sp.enrollment_record_id = sse.enrollment_record_id
             {where}
             ORDER BY {order_by}
@@ -366,12 +372,13 @@ class FacultyRepository:
             clauses.append(f"sse.enrollment_status = ${len(params)}")
             
         if attendance_range is not None:
+            att_expr = "COALESCE(a.attendance_percentage, sss.semester_attendance_percentage)"
             if attendance_range == "< 75%":
-                clauses.append("a.attendance_percentage < 75")
+                clauses.append(f"{att_expr} < 75")
             elif attendance_range == "75% - 85%":
-                clauses.append("a.attendance_percentage >= 75 AND a.attendance_percentage <= 85")
+                clauses.append(f"{att_expr} >= 75 AND {att_expr} <= 85")
             elif attendance_range == "> 85%":
-                clauses.append("a.attendance_percentage > 85")
+                clauses.append(f"{att_expr} > 85")
                 
         if sgpa_range is not None:
             if sgpa_range == "< 5.0":
@@ -1127,7 +1134,7 @@ class FacultyRepository:
                 count(DISTINCT (sse.subject_id, sse.semester_no, sse.academic_year)) AS subjects,
                 count(*) AS enrollments,
                 AVG(sp.percentage) AS avg_performance,
-                AVG(a.attendance_percentage) AS avg_attendance,
+                AVG(COALESCE(a.attendance_percentage, sss.semester_attendance_percentage)) AS avg_attendance,
                 count(*) FILTER (WHERE sp.result_status = 'Pass') AS pass_count,
                 count(sp.result_status) AS performed_count,
                 count(*) FILTER (WHERE sp.grade_point >= ${len(params)}) AS distinction_count,
@@ -1136,6 +1143,8 @@ class FacultyRepository:
             FROM student_subject_enrollment sse
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             LEFT JOIN student_subject_performance sp 
                 ON sp.enrollment_record_id = sse.enrollment_record_id
             {where}
@@ -1291,12 +1300,14 @@ class FacultyRepository:
                 sse.semester_no, sse.academic_year,
                 count(DISTINCT sse.student_id) AS enrollments,
                 AVG(sp.percentage) AS average_performance,
-                AVG(a.attendance_percentage) AS average_attendance,
+                AVG(COALESCE(a.attendance_percentage, sss.semester_attendance_percentage)) AS average_attendance,
                 count(*) FILTER (WHERE sp.result_status = 'Pass') AS pass_count,
                 count(sp.result_status) AS performed_count
             FROM student_subject_enrollment sse
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             LEFT JOIN student_subject_performance sp 
                 ON sp.enrollment_record_id = sse.enrollment_record_id
             {where}
@@ -1322,12 +1333,14 @@ class FacultyRepository:
             SELECT 
                 sse.semester_no, sse.academic_year,
                 AVG(sp.percentage) AS average_performance,
-                AVG(a.attendance_percentage) AS average_attendance,
+                AVG(COALESCE(a.attendance_percentage, sss.semester_attendance_percentage)) AS average_attendance,
                 count(*) FILTER (WHERE sp.result_status = 'Pass') AS pass_count,
                 count(sp.result_status) AS performed_count
             FROM student_subject_enrollment sse
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             LEFT JOIN student_subject_performance sp 
                 ON sp.enrollment_record_id = sse.enrollment_record_id
             WHERE {' AND '.join(clauses)}
@@ -1354,7 +1367,7 @@ class FacultyRepository:
                 sse.semester_no, sse.academic_year,
                 count(DISTINCT sse.student_id) AS enrollments,
                 AVG(sp.percentage) AS average_performance,
-                AVG(a.attendance_percentage) AS average_attendance,
+                AVG(COALESCE(a.attendance_percentage, sss.semester_attendance_percentage)) AS average_attendance,
                 count(*) FILTER (WHERE sp.result_status = 'Pass') AS pass_count,
                 count(sp.result_status) AS performed_count,
                 count(*) FILTER (WHERE sp.percentage < ${len(params)}) AS below_count,
@@ -1362,6 +1375,8 @@ class FacultyRepository:
             FROM student_subject_enrollment sse
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             LEFT JOIN student_subject_performance sp 
                 ON sp.enrollment_record_id = sse.enrollment_record_id
             {where}
@@ -1472,12 +1487,14 @@ class FacultyRepository:
                 sse.enrollment_record_id, sse.student_id, sse.enrollment_no, sse.semester_no,
                 sse.subject_id, sse.subject_code, sse.subject_name,
                 st.first_name, st.last_name,
-                a.attendance_percentage,
+                COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) AS attendance_percentage,
                 sp.total_marks, sp.grade, sp.result_status, sp.percentage
             FROM student_subject_enrollment sse
             JOIN students st ON st.student_id = sse.student_id
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             LEFT JOIN student_subject_performance sp 
                 ON sp.enrollment_record_id = sse.enrollment_record_id
             {where}
@@ -1539,17 +1556,19 @@ class FacultyRepository:
                 count(DISTINCT (sse.subject_id, sse.semester_no, sse.academic_year)) AS subjects,
                 count(*) AS enrollments,
                 count(a.attendance_id) AS attendance_records,
-                AVG(a.attendance_percentage) AS avg_attendance,
+                AVG(COALESCE(a.attendance_percentage, sss.semester_attendance_percentage)) AS avg_attendance,
                 CASE WHEN SUM(a.total_classes) > 0
                     THEN ROUND(SUM(a.attended_classes) * 100.0 / SUM(a.total_classes), 2)
                 END AS overall_attendance,
                 AVG(a.total_classes) AS avg_total_classes,
-                count(*) FILTER (WHERE a.attendance_percentage >= ${len(params)}) AS above_count,
-                count(*) FILTER (WHERE a.attendance_percentage < ${len(params)}) AS below_count,
+                count(*) FILTER (WHERE COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) >= ${len(params)}) AS above_count,
+                count(*) FILTER (WHERE COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) < ${len(params)}) AS below_count,
                 count(*) FILTER (WHERE a.eligibility_status = 'Not Eligible') AS ineligible_count
             FROM student_subject_enrollment sse
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             {where}
         """
         async with self.pool.acquire() as conn:
@@ -1576,12 +1595,14 @@ class FacultyRepository:
                 sse.subject_id, sse.subject_code, sse.subject_name,
                 sse.semester_no, sse.academic_year,
                 count(DISTINCT sse.student_id) AS enrollments,
-                AVG(a.attendance_percentage) AS average_attendance,
-                count(*) FILTER (WHERE a.attendance_percentage >= ${len(params)}) AS above_count,
-                count(*) FILTER (WHERE a.attendance_percentage < ${len(params)}) AS below_count
+                AVG(COALESCE(a.attendance_percentage, sss.semester_attendance_percentage)) AS average_attendance,
+                count(*) FILTER (WHERE COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) >= ${len(params)}) AS above_count,
+                count(*) FILTER (WHERE COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) < ${len(params)}) AS below_count
             FROM student_subject_enrollment sse
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             {where}
             GROUP BY sse.subject_id, sse.subject_code, sse.subject_name,
                 sse.semester_no, sse.academic_year
@@ -1679,10 +1700,12 @@ class FacultyRepository:
         term_query = f"""
             SELECT 
                 sse.semester_no, sse.academic_year,
-                AVG(a.attendance_percentage) AS average_attendance
+                AVG(COALESCE(a.attendance_percentage, sss.semester_attendance_percentage)) AS average_attendance
             FROM student_subject_enrollment sse
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             {where}
             GROUP BY sse.semester_no, sse.academic_year
             ORDER BY sse.academic_year ASC, sse.semester_no ASC
@@ -1691,10 +1714,12 @@ class FacultyRepository:
             SELECT 
                 sse.subject_id, sse.subject_code, sse.subject_name,
                 sse.semester_no, sse.academic_year,
-                AVG(a.attendance_percentage) AS average_attendance
+                AVG(COALESCE(a.attendance_percentage, sss.semester_attendance_percentage)) AS average_attendance
             FROM student_subject_enrollment sse
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             {where}
             GROUP BY sse.subject_id, sse.subject_code, sse.subject_name,
                 sse.semester_no, sse.academic_year
@@ -1761,11 +1786,13 @@ class FacultyRepository:
         subject_query = f"""
             SELECT 
                 sse.subject_id, sse.subject_code, sse.subject_name,
-                AVG(a.attendance_percentage) AS average_attendance,
+                AVG(COALESCE(a.attendance_percentage, sss.semester_attendance_percentage)) AS average_attendance,
                 count(DISTINCT sse.student_id) AS enrollments
             FROM student_subject_enrollment sse
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             {where}
             GROUP BY sse.subject_id, sse.subject_code, sse.subject_name
             ORDER BY sse.subject_name ASC
