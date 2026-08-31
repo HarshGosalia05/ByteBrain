@@ -2857,8 +2857,11 @@ class FacultyService:
         mean_credits: float,
         mean_students: float,
     ) -> tuple:
+        raw_hours = item.get("weekly_hours")
+        if raw_hours is None:
+            return "No Data", 0.0
         capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
-        hours = float(item.get("weekly_hours") or 0)
+        hours = float(raw_hours)
         utilization = hours / capacity * 100 if capacity else 0.0
         if utilization >= settings.FACULTY_WORKLOAD_OVERLOAD_THRESHOLD * 100:
             return "Overloaded", utilization
@@ -2882,6 +2885,8 @@ class FacultyService:
     ) -> str:
         capacity = settings.FACULTY_WORKLOAD_CAPACITY_WEEKLY_HOURS
         code = item["subject_code"]
+        if status == "No Data":
+            return f"{code} has no attendance records for this term; workload metrics are unavailable."
         if status == "Overloaded":
             return f"{code} is at {utilization:.0f}% of the {capacity:.0f}-hour weekly capacity baseline."
         if status == "Underutilized":
@@ -3061,7 +3066,7 @@ class FacultyService:
                 term_options=[FacultyTermOption(**t) for t in filter_data["term_options"]],
                 subject_types=option_data["subject_types"],
                 workload_statuses=[
-                    "Overloaded", "Balanced", "Underutilized",
+                    "Overloaded", "Balanced", "Underutilized", "No Data",
                     "Credit Imbalance", "Student Imbalance",
                 ],
             ),
@@ -3576,6 +3581,7 @@ class FacultyService:
         overloaded_count = sum(1 for g in governance_items if g.status == "Overloaded")
         balanced_count = sum(1 for g in governance_items if g.status == "Balanced")
         underutilized_count = sum(1 for g in governance_items if g.status == "Underutilized")
+        no_data_count = sum(1 for g in governance_items if g.status == "No Data")
         credit_imbalance_count = sum(1 for g in governance_items if g.status == "Credit Imbalance")
         student_imbalance_count = sum(1 for g in governance_items if g.status == "Student Imbalance")
         capacity_warning_count = sum(1 for g in governance_items if _warning(g))
@@ -3592,6 +3598,7 @@ class FacultyService:
             overloaded_count=overloaded_count,
             balanced_count=balanced_count,
             underutilized_count=underutilized_count,
+            no_data_count=no_data_count,
             credit_imbalance_count=credit_imbalance_count,
             student_imbalance_count=student_imbalance_count,
             capacity_warning_count=capacity_warning_count,

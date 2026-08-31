@@ -2007,6 +2007,7 @@ export type WorkloadGovernance = {
   overloaded_count: number
   balanced_count: number
   underutilized_count: number
+  no_data_count: number
   credit_imbalance_count: number
   student_imbalance_count: number
   capacity_warning_count: number

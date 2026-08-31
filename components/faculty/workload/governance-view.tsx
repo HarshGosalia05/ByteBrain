@@ -24,6 +24,7 @@ const STATUSES = [
   "Overloaded",
   "Underutilized",
   "Balanced",
+  "No Data",
   "Credit Imbalance",
   "Student Imbalance",
   "Capacity Warning",
@@ -32,12 +33,14 @@ const STATUSES = [
 
 type Status = (typeof STATUSES)[number]
 
-function statusVariant(status: string): "destructive" | "warning" | "success" {
+function statusVariant(status: string): "destructive" | "warning" | "success" | "secondary" {
   switch (status) {
     case "Overloaded":
       return "destructive"
     case "Balanced":
       return "success"
+    case "No Data":
+      return "secondary"
     default:
       return "warning"
   }
@@ -159,6 +162,9 @@ export function GovernanceView({
               Watch
             </Badge>
             <Badge variant="success">{gov.balanced_count} Balanced</Badge>
+            {gov.no_data_count > 0 && (
+              <Badge variant="secondary">{gov.no_data_count} No Data</Badge>
+            )}
           </div>
         )}
       </div>

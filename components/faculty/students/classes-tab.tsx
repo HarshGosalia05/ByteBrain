@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { StatCard } from "@/components/shared/data/stat-card"
 import { BookOpen, Users, Calendar, Hash, FilterX, Filter, Search } from "lucide-react"
-import { CURRENT_ACADEMIC_YEAR } from "@/lib/config"
+import { CURRENT_ACADEMIC_YEAR, ACADEMIC_YEAR_ALL } from "@/lib/config"
 import type { FacultyClassesResponse } from "@/lib/faculty-api"
 import { StudentProfileModal } from "./student-profile-modal"
 import {
@@ -67,7 +67,7 @@ export function ClassesTab({ data }: { data: FacultyClassesResponse }) {
   const activeFiltersCount = 
     (searchParams.get("search") ? 1 : 0) +
     (searchParams.get("semester") ? 1 : 0) +
-    (searchParams.get("academic_year") ? 1 : 0) +
+    (searchParams.get("academic_year") && searchParams.get("academic_year") !== CURRENT_ACADEMIC_YEAR ? 1 : 0) +
     (searchParams.get("subject_id") ? 1 : 0) +
     (searchParams.get("attendance_range") ? 1 : 0) +
     (searchParams.get("sgpa_range") ? 1 : 0) +
@@ -124,10 +124,10 @@ export function ClassesTab({ data }: { data: FacultyClassesResponse }) {
           <div className="flex flex-wrap flex-1 gap-2">
             <select
               className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-auto"
-              value={searchParams.get("academic_year") || CURRENT_ACADEMIC_YEAR}
+              value={searchParams.get("academic_year") ?? CURRENT_ACADEMIC_YEAR}
               onChange={(e) => handleFilterChange("academic_year", e.target.value)}
             >
-              <option value="">All Years</option>
+              <option value={ACADEMIC_YEAR_ALL}>All Years</option>
               {(data.filters.academic_years || []).map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}

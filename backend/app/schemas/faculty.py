@@ -917,6 +917,7 @@ class WorkloadGovernance(BaseModel):
     overloaded_count: int
     balanced_count: int
     underutilized_count: int
+    no_data_count: int
     credit_imbalance_count: int
     student_imbalance_count: int
     capacity_warning_count: int

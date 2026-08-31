@@ -59,6 +59,8 @@ function statusVariant(status: string) {
       return "bg-destructive/10 text-destructive"
     case "Balanced":
       return "bg-chart-2/15 text-chart-2"
+    case "No Data":
+      return "bg-muted text-muted-foreground"
     default:
       return "bg-chart-3/20 text-chart-3"
   }

@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Filter, FilterX } from "lucide-react"
 
-import { CURRENT_ACADEMIC_YEAR } from "@/lib/config"
+import { CURRENT_ACADEMIC_YEAR, ACADEMIC_YEAR_ALL } from "@/lib/config"
 import type { PerformanceFilters } from "@/lib/faculty-api"
 import { cn } from "@/lib/utils"
 
@@ -40,14 +40,14 @@ export function PerformanceFilterBar({ filters, hasPreviousTerm }: FilterBarProp
   }
 
   const semester = searchParams.get("semester") || ""
-  const academicYear = searchParams.get("academic_year") || ""
+  const academicYear = searchParams.get("academic_year") ?? CURRENT_ACADEMIC_YEAR
   const subjectId = searchParams.get("subject_id") || ""
   const compareOn = searchParams.get("compare") === "true"
   const semesterSelected = Boolean(semester)
   const compareDisabled = !semesterSelected || !hasPreviousTerm
 
   const activeFiltersCount =
-    (semester ? 1 : 0) + (academicYear ? 1 : 0) + (subjectId ? 1 : 0) + (compareOn ? 1 : 0)
+    (semester ? 1 : 0) + (academicYear !== CURRENT_ACADEMIC_YEAR ? 1 : 0) + (subjectId ? 1 : 0) + (compareOn ? 1 : 0)
 
   const compareHint = !semesterSelected
     ? "Select a semester to compare"
@@ -60,11 +60,11 @@ export function PerformanceFilterBar({ filters, hasPreviousTerm }: FilterBarProp
       <div className="flex flex-wrap items-center gap-3">
         <select
           className={selectClassName}
-          value={academicYear || CURRENT_ACADEMIC_YEAR}
+          value={academicYear}
           onChange={(e) => handleFilterChange("academic_year", e.target.value)}
           aria-label="Academic year"
         >
-          <option value="">All Years</option>
+          <option value={ACADEMIC_YEAR_ALL}>All Years</option>
           {(filters.academic_years || []).map((y) => (
             <option key={y} value={y}>
               {y}

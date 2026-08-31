@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 
 import { requireRole } from "@/lib/session"
-import { CURRENT_ACADEMIC_YEAR } from "@/lib/config"
+import { CURRENT_ACADEMIC_YEAR, ACADEMIC_YEAR_ALL } from "@/lib/config"
 import {
   getFacultyPerformanceSummary,
   type PerformanceAppliedFilters,
@@ -49,8 +49,12 @@ export default async function PerformancePage(props: {
   const searchParams = await props.searchParams
   const rawSemester = typeof searchParams.semester === "string" ? searchParams.semester : undefined
   const semester = rawSemester ? parseInt(rawSemester, 10) || null : null
+  const rawAcademicYear =
+    typeof searchParams.academic_year === "string" ? searchParams.academic_year : undefined
   const academic_year =
-    typeof searchParams.academic_year === "string" ? searchParams.academic_year : CURRENT_ACADEMIC_YEAR
+    rawAcademicYear === ACADEMIC_YEAR_ALL
+      ? undefined
+      : rawAcademicYear ?? CURRENT_ACADEMIC_YEAR
   const subject_id =
     typeof searchParams.subject_id === "string" ? searchParams.subject_id : undefined
   const compare = searchParams.compare === "true"

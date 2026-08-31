@@ -2472,10 +2472,9 @@ class FacultyRepository:
                 SELECT o.subject_id, o.subject_code, o.subject_name, o.semester_no, o.academic_year,
                        o.credits, o.students, o.classes, o.weekly_hours,
                        CASE
-                           WHEN o.weekly_hours IS NOT NULL
-                                AND o.weekly_hours >= ${overload_cap_i} THEN 'Overloaded'
-                           WHEN o.weekly_hours IS NOT NULL
-                                AND o.weekly_hours < ${underutil_cap_i} THEN 'Underutilized'
+                           WHEN o.weekly_hours IS NULL THEN 'No Data'
+                           WHEN o.weekly_hours >= ${overload_cap_i} THEN 'Overloaded'
+                           WHEN o.weekly_hours < ${underutil_cap_i} THEN 'Underutilized'
                            WHEN o.credits > ${credit_ratio_i} * m.mean_credits THEN 'Credit Imbalance'
                            WHEN o.students > ${student_ratio_i} * m.mean_students THEN 'Student Imbalance'
                            ELSE 'Balanced'
