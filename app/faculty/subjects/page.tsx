@@ -15,11 +15,14 @@ export default async function SubjectsPage(props: {
     typeof searchParams.semester === "string" ? searchParams.semester : undefined
   const academic_year =
     typeof searchParams.academic_year === "string" ? searchParams.academic_year : undefined
+  const batch =
+    typeof searchParams.batch === "string" ? searchParams.batch : undefined
   const sort = typeof searchParams.sort === "string" ? searchParams.sort : undefined
   const order =
     typeof searchParams.order === "string" ? (searchParams.order as "asc" | "desc") : undefined
+  const all_terms = searchParams.all_terms === "true"
 
-  const res = await getFacultySubjects({ page, search, semester, academic_year, sort, order })
+  const res = await getFacultySubjects({ page, search, semester, academic_year, batch, sort, order, all_terms })
   if (!res.ok) {
     return <ErrorState title="Failed to load subjects" description={res.error.message} />
   }

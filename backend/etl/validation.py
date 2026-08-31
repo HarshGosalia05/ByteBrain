@@ -41,6 +41,7 @@ REASON_INVALID_STUDENT_ID = "invalid_student_id"
 REASON_INVALID_SUBJECT_ID = "invalid_subject_id"
 REASON_INVALID_FACULTY_ID = "invalid_faculty_id"
 REASON_INVALID_ENROLLMENT_NO = "invalid_enrollment_no"
+REASON_INVALID_ACADEMIC_YEAR = "invalid_academic_year"
 REASON_INVALID_DATE = "invalid_date"
 REASON_INVALID_LECTURE_NUMBER = "invalid_lecture_number"
 REASON_INVALID_STATUS = "invalid_status"
@@ -105,7 +106,16 @@ EXPECTED_TIMETABLE_ROWS = 15
 
 @dataclass(frozen=True)
 class Scope:
-    """Run scope from configuration (plan `01` §8, `02` §1.2)."""
+    """Run scope from configuration (plan `01` §8, `02` §1.2).
+
+    The base identity fields (student_id_pattern / enrollment_no_pattern /
+    student_id_min..max) are the V1 locked scope and remain the ONLY accepted
+    namespace when the extra namespace fields are empty (Task 2 cohort-aware
+    defaults — V1 unchanged). Each extra enrolment/student namespace tuple is
+    ``(pattern, min, max)`` where ``min``/``max`` may be ``""`` (unbounded on
+    that side). An id is accepted when it matches ANY registered namespace and
+    lies within that namespace's range.
+    """
 
     department_code: str
     semester_no: str
@@ -116,6 +126,13 @@ class Scope:
     enrollment_no_pattern: str
     student_id_min: str
     student_id_max: str
+    # Academic-year format pattern, cohort-aware (configuration, never a regex
+    # hardcoded in stage code). Default accepts both the locked V1 "YYYY-YYYY"
+    # form and earlier-cohort "YYYY-YY" forms, so direct construction (tests)
+    # remains backward-compatible; from_config always supplies an explicit value.
+    academic_year_pattern: str = r"^\d{4}-(\d{2}|\d{4})$"
+    student_id_namespaces_extra: Tuple[Tuple[str, str, str], ...] = ()
+    enrollment_no_namespaces_extra: Tuple[Tuple[str, str, str], ...] = ()
 
     @classmethod
     def from_config(cls, config: Optional[EtlConfig] = None) -> "Scope":
@@ -124,13 +141,91 @@ class Scope:
             department_code=str(cfg.ETL_DEPARTMENT_CODE),
             semester_no=str(cfg.ETL_SEMESTER_NO),
             academic_year=cfg.ETL_ACADEMIC_YEAR,
+            academic_year_pattern=cfg.ETL_ACADEMIC_YEAR_PATTERN,
             student_id_pattern=cfg.ETL_STUDENT_ID_PATTERN,
             subject_id_pattern=cfg.ETL_SUBJECT_ID_PATTERN,
             faculty_id_pattern=cfg.ETL_FACULTY_ID_PATTERN,
             enrollment_no_pattern=cfg.ETL_ENROLLMENT_NO_PATTERN,
             student_id_min=cfg.ETL_STUDENT_ID_MIN,
             student_id_max=cfg.ETL_STUDENT_ID_MAX,
+            student_id_namespaces_extra=_parse_id_namespaces(
+                cfg.ETL_STUDENT_ID_NAMESPACES_EXTRA
+            ),
+            enrollment_no_namespaces_extra=_parse_enrollment_namespaces(
+                cfg.ETL_ENROLLMENT_NO_PATTERNS_EXTRA
+            ),
         )
+
+
+def _parse_id_namespaces(
+    specs: Sequence[str],
+) -> Tuple[Tuple[str, str, str], ...]:
+    """Parse "pattern|min|max" config entries into (pattern, min, max) tuples.
+
+    min/max are optional; missing parts become "" (unbounded). Kept read-only
+    and deterministic (Task 2: cohort-aware namespaces are configuration, not
+    hardcoded regexes).
+    """
+    namespaces: List[Tuple[str, str, str]] = []
+    for spec in specs or ():
+        parts = spec.split("|")
+        pattern = parts[0].strip()
+        if not pattern:
+            raise ValueError(f"empty pattern in ETL_STUDENT_ID_NAMESPACES_EXTRA: {spec!r}")
+        lo = parts[1].strip() if len(parts) > 1 else ""
+        hi = parts[2].strip() if len(parts) > 2 else ""
+        namespaces.append((pattern, lo, hi))
+    return tuple(namespaces)
+
+
+def _parse_enrollment_namespaces(
+    specs: Sequence[str],
+) -> Tuple[Tuple[str, str, str], ...]:
+    """Parse plain anchored enrollment patterns into (pattern, "", "") tuples."""
+    return tuple((spec.strip(), "", "") for spec in (specs or ()) if spec.strip())
+
+
+def _student_id_in_scope(sid: str, scope: Scope) -> bool:
+    """True when ``sid`` matches the base namespace or any extra namespace."""
+    if re.fullmatch(scope.student_id_pattern, sid) and (
+        scope.student_id_min <= sid <= scope.student_id_max
+    ):
+        return True
+    for pattern, lo, hi in scope.student_id_namespaces_extra:
+        if not re.fullmatch(pattern, sid):
+            continue
+        if lo and sid < lo:
+            continue
+        if hi and sid > hi:
+            continue
+        return True
+    return False
+
+
+def _enrollment_no_in_scope(enr: str, scope: Scope) -> bool:
+    """True when ``enr`` matches the base namespace or any extra namespace."""
+    if re.fullmatch(scope.enrollment_no_pattern, enr):
+        return True
+    for pattern, lo, hi in scope.enrollment_no_namespaces_extra:
+        if re.fullmatch(pattern, enr):
+            if lo and enr < lo:
+                continue
+            if hi and enr > hi:
+                continue
+            return True
+    return False
+
+
+def valid_academic_year(value: str, scope: Scope) -> bool:
+    """True when ``value`` matches the configured academic-year format.
+
+    Cohort-aware: derives the accepted format from ``scope.academic_year_pattern``
+    (configuration, never a hardcoded regex in stage code). Accepts the locked V1
+    "YYYY-YYYY" form and earlier-cohort "YYYY-YY" forms per the default pattern.
+    """
+    if value is None:
+        return False
+    return re.fullmatch(scope.academic_year_pattern, str(value).strip()) is not None
 
 
 @dataclass(frozen=True)
@@ -323,23 +418,19 @@ def _check_attendance_row(
             fail(REASON_NULL_REQUIRED, f"required key {name} is null", {name: row.get(name)})
 
     if sid:
-        if not re.fullmatch(scope.student_id_pattern, sid):
+        if not _student_id_in_scope(sid, scope):
             fail(
                 REASON_INVALID_STUDENT_ID,
-                f"student_id '{sid}' does not match {scope.student_id_pattern}",
+                f"student_id '{sid}' outside locked cohort-aware scope "
+                f"{scope.student_id_pattern} {scope.student_id_min}..{scope.student_id_max} "
+                f"(incl. {len(scope.student_id_namespaces_extra)} extra namespace(s))",
                 {"student_id": row.get("student_id")},
             )
-        elif not (scope.student_id_min <= sid <= scope.student_id_max):
-            fail(
-                REASON_INVALID_STUDENT_ID,
-                f"student_id '{sid}' outside locked scope "
-                f"{scope.student_id_min}..{scope.student_id_max}",
-                {"student_id": row.get("student_id")},
-            )
-    if enr and not re.fullmatch(scope.enrollment_no_pattern, enr):
+    if enr and not _enrollment_no_in_scope(enr, scope):
         fail(
             REASON_INVALID_ENROLLMENT_NO,
-            f"enrollment_no '{enr}' does not match {scope.enrollment_no_pattern}",
+            f"enrollment_no '{enr}' does not match {scope.enrollment_no_pattern} "
+            f"(incl. {len(scope.enrollment_no_namespaces_extra)} extra namespace(s))",
             {"enrollment_no": row.get("enrollment_no")},
         )
     if subj:

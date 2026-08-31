@@ -940,32 +940,51 @@ class FacultyService:
         page_size: int,
         sort: str,
         order: str,
+        all_terms: bool = False,
+        batch: Optional[str] = None,
     ) -> FacultySubjectsResponse:
         await self._ensure_profile(faculty_id)
 
         clean_search = search.strip()[:100] if search else None
+        clean_batch = batch.strip() if batch and batch.strip() else None
+        if clean_batch and clean_batch.lower() == "all":
+            clean_batch = None
         sort_key = sort if sort in SUBJECT_SORT_EXPRESSIONS else "name"
         direction = "DESC" if order == "desc" else "ASC"
         order_by = f"{SUBJECT_SORT_EXPRESSIONS[sort_key]} {direction}"
 
         current_term = await self.repo.get_current_term(faculty_id)
 
-        # None semester/year means "All" — optional WHERE filters in the repo
-        # handle the empty case, so no forced term is applied here.
-        summary_data = await self.repo.get_subjects_summary(faculty_id, semester_no, academic_year)
-        filter_data = await self.repo.get_subject_filters(faculty_id)
+        # Default view = current/live term only. When the user has not
+        # explicitly selected any dimension (both filters empty) and has NOT
+        # requested "All", resolve to the current academic term so historical
+        # offerings are never mixed into the default view.
+        if not all_terms and semester_no is None and academic_year is None and current_term:
+            semester_no = current_term["semester_no"]
+            academic_year = current_term["academic_year"]
 
-        term_cards = await self.repo.get_subject_cards(
-            faculty_id, semester_no, academic_year, None, "sse.subject_name ASC"
+        summary_data = await self.repo.get_subjects_summary(
+            faculty_id, semester_no, academic_year, clean_batch
+        )
+        filter_data = await self.repo.get_subject_filters(faculty_id)
+        kpi_attendance = await self.repo.get_subjects_weighted_attendance(
+            faculty_id, semester_no, academic_year, clean_batch
         )
 
-        total = await self.repo.count_subject_cards(faculty_id, semester_no, academic_year, clean_search)
+        term_cards = await self.repo.get_subject_cards(
+            faculty_id, semester_no, academic_year, None, "sse.subject_name ASC", batch=clean_batch
+        )
+
+        total = await self.repo.count_subject_cards(
+            faculty_id, semester_no, academic_year, clean_search, clean_batch
+        )
         total_pages = max(1, -(-total // page_size)) if total else 0
         row_start = (page - 1) * page_size
         card_rows = []
         if total > 0:
             card_rows = await self.repo.get_subject_cards(
-                faculty_id, semester_no, academic_year, clean_search, order_by, page_size, row_start
+                faculty_id, semester_no, academic_year, clean_search, order_by, page_size, row_start,
+                batch=clean_batch,
             )
         cards = [self._class_card_from_row(row) for row in card_rows]
 
@@ -976,10 +995,7 @@ class FacultyService:
                 total_students=int(summary_data["total_students"]),
                 current_semester=current_term["semester_no"] if current_term else None,
                 current_academic_year=current_term["academic_year"] if current_term else None,
-                average_attendance=self._average([
-                    float(r["average_attendance"]) if r.get("average_attendance") is not None else None
-                    for r in term_cards
-                ]),
+                average_attendance=kpi_attendance,
                 average_performance=self._average([
                     float(r["average_percentage"]) if r.get("average_percentage") is not None else None
                     for r in term_cards
@@ -988,11 +1004,13 @@ class FacultyService:
             filters=FacultySubjectsFilters(
                 semesters=filter_data["semesters"],
                 academic_years=filter_data["academic_years"],
+                batches=filter_data.get("batches") or [],
             ),
             applied=FacultySubjectsAppliedFilters(
                 semester=semester_no,
                 academic_year=academic_year,
                 search=clean_search,
+                batch=clean_batch,
             ),
             cards=cards,
             pagination=FacultyPagination(

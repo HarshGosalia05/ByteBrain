@@ -94,9 +94,17 @@ class FacultyRepository:
             SELECT 
                 sse.subject_id, sse.subject_code, sse.subject_name, sse.credits,
                 count(DISTINCT sse.student_id) AS students,
-                AVG(a.attendance_percentage) AS average_attendance,
+                CASE
+                    WHEN SUM(aw.classes_held) > 0
+                        THEN ROUND((100.0 * SUM(aw.classes_attended) / SUM(aw.classes_held))::numeric, 2)
+                    WHEN SUM(a.total_classes) > 0
+                        THEN ROUND((100.0 * SUM(a.attended_classes) / SUM(a.total_classes))::numeric, 2)
+                    ELSE NULL
+                END AS average_attendance,
                 AVG(sp.percentage) AS average_performance
             FROM student_subject_enrollment sse
+            LEFT JOIN attendance_weekly aw 
+                ON aw.enrollment_record_id = sse.enrollment_record_id
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
             LEFT JOIN student_subject_performance sp 
@@ -594,25 +602,80 @@ class FacultyRepository:
         faculty_id: str,
         semester_no: Optional[int] = None,
         academic_year: Optional[str] = None,
+        batch: Optional[str] = None,
     ) -> Dict[str, Any]:
-        clauses = ["faculty_id = $1", "enrollment_status = 'Active'"]
+        clauses = ["sse.faculty_id = $1", "sse.enrollment_status = 'Active'"]
         params: List[Any] = [faculty_id]
         if semester_no is not None:
             params.append(semester_no)
-            clauses.append(f"semester_no = ${len(params)}")
+            clauses.append(f"sse.semester_no = ${len(params)}")
         if academic_year is not None:
             params.append(academic_year)
-            clauses.append(f"academic_year = ${len(params)}")
+            clauses.append(f"sse.academic_year = ${len(params)}")
+        batch_year = self.batch_to_year(batch)
+        if batch_year is not None:
+            params.append(batch_year)
+            clauses.append(f"st.admission_year = ${len(params)}")
         query = f"""
             SELECT 
-                count(DISTINCT (subject_id, semester_no, academic_year)) AS total_subjects,
-                count(DISTINCT student_id) AS total_students
-            FROM student_subject_enrollment
+                count(DISTINCT (sse.subject_id, sse.semester_no, sse.academic_year)) AS total_subjects,
+                count(DISTINCT sse.student_id) AS total_students
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
             WHERE {' AND '.join(clauses)}
         """
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(query, *params)
             return dict(row) if row else {"total_subjects": 0, "total_students": 0}
+
+    async def get_subjects_weighted_attendance(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
+        batch: Optional[str] = None,
+    ) -> Optional[float]:
+        """Weighted attendance across the filtered subject-offering population.
+
+        Uses the same weekly-primary / legacy fallback as the subject cards so
+        the KPI and the cards are computed over the identical filtered dataset.
+        attendance % = 100 * SUM(classes_attended) / SUM(classes_held), never
+        averaging already-averaged subject percentages.
+        """
+        clauses = ["sse.faculty_id = $1", "sse.enrollment_status = 'Active'"]
+        params: List[Any] = [faculty_id]
+        if semester_no is not None:
+            params.append(semester_no)
+            clauses.append(f"sse.semester_no = ${len(params)}")
+        if academic_year is not None:
+            params.append(academic_year)
+            clauses.append(f"sse.academic_year = ${len(params)}")
+        batch_year = self.batch_to_year(batch)
+        if batch_year is not None:
+            params.append(batch_year)
+            clauses.append(f"st.admission_year = ${len(params)}")
+        query = f"""
+            SELECT
+                CASE
+                    WHEN COALESCE(SUM(aw.classes_held), 0) > 0
+                        THEN ROUND((100.0 * SUM(aw.classes_attended) / SUM(aw.classes_held))::numeric, 2)
+                    WHEN COALESCE(SUM(a.total_classes), 0) > 0
+                        THEN ROUND((100.0 * SUM(a.attended_classes) / SUM(a.total_classes))::numeric, 2)
+                    ELSE NULL
+                END AS average_attendance
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            LEFT JOIN attendance_weekly aw
+                ON aw.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN attendance a
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            WHERE {' AND '.join(clauses)}
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, *params)
+            if not row or row["average_attendance"] is None:
+                return None
+            return float(row["average_attendance"])
 
     async def get_subject_filters(self, faculty_id: str) -> Dict[str, Any]:
         async with self.pool.acquire() as conn:
@@ -634,10 +697,39 @@ class FacultyRepository:
                 """,
                 faculty_id,
             )
+            batches = await conn.fetch(
+                """
+                SELECT DISTINCT st.admission_year
+                FROM student_subject_enrollment sse
+                JOIN students st ON st.student_id = sse.student_id
+                WHERE sse.faculty_id = $1 AND sse.enrollment_status = 'Active'
+                    AND st.admission_year IS NOT NULL
+                ORDER BY st.admission_year ASC
+                """,
+                faculty_id,
+            )
         return {
             "semesters": [r["semester_no"] for r in semesters],
             "academic_years": [r["academic_year"] for r in years],
+            "batches": [self.year_to_batch(r["admission_year"]) for r in batches],
         }
+
+    @staticmethod
+    def batch_to_year(batch: Optional[str]) -> Optional[int]:
+        """Parse a batch label ("2021-22") into the admission_year int (2021)."""
+        if not batch:
+            return None
+        try:
+            return int(str(batch)[:4])
+        except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def year_to_batch(year: Optional[int]) -> Optional[str]:
+        """Format an admission_year int (2021) into the project batch label ("2021-22")."""
+        if year is None:
+            return None
+        return f"{year}-{str(year + 1)[-2:]}"
 
     def _subject_cards_where(
         self,
@@ -645,6 +737,7 @@ class FacultyRepository:
         semester_no: Optional[int],
         academic_year: Optional[str],
         search: Optional[str],
+        batch: Optional[str] = None,
     ) -> tuple:
         clauses = ["sse.faculty_id = $1", "sse.enrollment_status = 'Active'"]
         params: List[Any] = [faculty_id]
@@ -654,6 +747,10 @@ class FacultyRepository:
         if academic_year is not None:
             params.append(academic_year)
             clauses.append(f"sse.academic_year = ${len(params)}")
+        batch_year = self.batch_to_year(batch)
+        if batch_year is not None:
+            params.append(batch_year)
+            clauses.append(f"st.admission_year = ${len(params)}")
         if search:
             params.append(f"%{search}%")
             clauses.append(
@@ -667,11 +764,13 @@ class FacultyRepository:
         semester_no: Optional[int],
         academic_year: Optional[str],
         search: Optional[str],
+        batch: Optional[str] = None,
     ) -> int:
-        where, params = self._subject_cards_where(faculty_id, semester_no, academic_year, search)
+        where, params = self._subject_cards_where(faculty_id, semester_no, academic_year, search, batch)
         query = f"""
             SELECT count(DISTINCT (sse.subject_id, sse.semester_no, sse.academic_year))
             FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
             {where}
         """
         async with self.pool.acquire() as conn:
@@ -686,14 +785,21 @@ class FacultyRepository:
         order_by: str,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        batch: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        where, params = self._subject_cards_where(faculty_id, semester_no, academic_year, search)
+        where, params = self._subject_cards_where(faculty_id, semester_no, academic_year, search, batch)
         query = f"""
             SELECT 
                 sse.subject_id, sse.subject_code, sse.subject_name, sse.credits,
                 sse.semester_no, sse.academic_year,
                 count(DISTINCT sse.student_id) AS class_strength,
-                AVG(a.attendance_percentage) AS average_attendance,
+                CASE
+                    WHEN SUM(aw.classes_held) > 0
+                        THEN ROUND((100.0 * SUM(aw.classes_attended) / SUM(aw.classes_held))::numeric, 2)
+                    WHEN SUM(a.total_classes) > 0
+                        THEN ROUND((100.0 * SUM(a.attended_classes) / SUM(a.total_classes))::numeric, 2)
+                    ELSE NULL
+                END AS average_attendance,
                 AVG(sp.percentage) AS average_percentage,
                 MAX(sp.total_marks) AS highest_marks,
                 MIN(sp.total_marks) AS lowest_marks,
@@ -701,6 +807,9 @@ class FacultyRepository:
                 count(*) FILTER (WHERE sp.result_status = 'Pass') AS pass_count,
                 count(sp.result_status) AS performed_count
             FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            LEFT JOIN attendance_weekly aw 
+                ON aw.enrollment_record_id = sse.enrollment_record_id
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
             LEFT JOIN student_subject_performance sp 
@@ -767,11 +876,19 @@ class FacultyRepository:
                 SELECT 
                     count(DISTINCT sse.student_id) AS total_enrolled,
                     AVG(sp.percentage) AS average_percentage,
-                    AVG(a.attendance_percentage) AS average_attendance,
+                    CASE
+                        WHEN SUM(aw.classes_held) > 0
+                            THEN ROUND((100.0 * SUM(aw.classes_attended) / SUM(aw.classes_held))::numeric, 2)
+                        WHEN SUM(a.total_classes) > 0
+                            THEN ROUND((100.0 * SUM(a.attended_classes) / SUM(a.total_classes))::numeric, 2)
+                        ELSE NULL
+                    END AS average_attendance,
                     count(*) FILTER (WHERE sp.result_status = 'Pass') AS pass_count,
                     count(sp.result_status) AS performed_count,
                     AVG(sp.grade_point) AS average_grade_point
                 FROM student_subject_enrollment sse
+                LEFT JOIN attendance_weekly aw 
+                    ON aw.enrollment_record_id = sse.enrollment_record_id
                 LEFT JOIN attendance a 
                     ON a.enrollment_record_id = sse.enrollment_record_id
                 LEFT JOIN student_subject_performance sp 
@@ -799,21 +916,35 @@ class FacultyRepository:
 
             attendance = await conn.fetch(
                 """
+                WITH student_att AS (
+                    SELECT sse.student_id,
+                           COALESCE(
+                               CASE WHEN SUM(aw.classes_held) > 0
+                                    THEN 100.0 * SUM(aw.classes_attended) / SUM(aw.classes_held)
+                                    ELSE NULL END,
+                               CASE WHEN SUM(a.total_classes) > 0
+                                    THEN 100.0 * SUM(a.attended_classes) / SUM(a.total_classes)
+                                    ELSE NULL END
+                           ) AS att_pct
+                    FROM student_subject_enrollment sse
+                    LEFT JOIN attendance_weekly aw ON aw.enrollment_record_id = sse.enrollment_record_id
+                    LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                    WHERE sse.faculty_id = $1 AND sse.subject_id = $2
+                        AND sse.semester_no = $3 AND sse.academic_year = $4
+                        AND sse.enrollment_status = 'Active'
+                    GROUP BY sse.student_id
+                )
                 SELECT
                     CASE
-                        WHEN a.attendance_percentage < 75 THEN '< 75%'
-                        WHEN a.attendance_percentage <= 85 THEN '75% - 85%'
+                        WHEN att_pct < 75 THEN '< 75%'
+                        WHEN att_pct <= 85 THEN '75% - 85%'
                         ELSE '> 85%'
                     END AS band,
-                    count(DISTINCT sse.student_id) AS count
-                FROM student_subject_enrollment sse
-                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
-                WHERE sse.faculty_id = $1 AND sse.subject_id = $2
-                    AND sse.semester_no = $3 AND sse.academic_year = $4
-                    AND sse.enrollment_status = 'Active'
-                    AND a.attendance_percentage IS NOT NULL
+                    count(*) AS count
+                FROM student_att
+                WHERE att_pct IS NOT NULL
                 GROUP BY band
-                ORDER BY MIN(a.attendance_percentage) ASC
+                ORDER BY MIN(att_pct) ASC
                 """,
                 faculty_id, subject_id, semester_no, academic_year,
             )
@@ -821,10 +952,22 @@ class FacultyRepository:
             students = await conn.fetch(
                 """
                 SELECT sse.student_id, sse.enrollment_no, st.first_name, st.last_name,
-                    a.attendance_percentage, sp.total_marks, sp.grade
+                    COALESCE(wk_att.attendance_percentage, lg_att.attendance_percentage) AS attendance_percentage,
+                    sp.total_marks, sp.grade
                 FROM student_subject_enrollment sse
                 JOIN students st ON st.student_id = sse.student_id
-                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                LEFT JOIN (
+                    SELECT enrollment_record_id,
+                           ROUND((100.0 * SUM(classes_attended) / NULLIF(SUM(classes_held), 0))::numeric, 2) AS attendance_percentage
+                    FROM attendance_weekly
+                    GROUP BY enrollment_record_id
+                ) wk_att ON wk_att.enrollment_record_id = sse.enrollment_record_id
+                LEFT JOIN (
+                    SELECT enrollment_record_id,
+                           ROUND((100.0 * SUM(attended_classes) / NULLIF(SUM(total_classes), 0))::numeric, 2) AS attendance_percentage
+                    FROM attendance
+                    GROUP BY enrollment_record_id
+                ) lg_att ON lg_att.enrollment_record_id = sse.enrollment_record_id
                 LEFT JOIN student_subject_performance sp ON sp.enrollment_record_id = sse.enrollment_record_id
                 WHERE sse.faculty_id = $1 AND sse.subject_id = $2
                     AND sse.semester_no = $3 AND sse.academic_year = $4
@@ -858,10 +1001,18 @@ class FacultyRepository:
                 sse.semester_no, sse.academic_year,
                 count(DISTINCT sse.student_id) AS students,
                 AVG(sp.percentage) AS average_performance,
-                AVG(a.attendance_percentage) AS average_attendance,
+                CASE
+                    WHEN SUM(aw.classes_held) > 0
+                        THEN ROUND((100.0 * SUM(aw.classes_attended) / SUM(aw.classes_held))::numeric, 2)
+                    WHEN SUM(a.total_classes) > 0
+                        THEN ROUND((100.0 * SUM(a.attended_classes) / SUM(a.total_classes))::numeric, 2)
+                    ELSE NULL
+                END AS average_attendance,
                 count(*) FILTER (WHERE sp.result_status = 'Pass') AS pass_count,
                 count(sp.result_status) AS performed_count
             FROM student_subject_enrollment sse
+            LEFT JOIN attendance_weekly aw 
+                ON aw.enrollment_record_id = sse.enrollment_record_id
             LEFT JOIN attendance a 
                 ON a.enrollment_record_id = sse.enrollment_record_id
             LEFT JOIN student_subject_performance sp 

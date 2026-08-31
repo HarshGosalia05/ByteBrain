@@ -15,7 +15,6 @@ No database writes of any kind.
 """
 import asyncio
 import hashlib
-import os
 import sys
 from pathlib import Path
 
@@ -25,16 +24,23 @@ _SRC = str(Path(__file__).resolve().parent / "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
+_BACKEND = str(Path(__file__).resolve().parents[1] / "backend")
+if _BACKEND not in sys.path:
+    sys.path.insert(0, _BACKEND)
+
+from db_env import db_config  # noqa: E402
+
+DB = db_config()
+DB_HOST = DB.host
+DB_PORT = DB.port
+DB_NAME = DB.name
+DB_USER = DB.user
+DB_PASSWORD = DB.password
+
 from features.v1_etl_second_cohort_readiness import (  # noqa: E402
     ETL_BLOCKED,
     audit_etl_second_cohort_readiness,
 )
-
-DB_HOST = "aws-1-ap-south-1.pooler.supabase.com"
-DB_PORT = 6543
-DB_NAME = "postgres"
-DB_USER = "postgres.rtaqkxqdejelxsamnesm"
-DB_PASSWORD = "KenexAI@*195"
 
 ARTIFACTS = {
     "m1": ("m1_subject_endmarks.joblib", "3404d29e"),

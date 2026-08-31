@@ -2,16 +2,18 @@ import psycopg2
 import pandas as pd
 import os
 import re
+import sys
+from pathlib import Path
 
-# ============================================================
-# SUPABASE DATABASE CONNECTION
-# ============================================================
+sys.path.insert(0, str(Path(__file__).resolve().parent / "backend"))
+from db_env import db_config  # noqa: E402
 
-DB_HOST = "aws-1-ap-south-1.pooler.supabase.com"
-DB_PORT = 6543
-DB_NAME = "postgres"
-DB_USER = "postgres.rtaqkxqdejelxsamnesm"
-DB_PASSWORD = "KenexAI@*195"
+DB = db_config()
+DB_HOST = DB.host
+DB_PORT = DB.port
+DB_NAME = DB.name
+DB_USER = DB.user
+DB_PASSWORD = DB.password
 
 # ============================================================
 # CONNECT TO SUPABASE

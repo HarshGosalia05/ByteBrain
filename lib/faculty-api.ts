@@ -330,12 +330,14 @@ export type FacultySubjectsSummary = {
 export type FacultySubjectsFilters = {
   semesters: number[]
   academic_years: string[]
+  batches?: string[]
 }
 
 export type FacultySubjectsAppliedFilters = {
   semester: number | null
   academic_year: string | null
   search: string | null
+  batch?: string | null
 }
 
 export type FacultySubjectsResponse = {
@@ -957,21 +959,26 @@ export function facultyMlReadinessTone(level: string): "success" | "warning" | "
 export function getFacultySubjects(params?: {
   semester?: string | number | null
   academic_year?: string | null
+  batch?: string | null
   search?: string | null
   page?: number
   page_size?: number
   sort?: string
   order?: "asc" | "desc"
+  all_terms?: boolean
 }): Promise<BffResult<FacultySubjectsResponse>> {
   const searchParams = new URLSearchParams()
   if (params?.semester !== undefined) searchParams.set("semester", String(params.semester))
   if (params?.academic_year !== undefined)
     searchParams.set("academic_year", params.academic_year ?? "")
+  if (params?.batch !== undefined && params.batch !== null)
+    searchParams.set("batch", params.batch ?? "all")
   if (params?.search) searchParams.set("search", params.search)
   if (params?.page) searchParams.set("page", params.page.toString())
   if (params?.page_size) searchParams.set("page_size", params.page_size.toString())
   if (params?.sort) searchParams.set("sort", params.sort)
   if (params?.order) searchParams.set("order", params.order)
+  if (params?.all_terms) searchParams.set("all_terms", "true")
 
   const query = searchParams.toString()
   const path = query ? `subjects?${query}` : "subjects"

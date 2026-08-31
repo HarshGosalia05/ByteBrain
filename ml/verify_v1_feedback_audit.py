@@ -12,7 +12,6 @@ Usage:  python ml/verify_v1_feedback_audit.py
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -24,6 +23,12 @@ for _p in (_ML_SRC, _ROOT):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+_BACKEND = str(Path(__file__).resolve().parents[1] / "backend")
+if _BACKEND not in sys.path:
+    sys.path.insert(0, _BACKEND)
+
+from db_env import db_config  # noqa: E402
+
 from features.v1_feedback_audit import (  # noqa: E402
     audit_prediction_feedback_labels,
     render_quality_report,
@@ -31,12 +36,13 @@ from features.v1_feedback_audit import (  # noqa: E402
 
 
 def get_connection():
+    db = db_config()
     return psycopg2.connect(
-        host=os.getenv("DB_HOST", "aws-1-ap-south-1.pooler.supabase.com"),
-        port=int(os.getenv("DB_PORT", "6543")),
-        dbname=os.getenv("DB_NAME", "postgres"),
-        user=os.getenv("DB_USER", "postgres.rtaqkxqdejelxsamnesm"),
-        password=os.getenv("DB_PASSWORD", "KenexAI@*195"),
+        host=db.host,
+        port=db.port,
+        dbname=db.name,
+        user=db.user,
+        password=db.password,
     )
 
 

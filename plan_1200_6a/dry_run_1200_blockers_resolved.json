@@ -1,0 +1,390 @@
+{
+  "label": "1200_blockers_resolved",
+  "version": "dry_run_v6_B1B5_RESOLVED",
+  "dataset": "KenexAI_1200_final_v3",
+  "schema_snapshot_sha": "1307eaa9770ef334",
+  "masters_sha": "a783a7068819da11",
+  "extract": {
+    "discovered": [
+      "students_6A_1200_final.csv",
+      "subject_catalog_6A_57_final.csv",
+      "student_subject_enrollment_6A_1200_final.csv",
+      "student_subject_performance_6A_1200_final.csv",
+      "student_semester_summary_6A_1200_final.csv",
+      "attendance_6A_1200_final.csv",
+      "student_learning_activity_6A_1200_final.csv",
+      "lifestyle_survey_6A_1200_final.csv",
+      "career_preferences_6A_1200_final.csv",
+      "student_skill_profile_6A_1200_final.csv",
+      "placement_6A_1200_final.csv",
+      "faculty_student_map_6A_1200_final.csv"
+    ],
+    "missing": [],
+    "row_counts_ok": true,
+    "counts": {
+      "students_6A_1200_final.csv": 1200,
+      "subject_catalog_6A_57_final.csv": 57,
+      "student_subject_enrollment_6A_1200_final.csv": 68400,
+      "student_subject_performance_6A_1200_final.csv": 68400,
+      "student_semester_summary_6A_1200_final.csv": 9600,
+      "attendance_6A_1200_final.csv": 547200,
+      "student_learning_activity_6A_1200_final.csv": 547200,
+      "lifestyle_survey_6A_1200_final.csv": 9600,
+      "career_preferences_6A_1200_final.csv": 1200,
+      "student_skill_profile_6A_1200_final.csv": 19200,
+      "placement_6A_1200_final.csv": 1200,
+      "faculty_student_map_6A_1200_final.csv": 1200
+    },
+    "expected_counts": {
+      "students_6A_1200_final.csv": 1200,
+      "subject_catalog_6A_57_final.csv": 57,
+      "student_subject_enrollment_6A_1200_final.csv": 68400,
+      "student_subject_performance_6A_1200_final.csv": 68400,
+      "student_semester_summary_6A_1200_final.csv": 9600,
+      "attendance_6A_1200_final.csv": 547200,
+      "student_learning_activity_6A_1200_final.csv": 547200,
+      "lifestyle_survey_6A_1200_final.csv": 9600,
+      "career_preferences_6A_1200_final.csv": 1200,
+      "student_skill_profile_6A_1200_final.csv": 19200,
+      "placement_6A_1200_final.csv": 1200,
+      "faculty_student_map_6A_1200_final.csv": 1200
+    },
+    "header_ok": true
+  },
+  "identity": {
+    "count": 1200,
+    "unique_ids": 1200,
+    "unique_enos": 1200,
+    "id_duplicates": [],
+    "eno_duplicates": [],
+    "id_bad_pattern": [],
+    "valid": true,
+    "checks": {
+      "students_present": true,
+      "student_ids_in_scope": true,
+      "enrollment_nos_in_scope": true,
+      "academic_years_valid": true
+    }
+  },
+  "b1_admission_quota": {
+    "decision": "Merit->ACPC (merit-based government admission), Management->Management (paid quota); a blind Merit->Management collapse is REJECTED",
+    "source_values": {
+      "Merit": 960,
+      "Management": 240
+    },
+    "mapped_values": {
+      "ACPC": 960,
+      "Management": 240
+    },
+    "all_check_legal": true,
+    "unmappable": 0
+  },
+  "b2_students_academic_standing": {
+    "mapping_engine": "map_academic_standing (shared B2/B3 map)",
+    "source_values": {
+      "Good Standing": 946,
+      "Satisfactory": 208,
+      "Needs Attention": 46
+    },
+    "mapped_values": {
+      "Good": 946,
+      "Average": 208,
+      "Needs Improvement": 46
+    },
+    "all_check_legal": true,
+    "unmappable": 0
+  },
+  "b3_semester_summary_academic_standing": {
+    "mapping_engine": "map_academic_standing (shared B2/B3 map)",
+    "rows": 9600,
+    "source_values": {
+      "Good Standing": 7721,
+      "Satisfactory": 1652,
+      "Needs Attention": 227
+    },
+    "mapped_values": {
+      "Good": 7721,
+      "Average": 1652,
+      "Needs Improvement": 227
+    },
+    "all_check_legal": true,
+    "unmappable": 0
+  },
+  "b4_career_preferences_v2": {
+    "architecture": "ARCHITECTURE B - new dedicated table; old career_preferences (M4-contract) untouched, no fabrication",
+    "table": "career_preferences_v2",
+    "columns": [
+      "career_preference_id",
+      "student_id",
+      "primary_interest_domain",
+      "secondary_interest_domain",
+      "preferred_role",
+      "higher_studies_intent",
+      "preferred_work_mode",
+      "desired_salary_lpa",
+      "career_role_category",
+      "career_preference_version",
+      "required_skills_for_preferred_role",
+      "role_skill_profile_version",
+      "career_preference_source"
+    ],
+    "accepted": 1200,
+    "rejected": 0,
+    "distinct_students": 1200,
+    "student_id_unique": true,
+    "orphan_fk_student_id": 0,
+    "m4_contract_unaffected": "student_repo.get_career_preferences still reads only the old career_preferences columns",
+    "fabricated_m4_fields": []
+  },
+  "b5_performance_gate": {
+    "raw_rows": 68400,
+    "gate": {
+      "raw_not_insertable_asserted": true,
+      "probe": "assert_raw_performance_not_loaded fires on raw rows (source performance_category not in the live CHECK set) => loader MUST consume transform_performance_rows",
+      "issue_excerpt": "RAW performance CSV must never be inserted into student_subject_performance. Run transform_performance_rows first. Issues:\n  row 2 (PER6A0000001): internal_marks not an integer for DB INTEGER column; mid_sem_marks not an integer for DB INTEGER column; end_sem_marks not an integer for DB INTEGER column; performance_category is the source vocab (not a live CHECK value)\n  row 3 (PER6A0000002): intern"
+    },
+    "transformed_rows": 68400,
+    "all_transformed_student_ids_resolve": true,
+    "check_constraints": {
+      "performance_category_all_check_legal": true,
+      "performance_category_values": {
+        "Above Average": 15667,
+        "Average": 41563,
+        "Below Average": 6435,
+        "Low Performer": 226,
+        "Top": 4509
+      },
+      "performance_grade_all_check_legal": true,
+      "performance_grade_values": {
+        "A": 23702,
+        "A+": 15667,
+        "B": 5732,
+        "B+": 17861,
+        "C": 703,
+        "F": 226,
+        "O": 4509
+      },
+      "performance_status_all_check_legal": true,
+      "performance_total_max": 140,
+      "performance_total_within_db_max": true,
+      "raw_source_category_values": [
+        "At Risk",
+        "Developing",
+        "Excellent",
+        "Good"
+      ]
+    },
+    "semester_7_trigger_parity": "labels re-derived via derive_marks_fields == live trigger => idempotent load"
+  },
+  "referential_integrity": {
+    "checks": [
+      {
+        "relationship": "enrollment.student_id -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "enrollment.enrollment_no -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "enrollment.subject_id -> subjects(57)",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "performance.student_id -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "performance.enrollment_record_id -> enrollment",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "performance.enrollment_no -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "performance.subject_id -> subjects(57)",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "semester_summary.student_id -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "semester_summary.enrollment_no -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "attendance.student_id -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "attendance.enrollment_record_id -> enrollment",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "attendance.subject_id -> subjects(57)",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "learning_activity.student_id -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "learning_activity.enrollment_record_id -> enrollment",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "learning_activity.subject_id -> subjects(57)",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "lifestyle_survey.student_id -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "career_preferences_v2.student_id -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "skill_profile.student_id -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "placement.student_id -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "faculty_student_map.student_id -> students",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "all subjects used stay within 57",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "enrollment.faculty_id -> live faculty(25)",
+        "orphan_count": 0
+      },
+      {
+        "relationship": "faculty_student_map.faculty_id -> live faculty(25)",
+        "orphan_count": 0
+      }
+    ],
+    "total_orphans": 0,
+    "faculty_baseline_used": true
+  },
+  "data_quality": {
+    "checks": [
+      {
+        "check": "students student_id unique",
+        "rows": 1200,
+        "duplicate_grains": 0
+      },
+      {
+        "check": "enrollment_record_id unique",
+        "rows": 68400,
+        "duplicate_grains": 0
+      },
+      {
+        "check": "performance_id unique",
+        "rows": 68400,
+        "duplicate_grains": 0
+      },
+      {
+        "check": "performance.enrollment_record_id unique",
+        "rows": 68400,
+        "duplicate_grains": 0
+      },
+      {
+        "check": "semester_summary_id unique",
+        "rows": 9600,
+        "duplicate_grains": 0
+      },
+      {
+        "check": "attendance_id unique",
+        "rows": 547200,
+        "duplicate_grains": 0
+      },
+      {
+        "check": "learning_activity_id unique",
+        "rows": 547200,
+        "duplicate_grains": 0
+      },
+      {
+        "check": "lifestyle_survey survey_id unique",
+        "rows": 9600,
+        "duplicate_grains": 0
+      },
+      {
+        "check": "career_preference_id unique",
+        "rows": 1200,
+        "duplicate_grains": 0
+      },
+      {
+        "check": "career_preferences_v2 student_id unique",
+        "rows": 1200,
+        "duplicate_grains": 0
+      },
+      {
+        "check": "skill student_skill_id unique",
+        "rows": 19200,
+        "duplicate_grains": 0
+      },
+      {
+        "check": "placement_id unique",
+        "rows": 1200,
+        "duplicate_grains": 0
+      },
+      {
+        "check": "faculty_student_map_id unique",
+        "rows": 1200,
+        "duplicate_grains": 0
+      }
+    ],
+    "total_duplicate_grains": 0
+  },
+  "quarantine": {
+    "total_quarantined": 0,
+    "by_source": {},
+    "by_reason_code": {},
+    "samples": []
+  },
+  "leakage": {
+    "perf_forbidden_ground_truth_columns_stored": [],
+    "ct1_ct2_present_in_source": true,
+    "ct1_ct2_absent_from_transformed_output": true,
+    "derived_labels_are_trigger_identical_note": "grade/grade_point/result_status/performance_category/remarks/total/percentage recomputed by derive_marks_fields (== live trigger)"
+  },
+  "fsm_transform": {
+    "accepted": 1200,
+    "rejected": 0,
+    "mentor_role": {
+      "Academic Mentor": 1200
+    },
+    "status": {
+      "Active": 1200
+    },
+    "distinct_students": 1200,
+    "unique_pairs": 1200
+  },
+  "schema_compat": {
+    "career_preferences_v2_created": true,
+    "old_career_preferences_extended": false,
+    "semantic_vocab_mappings": {
+      "admission_quota": "Merit->ACPC / Management->Management",
+      "academic_standing": "Good Standing->Good / Satisfactory->Average / Needs Attention->Needs Improvement"
+    },
+    "non_destructive_ddl_only": "migration DDL adds columns/tables plus ALTERs with IF NOT EXISTS; no DROP of live constraints/tables"
+  },
+  "masters_80_cohort_preserved": {
+    "new_student_id_overlap_with_live": [],
+    "new_student_id_overlap_count": 0,
+    "new_enrollment_no_overlap_with_live": [],
+    "new_enrollment_no_overlap_count": 0,
+    "eighty_cohort_modifications_proposed": 0,
+    "baseline_scope": "read-only masters snapshot; no write/apply executed"
+  },
+  "determinism_sha": "d0e08f3953de8b2e24547690e209b4586006971447bbdb65ffd5ec65c00b3ab3",
+  "determinism_rerun_stable": true
+}

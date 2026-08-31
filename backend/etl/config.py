@@ -13,6 +13,7 @@ ETL CLI does not depend on the process working directory; the DSN format mirrors
 """
 
 from pathlib import Path
+from typing import List
 from urllib.parse import quote_plus
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -36,12 +37,29 @@ class EtlConfig(BaseSettings):
     ETL_DEPARTMENT_CODE: int = 1
     ETL_SEMESTER_NO: int = 7
     ETL_ACADEMIC_YEAR: str = "2026-2027"
+    # Academic-year format, cohort-aware. Default accepts both the locked V1
+    # "YYYY-YYYY" form ("2026-2027") and the "YYYY-YY" form used by earlier
+    # admission cohorts ("2021-22".."2025-26"). The pattern is configuration,
+    # never a regex hardcoded in stage/transform code.
+    ETL_ACADEMIC_YEAR_PATTERN: str = r"^\d{4}-(\d{2}|\d{4})$"
     ETL_STUDENT_ID_PATTERN: str = r"^STU\d{6}$"
     ETL_SUBJECT_ID_PATTERN: str = r"^SUB\d{4}$"
     ETL_FACULTY_ID_PATTERN: str = r"^FAC\d{3}$"
     ETL_ENROLLMENT_NO_PATTERN: str = r"^2023\d{6}$"
     ETL_STUDENT_ID_MIN: str = "STU000001"
     ETL_STUDENT_ID_MAX: str = "STU000050"
+
+    # Cohort-aware identity validation (Task 2). The locked scope above remains
+    # the single default namespace. Extra namespaces let the SAME ETL validate a
+    # second cohort (e.g. the 6A-1200 dataset with student STU6A0001..STU6A1200
+    # and enrollment 2021...) without editing validation code: patterns and
+    # ranges stay config-derived, never hardcoded. Defaults are empty, so V1
+    # behavior is unchanged unless a cohort explicitly registers itself.
+    # Each student-id namespace entry is "pattern|min|max" (min/max optional;
+    # empty = unbounded on that side). Each enrollment-no entry is a plain
+    # anchored fullmatch pattern.
+    ETL_STUDENT_ID_NAMESPACES_EXTRA: List[str] = []
+    ETL_ENROLLMENT_NO_PATTERNS_EXTRA: List[str] = []
 
     DB_HOST: str = "localhost"
     DB_PORT: int = 5432

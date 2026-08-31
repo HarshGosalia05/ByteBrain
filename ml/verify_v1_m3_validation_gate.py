@@ -29,11 +29,18 @@ _SRC = str(Path(__file__).resolve().parent / "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-DB_HOST = "aws-1-ap-south-1.pooler.supabase.com"
-DB_PORT = 6543
-DB_NAME = "postgres"
-DB_USER = "postgres.rtaqkxqdejelxsamnesm"
-DB_PASS = "KenexAI@*195"
+_BACKEND = str(Path(__file__).resolve().parents[1] / "backend")
+if _BACKEND not in sys.path:
+    sys.path.insert(0, _BACKEND)
+
+from db_env import db_config  # noqa: E402
+
+DB = db_config()
+DB_HOST = DB.host
+DB_PORT = DB.port
+DB_NAME = DB.name
+DB_USER = DB.user
+DB_PASS = DB.password
 
 SUMMARY_SQL = """
     SELECT student_id, semester_no, subjects_registered, credits_registered,

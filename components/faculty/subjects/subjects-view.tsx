@@ -44,6 +44,19 @@ export function SubjectsView({ data }: { data: FacultySubjectsResponse }) {
     setSearchValue(currentSearch)
   }
 
+  // When the user has not explicitly restricted either dimension, they are
+  // asking for ALL terms; signal this so the backend does not force the
+  // current-term default view.
+  const syncAllTerms = (params: URLSearchParams) => {
+    const hasSem = params.get("semester")
+    const hasYear = params.get("academic_year")
+    if (!hasSem && !hasYear) {
+      params.set("all_terms", "true")
+    } else {
+      params.delete("all_terms")
+    }
+  }
+
   const handleFilterChange = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString())
     if (value) {
@@ -51,6 +64,7 @@ export function SubjectsView({ data }: { data: FacultySubjectsResponse }) {
     } else {
       params.delete(key)
     }
+    syncAllTerms(params)
     if (key !== "page") {
       params.set("page", "1")
     }
@@ -76,6 +90,8 @@ export function SubjectsView({ data }: { data: FacultySubjectsResponse }) {
     params.delete("search")
     params.delete("semester")
     params.delete("academic_year")
+    params.delete("batch")
+    params.delete("all_terms")
     params.delete("sort")
     params.delete("order")
     params.set("page", "1")
@@ -87,6 +103,7 @@ export function SubjectsView({ data }: { data: FacultySubjectsResponse }) {
     (searchParams.get("search") ? 1 : 0) +
     (searchParams.get("semester") ? 1 : 0) +
     (searchParams.get("academic_year") ? 1 : 0) +
+    (searchParams.get("batch") ? 1 : 0) +
     (searchParams.get("sort") || searchParams.get("order") ? 1 : 0)
 
   const sortValue = `${searchParams.get("sort") || "name"}:${searchParams.get("order") || "asc"}`
@@ -142,12 +159,26 @@ export function SubjectsView({ data }: { data: FacultySubjectsResponse }) {
           <div className="flex flex-wrap flex-1 gap-2">
             <select
               className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-auto"
+              value={data.applied.batch || ""}
+              onChange={(e) => handleFilterChange("batch", e.target.value)}
+            >
+              <option value="">All Batches</option>
+              {(data.filters.batches || []).map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-auto"
               value={data.applied.academic_year || ""}
               onChange={(e) => handleFilterChange("academic_year", e.target.value)}
             >
               <option value="">All Years</option>
               {(data.filters.academic_years || []).map((y) => (
-                <option key={y} value={y}>{y}</option>
+                <option key={y} value={y}>
+                  {y === data.summary.current_academic_year ? `Current: ${y}` : y}
+                </option>
               ))}
             </select>
             <select
@@ -157,7 +188,9 @@ export function SubjectsView({ data }: { data: FacultySubjectsResponse }) {
             >
               <option value="">All Semesters</option>
               {(data.filters.semesters || []).map((s) => (
-                <option key={s} value={s.toString()}>Semester {s}</option>
+                <option key={s} value={s.toString()}>
+                  {s === data.summary.current_semester ? `Current: Sem ${s}` : `Semester ${s}`}
+                </option>
               ))}
             </select>
             <select

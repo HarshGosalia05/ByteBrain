@@ -1,0 +1,604 @@
+{
+  "audit_before_execute": {
+    "clean": true,
+    "forbidden": {
+      "ALTER_COLUMN_TYPE": false,
+      "ALTER_DROP": false,
+      "DELETE": false,
+      "DROP": false,
+      "INSERT_VALUES": false,
+      "TRUNCATE": false,
+      "UPDATE": false
+    },
+    "guard_stu6a_present": true
+  },
+  "commit": "committed",
+  "ddl_executed": true,
+  "executed_statements": [
+    {
+      "first_line": "-- ---------------------------------------------------------------------------",
+      "n": 1,
+      "ok": true
+    },
+    {
+      "first_line": "-- ---------------------------------------------------------------------------",
+      "n": 2,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE UNIQUE INDEX IF NOT EXISTS uq_attendance_weekly_grain",
+      "n": 3,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_att_weekly_student_subj_week",
+      "n": 4,
+      "ok": true
+    },
+    {
+      "first_line": "-- Behavioural / engagement events (OULAD-inspired, reference-only).",
+      "n": 5,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE UNIQUE INDEX IF NOT EXISTS uq_learning_activity_grain",
+      "n": 6,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_learning_activity_student_subj_week",
+      "n": 7,
+      "ok": true
+    },
+    {
+      "first_line": "-- Skill evidence per (student, skill, semester).",
+      "n": 8,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_skill_profile_student_sem",
+      "n": 9,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_skill_profile_domain",
+      "n": 10,
+      "ok": true
+    },
+    {
+      "first_line": "-- Placement outcomes (analytics-only; NEVER a feature for M1/M2/M3).",
+      "n": 11,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_placement_status ON placement (placement_status);",
+      "n": 12,
+      "ok": true
+    },
+    {
+      "first_line": "-- Per-semester lifestyle survey for the 1,200 cohort (existing lifestyle_survey",
+      "n": 13,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE UNIQUE INDEX IF NOT EXISTS uq_student_lifestyle_grain",
+      "n": 14,
+      "ok": true
+    },
+    {
+      "first_line": "-- Career preferences for the 1,200 cohort (ARCHITECTURE B \u2014 dedicated v2 table).",
+      "n": 15,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE UNIQUE INDEX IF NOT EXISTS uq_career_pref_v2_student",
+      "n": 16,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_career_pref_v2_domain",
+      "n": 17,
+      "ok": true
+    },
+    {
+      "first_line": "-- ---------------------------------------------------------------------------",
+      "n": 18,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE students ADD COLUMN IF NOT EXISTS cohort_id VARCHAR;",
+      "n": 19,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE students ADD COLUMN IF NOT EXISTS source_dataset VARCHAR;",
+      "n": 20,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE students ADD COLUMN IF NOT EXISTS generation_version VARCHAR;",
+      "n": 21,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE students ADD COLUMN IF NOT EXISTS dataset_version VARCHAR;",
+      "n": 22,
+      "ok": true
+    },
+    {
+      "first_line": "-- student_subject_enrollment",
+      "n": 23,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_subject_enrollment ADD COLUMN IF NOT EXISTS subject_domain VARCHAR;",
+      "n": 24,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_subject_enrollment ADD COLUMN IF NOT EXISTS subject_skill VARCHAR;",
+      "n": 25,
+      "ok": true
+    },
+    {
+      "first_line": "-- student_subject_performance: new pre-end-sem / behaviour / domain columns",
+      "n": 26,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_subject_performance ADD COLUMN IF NOT EXISTS assignment_score NUMERIC;",
+      "n": 27,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_subject_performance ADD COLUMN IF NOT EXISTS quiz_avg_marks NUMERIC;",
+      "n": 28,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_subject_performance ADD COLUMN IF NOT EXISTS submission_delay_days NUMERIC;",
+      "n": 29,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_subject_performance ADD COLUMN IF NOT EXISTS pre_endsem_assessment_pct NUMERIC;",
+      "n": 30,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_subject_performance ADD COLUMN IF NOT EXISTS subject_domain VARCHAR;",
+      "n": 31,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_subject_performance ADD COLUMN IF NOT EXISTS subject_skill VARCHAR;",
+      "n": 32,
+      "ok": true
+    },
+    {
+      "first_line": "-- NOTE (marks convention): the new CSV's internal/mid_sem/end_sem are decimals",
+      "n": 33,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS previous_sem_sgpa NUMERIC;",
+      "n": 34,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS sgpa_drift NUMERIC;",
+      "n": 35,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS sgpa_rolling_mean_3 NUMERIC;",
+      "n": 36,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS previous_sem_backlog_count INTEGER;",
+      "n": 37,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS backlog_change INTEGER;",
+      "n": 38,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS cumulative_backlog_events INTEGER;",
+      "n": 39,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS backlog_trajectory VARCHAR;",
+      "n": 40,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS attendance_aggregate_pct NUMERIC;",
+      "n": 41,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS is_m1_deployment_boundary BOOLEAN DEFA",
+      "n": 42,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS target_available_if_completed BOOLEAN ",
+      "n": 43,
+      "ok": true
+    },
+    {
+      "first_line": "-- career_preferences: intentionally NOT extended (ARCHITECTURE B \u2014 see the new",
+      "n": 44,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE faculty_student_map ADD COLUMN IF NOT EXISTS semester_no INTEGER;",
+      "n": 45,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE faculty_student_map ADD COLUMN IF NOT EXISTS mapping_type VARCHAR;",
+      "n": 46,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE faculty_student_map ADD COLUMN IF NOT EXISTS is_active BOOLEAN;",
+      "n": 47,
+      "ok": true
+    },
+    {
+      "first_line": "-- ---------------------------------------------------------------------------",
+      "n": 48,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_students_admission_year ON students (admission_year);",
+      "n": 49,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_enrollment_student ON student_subject_enrollment (student_id);",
+      "n": 50,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_enrollment_subject ON student_subject_enrollment (subject_id);",
+      "n": 51,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_enrollment_faculty ON student_subject_enrollment (faculty_id);",
+      "n": 52,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_enrollment_academic_year ON student_subject_enrollment (academic_year",
+      "n": 53,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_performance_student ON student_subject_performance (student_id);",
+      "n": 54,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_performance_subject_sem ON student_subject_performance (subject_id, s",
+      "n": 55,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_sem_summary_student ON student_semester_summary (student_id);",
+      "n": 56,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE INDEX IF NOT EXISTS idx_sem_summary_academic_year ON student_semester_summary (academic_year)",
+      "n": 57,
+      "ok": true
+    },
+    {
+      "first_line": "-- ---------------------------------------------------------------------------",
+      "n": 58,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE OR REPLACE FUNCTION public.app_user_id() RETURNS TEXT LANGUAGE SQL STABLE AS",
+      "n": 59,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE OR REPLACE FUNCTION public.app_student_id() RETURNS TEXT LANGUAGE SQL STABLE AS",
+      "n": 60,
+      "ok": true
+    },
+    {
+      "first_line": "CREATE OR REPLACE FUNCTION public.app_faculty_id() RETURNS TEXT LANGUAGE SQL STABLE AS",
+      "n": 61,
+      "ok": true
+    },
+    {
+      "first_line": "-- Enable RLS on every new and newly-exposed table.",
+      "n": 62,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_learning_activity ENABLE ROW LEVEL SECURITY;",
+      "n": 63,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_skill_profile  ENABLE ROW LEVEL SECURITY;",
+      "n": 64,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE placement              ENABLE ROW LEVEL SECURITY;",
+      "n": 65,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE student_lifestyle_survey ENABLE ROW LEVEL SECURITY;",
+      "n": 66,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE career_preferences     ENABLE ROW LEVEL SECURITY;",
+      "n": 67,
+      "ok": true
+    },
+    {
+      "first_line": "ALTER TABLE career_preferences_v2  ENABLE ROW LEVEL SECURITY;",
+      "n": 68,
+      "ok": true
+    },
+    {
+      "first_line": "-- Policy template per role. Example for placement (analytics-only):",
+      "n": 69,
+      "ok": true
+    }
+  ],
+  "label": "cse6a_1200_ddl_apply_live",
+  "phase": "PHASE_2_DDL_APPLY",
+  "post_ddl_verification": {
+    "added_columns_all_exist": true,
+    "fingerprint_all_unchanged": true,
+    "fingerprint_unchanged": {
+      "attendance": true,
+      "career_preferences": true,
+      "departments": true,
+      "faculty": true,
+      "faculty_student_map": true,
+      "lifestyle_survey": true,
+      "student_semester_summary": true,
+      "student_subject_enrollment": true,
+      "student_subject_performance": true,
+      "students": true,
+      "subjects": true
+    },
+    "helper_functions_count": 4,
+    "helper_functions_expected": 4,
+    "indexes_all_exist": true,
+    "missing_added_columns": [],
+    "missing_indexes": [],
+    "new_columns_added_baseline": {
+      "career_preferences": {
+        "count_same": true,
+        "post_ddl_hash_full_row_with_new_cols": "ceaace3257948a434e1b30d2935b70d2",
+        "post_ddl_hash_projected": "ceaace3257948a434e1b30d2935b70d2",
+        "pre_ddl_hash_over_old_shape": "ceaace3257948a434e1b30d2935b70d2",
+        "projected_identical": true
+      },
+      "departments": {
+        "count_same": true,
+        "post_ddl_hash_full_row_with_new_cols": "b25b0ee814cf9a6f8e63340a7137fe6e",
+        "post_ddl_hash_projected": "b25b0ee814cf9a6f8e63340a7137fe6e",
+        "pre_ddl_hash_over_old_shape": "b25b0ee814cf9a6f8e63340a7137fe6e",
+        "projected_identical": true
+      },
+      "faculty": {
+        "count_same": true,
+        "post_ddl_hash_full_row_with_new_cols": "123b3bd3a5771cced29a527c5f480485",
+        "post_ddl_hash_projected": "123b3bd3a5771cced29a527c5f480485",
+        "pre_ddl_hash_over_old_shape": "123b3bd3a5771cced29a527c5f480485",
+        "projected_identical": true
+      },
+      "faculty_student_map": {
+        "count_same": true,
+        "post_ddl_hash_full_row_with_new_cols": "64476ca1ab95a04e659fa4d52d504ef9",
+        "post_ddl_hash_projected": "78f8f26fd58549648139c6cdeb70c67d",
+        "pre_ddl_hash_over_old_shape": "78f8f26fd58549648139c6cdeb70c67d",
+        "projected_identical": true
+      },
+      "student_semester_summary": {
+        "count_same": true,
+        "post_ddl_hash_full_row_with_new_cols": "3c8534cb490d52a836f3e0fa3b1a631f",
+        "post_ddl_hash_projected": "aae98d694541525b40895a60ae00be78",
+        "pre_ddl_hash_over_old_shape": "aae98d694541525b40895a60ae00be78",
+        "projected_identical": true
+      },
+      "student_subject_enrollment": {
+        "count_same": true,
+        "post_ddl_hash_full_row_with_new_cols": "7620489e268933195dac69ad7750a685",
+        "post_ddl_hash_projected": "cbe73a82763647fbfa87197de2dda927",
+        "pre_ddl_hash_over_old_shape": "cbe73a82763647fbfa87197de2dda927",
+        "projected_identical": true
+      },
+      "student_subject_performance": {
+        "count_same": true,
+        "post_ddl_hash_full_row_with_new_cols": "1663d60d0a85028eed0935054ef9309d",
+        "post_ddl_hash_projected": "2f4a2efa254fc243f66f5a091b87bcc0",
+        "pre_ddl_hash_over_old_shape": "2f4a2efa254fc243f66f5a091b87bcc0",
+        "projected_identical": true
+      },
+      "students": {
+        "count_same": true,
+        "post_ddl_hash_full_row_with_new_cols": "d171057d66cffac08e8933e3683f1cbe",
+        "post_ddl_hash_projected": "4cd71b6ea47fcc64197eed17a8ea1414",
+        "pre_ddl_hash_over_old_shape": "4cd71b6ea47fcc64197eed17a8ea1414",
+        "projected_identical": true
+      },
+      "subjects": {
+        "count_same": true,
+        "post_ddl_hash_full_row_with_new_cols": "81e43928424beea82c8b38563c67c2ab",
+        "post_ddl_hash_projected": "81e43928424beea82c8b38563c67c2ab",
+        "pre_ddl_hash_over_old_shape": "81e43928424beea82c8b38563c67c2ab",
+        "projected_identical": true
+      }
+    },
+    "new_table_row_counts": {
+      "attendance_weekly": 0,
+      "career_preferences_v2": 0,
+      "placement": 0,
+      "student_learning_activity": 0,
+      "student_lifestyle_survey": 0,
+      "student_skill_profile": 0
+    },
+    "new_tables_all_exist": true,
+    "new_tables_empty": true,
+    "new_tables_exist": {
+      "attendance_weekly": true,
+      "career_preferences_v2": true,
+      "placement": true,
+      "student_learning_activity": true,
+      "student_lifestyle_survey": true,
+      "student_skill_profile": true
+    },
+    "pass": true,
+    "placement_policies_count": 2,
+    "placement_policies_expected": 2,
+    "post_ddl_fingerprint": {
+      "attendance": {
+        "count": 3850,
+        "hash": "67bec73079a139fdb25e57ff33beb0e5"
+      },
+      "career_preferences": {
+        "count": 80,
+        "hash_projected_to_pre_ddl_columns": "ceaace3257948a434e1b30d2935b70d2"
+      },
+      "departments": {
+        "count": 2,
+        "hash_projected_to_pre_ddl_columns": "b25b0ee814cf9a6f8e63340a7137fe6e"
+      },
+      "faculty": {
+        "count": 25,
+        "hash_projected_to_pre_ddl_columns": "123b3bd3a5771cced29a527c5f480485"
+      },
+      "faculty_student_map": {
+        "count": 80,
+        "hash_projected_to_pre_ddl_columns": "78f8f26fd58549648139c6cdeb70c67d"
+      },
+      "lifestyle_survey": {
+        "count": 80,
+        "hash": "1a426b311ebcc794117c64e2553dd2c3"
+      },
+      "student_semester_summary": {
+        "count": 500,
+        "hash_projected_to_pre_ddl_columns": "aae98d694541525b40895a60ae00be78"
+      },
+      "student_subject_enrollment": {
+        "count": 3850,
+        "hash_projected_to_pre_ddl_columns": "cbe73a82763647fbfa87197de2dda927"
+      },
+      "student_subject_performance": {
+        "count": 3850,
+        "hash_projected_to_pre_ddl_columns": "2f4a2efa254fc243f66f5a091b87bcc0"
+      },
+      "students": {
+        "count": 80,
+        "hash_projected_to_pre_ddl_columns": "4cd71b6ea47fcc64197eed17a8ea1414"
+      },
+      "subjects": {
+        "count": 99,
+        "hash_projected_to_pre_ddl_columns": "81e43928424beea82c8b38563c67c2ab"
+      }
+    },
+    "rls_all_enabled": true,
+    "rls_enabled": {
+      "attendance_weekly": true,
+      "career_preferences": true,
+      "career_preferences_v2": true,
+      "placement": true,
+      "student_learning_activity": true,
+      "student_lifestyle_survey": true,
+      "student_skill_profile": true
+    },
+    "trigger_exists": true,
+    "trigger_matches_migration18": true
+  },
+  "statement_count": 69,
+  "statements": [
+    "-- ---------------------------------------------------------------------------",
+    "-- ---------------------------------------------------------------------------",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_attendance_weekly_grain",
+    "CREATE INDEX IF NOT EXISTS idx_att_weekly_student_subj_week",
+    "-- Behavioural / engagement events (OULAD-inspired, reference-only).",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_learning_activity_grain",
+    "CREATE INDEX IF NOT EXISTS idx_learning_activity_student_subj_week",
+    "-- Skill evidence per (student, skill, semester).",
+    "CREATE INDEX IF NOT EXISTS idx_skill_profile_student_sem",
+    "CREATE INDEX IF NOT EXISTS idx_skill_profile_domain",
+    "-- Placement outcomes (analytics-only; NEVER a feature for M1/M2/M3).",
+    "CREATE INDEX IF NOT EXISTS idx_placement_status ON placement (placement_status);",
+    "-- Per-semester lifestyle survey for the 1,200 cohort (existing lifestyle_survey",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_student_lifestyle_grain",
+    "-- Career preferences for the 1,200 cohort (ARCHITECTURE B \u2014 dedicated v2 table)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_career_pref_v2_student",
+    "CREATE INDEX IF NOT EXISTS idx_career_pref_v2_domain",
+    "-- ---------------------------------------------------------------------------",
+    "ALTER TABLE students ADD COLUMN IF NOT EXISTS cohort_id VARCHAR;",
+    "ALTER TABLE students ADD COLUMN IF NOT EXISTS source_dataset VARCHAR;",
+    "ALTER TABLE students ADD COLUMN IF NOT EXISTS generation_version VARCHAR;",
+    "ALTER TABLE students ADD COLUMN IF NOT EXISTS dataset_version VARCHAR;",
+    "-- student_subject_enrollment",
+    "ALTER TABLE student_subject_enrollment ADD COLUMN IF NOT EXISTS subject_domain V",
+    "ALTER TABLE student_subject_enrollment ADD COLUMN IF NOT EXISTS subject_skill VA",
+    "-- student_subject_performance: new pre-end-sem / behaviour / domain columns",
+    "ALTER TABLE student_subject_performance ADD COLUMN IF NOT EXISTS assignment_scor",
+    "ALTER TABLE student_subject_performance ADD COLUMN IF NOT EXISTS quiz_avg_marks ",
+    "ALTER TABLE student_subject_performance ADD COLUMN IF NOT EXISTS submission_dela",
+    "ALTER TABLE student_subject_performance ADD COLUMN IF NOT EXISTS pre_endsem_asse",
+    "ALTER TABLE student_subject_performance ADD COLUMN IF NOT EXISTS subject_domain ",
+    "ALTER TABLE student_subject_performance ADD COLUMN IF NOT EXISTS subject_skill V",
+    "-- NOTE (marks convention): the new CSV's internal/mid_sem/end_sem are decimals",
+    "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS previous_sem_sgpa ",
+    "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS sgpa_drift NUMERIC",
+    "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS sgpa_rolling_mean_",
+    "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS previous_sem_backl",
+    "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS backlog_change INT",
+    "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS cumulative_backlog",
+    "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS backlog_trajectory",
+    "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS attendance_aggrega",
+    "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS is_m1_deployment_b",
+    "ALTER TABLE student_semester_summary ADD COLUMN IF NOT EXISTS target_available_i",
+    "-- career_preferences: intentionally NOT extended (ARCHITECTURE B \u2014 see the new",
+    "ALTER TABLE faculty_student_map ADD COLUMN IF NOT EXISTS semester_no INTEGER;",
+    "ALTER TABLE faculty_student_map ADD COLUMN IF NOT EXISTS mapping_type VARCHAR;",
+    "ALTER TABLE faculty_student_map ADD COLUMN IF NOT EXISTS is_active BOOLEAN;",
+    "-- ---------------------------------------------------------------------------",
+    "CREATE INDEX IF NOT EXISTS idx_students_admission_year ON students (admission_ye",
+    "CREATE INDEX IF NOT EXISTS idx_enrollment_student ON student_subject_enrollment ",
+    "CREATE INDEX IF NOT EXISTS idx_enrollment_subject ON student_subject_enrollment ",
+    "CREATE INDEX IF NOT EXISTS idx_enrollment_faculty ON student_subject_enrollment ",
+    "CREATE INDEX IF NOT EXISTS idx_enrollment_academic_year ON student_subject_enrol",
+    "CREATE INDEX IF NOT EXISTS idx_performance_student ON student_subject_performanc",
+    "CREATE INDEX IF NOT EXISTS idx_performance_subject_sem ON student_subject_perfor",
+    "CREATE INDEX IF NOT EXISTS idx_sem_summary_student ON student_semester_summary (",
+    "CREATE INDEX IF NOT EXISTS idx_sem_summary_academic_year ON student_semester_sum",
+    "-- ---------------------------------------------------------------------------",
+    "CREATE OR REPLACE FUNCTION public.app_user_id() RETURNS TEXT LANGUAGE SQL STABLE",
+    "CREATE OR REPLACE FUNCTION public.app_student_id() RETURNS TEXT LANGUAGE SQL STA",
+    "CREATE OR REPLACE FUNCTION public.app_faculty_id() RETURNS TEXT LANGUAGE SQL STA",
+    "-- Enable RLS on every new and newly-exposed table.",
+    "ALTER TABLE student_learning_activity ENABLE ROW LEVEL SECURITY;",
+    "ALTER TABLE student_skill_profile  ENABLE ROW LEVEL SECURITY;",
+    "ALTER TABLE placement              ENABLE ROW LEVEL SECURITY;",
+    "ALTER TABLE student_lifestyle_survey ENABLE ROW LEVEL SECURITY;",
+    "ALTER TABLE career_preferences     ENABLE ROW LEVEL SECURITY;",
+    "ALTER TABLE career_preferences_v2  ENABLE ROW LEVEL SECURITY;",
+    "-- Policy template per role. Example for placement (analytics-only):"
+  ]
+}

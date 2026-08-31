@@ -1,0 +1,1793 @@
+{
+  "columns": {
+    "attendance_weekly": [
+      {
+        "column": "attendance_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "student_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "enrollment_record_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "subject_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "semester_no",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "week_number",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "classes_held",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "classes_attended",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "attendance_percentage",
+        "type": "numeric",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "attendance_velocity",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "attendance_rolling_2w",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "attendance_rolling_4w",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "attendance_baseline",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "attendance_change_from_baseline",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "low_attendance_flag",
+        "type": "boolean",
+        "nullable": true,
+        "default": "false"
+      }
+    ],
+    "career_preferences_v2": [
+      {
+        "column": "career_preference_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "student_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "primary_interest_domain",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "secondary_interest_domain",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "preferred_role",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "higher_studies_intent",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "preferred_work_mode",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "desired_salary_lpa",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "career_role_category",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "career_preference_version",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "required_skills_for_preferred_role",
+        "type": "text",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "role_skill_profile_version",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "career_preference_source",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      }
+    ],
+    "faculty_student_map": [
+      {
+        "column": "faculty_student_map_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "faculty_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "student_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "enrollment_no",
+        "type": "bigint",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "department",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "mentor_role",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "allocation_reason",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "mentor_since",
+        "type": "date",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "status",
+        "type": "character varying",
+        "nullable": false,
+        "default": "'Active'::character varying"
+      },
+      {
+        "column": "mapping_id",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "semester_no",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "mapping_type",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "is_active",
+        "type": "boolean",
+        "nullable": true,
+        "default": null
+      }
+    ],
+    "placement": [
+      {
+        "column": "placement_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "student_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "placement_status",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "package_lpa",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "package_tier",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "placement_domain",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "placement_date",
+        "type": "date",
+        "nullable": true,
+        "default": null
+      }
+    ],
+    "student_learning_activity": [
+      {
+        "column": "learning_activity_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "student_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "enrollment_record_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "subject_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "semester_no",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "week_number",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "active_days",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "learning_sessions",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "resource_views",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "assessment_attempts",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "submission_count",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "late_submission_count",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "avg_submission_delay_days",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "activity_trend",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "activity_volume",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "activity_velocity",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "activity_change_pct",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "inactive_week_flag",
+        "type": "boolean",
+        "nullable": true,
+        "default": "false"
+      },
+      {
+        "column": "engagement_consistency",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "late_submission_rate",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "assessment_completion_rate",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "activity_mapping_note",
+        "type": "text",
+        "nullable": true,
+        "default": null
+      }
+    ],
+    "student_lifestyle_survey": [
+      {
+        "column": "survey_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "student_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "semester_no",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "sleep_hours_per_day",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "commute_time_mins",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "study_hours_per_week",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "mental_stress_level",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "extracurricular_hours_per_week",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      }
+    ],
+    "student_semester_summary": [
+      {
+        "column": "semester_summary_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "student_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "enrollment_no",
+        "type": "bigint",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "semester_no",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "academic_year",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "subjects_registered",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "credits_registered",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "credits_earned",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "semester_total_marks",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "semester_percentage",
+        "type": "numeric",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "semester_sgpa",
+        "type": "numeric",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "semester_grade",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "semester_attendance_percentage",
+        "type": "numeric",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "backlog_count",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "semester_result",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "academic_standing",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "division",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "previous_sem_sgpa",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "sgpa_drift",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "sgpa_rolling_mean_3",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "previous_sem_backlog_count",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "backlog_change",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "cumulative_backlog_events",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "backlog_trajectory",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "attendance_aggregate_pct",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "is_m1_deployment_boundary",
+        "type": "boolean",
+        "nullable": true,
+        "default": "false"
+      },
+      {
+        "column": "target_available_if_completed",
+        "type": "boolean",
+        "nullable": true,
+        "default": "false"
+      }
+    ],
+    "student_skill_profile": [
+      {
+        "column": "student_skill_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "student_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "skill_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "skill_name",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "proficiency_level",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "evidence_type",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "evidence_score",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "semester_no",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "skill_domain",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "normalized_proficiency_pct",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "skill_evidence_quality",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      }
+    ],
+    "student_subject_enrollment": [
+      {
+        "column": "enrollment_record_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "student_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "enrollment_no",
+        "type": "bigint",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "department_code",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "department_name",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "semester_no",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "academic_year",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "subject_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "subject_code",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "subject_name",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "credits",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "subject_type",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "faculty_id",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "enrollment_date",
+        "type": "date",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "enrollment_status",
+        "type": "character varying",
+        "nullable": false,
+        "default": "'Active'::character varying"
+      },
+      {
+        "column": "division",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "subject_domain",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "subject_skill",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      }
+    ],
+    "student_subject_performance": [
+      {
+        "column": "performance_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "enrollment_record_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "enrollment_no",
+        "type": "bigint",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "student_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "subject_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "semester_no",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "internal_marks",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "mid_sem_marks",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "end_sem_marks",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "total_marks",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "percentage",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "grade",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "grade_point",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "result_status",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "attempt_number",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "performance_category",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "remarks",
+        "type": "text",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "ct1_marks",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "ct2_marks",
+        "type": "integer",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "updated_at",
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "updated_by",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "division",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "assignment_score",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "quiz_avg_marks",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "submission_delay_days",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "pre_endsem_assessment_pct",
+        "type": "numeric",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "subject_domain",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "subject_skill",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      }
+    ],
+    "students": [
+      {
+        "column": "student_id",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "enrollment_no",
+        "type": "bigint",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "university_roll_no",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "first_name",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "last_name",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "gender",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "date_of_birth",
+        "type": "date",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "blood_group",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "category",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "admission_year",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "admission_date",
+        "type": "date",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "admission_type",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "admission_quota",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "department_code",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "department_name",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "current_semester",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "current_academic_year",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "domicile_state",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "city",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "guardian_name",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "guardian_phone",
+        "type": "bigint",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "email",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "student_phone_number",
+        "type": "bigint",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "student_status",
+        "type": "character varying",
+        "nullable": false,
+        "default": "'Active'::character varying"
+      },
+      {
+        "column": "created_at",
+        "type": "timestamp without time zone",
+        "nullable": false,
+        "default": "now()"
+      },
+      {
+        "column": "updated_at",
+        "type": "timestamp without time zone",
+        "nullable": false,
+        "default": "now()"
+      },
+      {
+        "column": "full_name",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "latest_sgpa",
+        "type": "numeric",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "overall_cgpa",
+        "type": "numeric",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "overall_percentage",
+        "type": "numeric",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "overall_attendance_percentage",
+        "type": "numeric",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "total_credits_registered",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "total_credits_earned",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "total_backlogs",
+        "type": "integer",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "academic_standing",
+        "type": "character varying",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "column": "division",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "cohort_id",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "source_dataset",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "generation_version",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      },
+      {
+        "column": "dataset_version",
+        "type": "character varying",
+        "nullable": true,
+        "default": null
+      }
+    ]
+  },
+  "unique_constraints": [
+    {
+      "table": "attendance_weekly",
+      "name": "attendance_weekly_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "attendance_id"
+      ]
+    },
+    {
+      "table": "career_preferences_v2",
+      "name": "career_preferences_v2_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "career_preference_id"
+      ]
+    },
+    {
+      "table": "faculty_student_map",
+      "name": "faculty_student_map_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "faculty_student_map_id"
+      ]
+    },
+    {
+      "table": "faculty_student_map",
+      "name": "uq_fac_stu_map",
+      "type": "UNIQUE",
+      "columns": [
+        "faculty_id",
+        "student_id"
+      ]
+    },
+    {
+      "table": "placement",
+      "name": "placement_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "placement_id"
+      ]
+    },
+    {
+      "table": "placement",
+      "name": "placement_student_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "student_id"
+      ]
+    },
+    {
+      "table": "student_learning_activity",
+      "name": "student_learning_activity_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "learning_activity_id"
+      ]
+    },
+    {
+      "table": "student_lifestyle_survey",
+      "name": "student_lifestyle_survey_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "survey_id"
+      ]
+    },
+    {
+      "table": "student_semester_summary",
+      "name": "student_semester_summary_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "semester_summary_id"
+      ]
+    },
+    {
+      "table": "student_semester_summary",
+      "name": "uq_sem_summary",
+      "type": "UNIQUE",
+      "columns": [
+        "student_id",
+        "semester_no",
+        "academic_year"
+      ]
+    },
+    {
+      "table": "student_skill_profile",
+      "name": "student_skill_profile_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "student_skill_id"
+      ]
+    },
+    {
+      "table": "student_subject_enrollment",
+      "name": "student_subject_enrollment_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "enrollment_record_id"
+      ]
+    },
+    {
+      "table": "student_subject_enrollment",
+      "name": "uq_enrollment",
+      "type": "UNIQUE",
+      "columns": [
+        "student_id",
+        "subject_id",
+        "academic_year"
+      ]
+    },
+    {
+      "table": "student_subject_performance",
+      "name": "student_subject_performance_enrollment_record_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "enrollment_record_id"
+      ]
+    },
+    {
+      "table": "student_subject_performance",
+      "name": "student_subject_performance_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "performance_id"
+      ]
+    },
+    {
+      "table": "students",
+      "name": "students_email_key",
+      "type": "UNIQUE",
+      "columns": [
+        "email"
+      ]
+    },
+    {
+      "table": "students",
+      "name": "students_enrollment_no_key",
+      "type": "UNIQUE",
+      "columns": [
+        "enrollment_no"
+      ]
+    },
+    {
+      "table": "students",
+      "name": "students_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "student_id"
+      ]
+    },
+    {
+      "table": "students",
+      "name": "students_university_roll_no_key",
+      "type": "UNIQUE",
+      "columns": [
+        "university_roll_no"
+      ]
+    }
+  ],
+  "foreign_keys": [
+    {
+      "table": "attendance_weekly",
+      "column": "enrollment_record_id",
+      "references": "student_subject_enrollment"
+    },
+    {
+      "table": "attendance_weekly",
+      "column": "student_id",
+      "references": "students"
+    },
+    {
+      "table": "attendance_weekly",
+      "column": "subject_id",
+      "references": "subjects"
+    },
+    {
+      "table": "career_preferences_v2",
+      "column": "student_id",
+      "references": "students"
+    },
+    {
+      "table": "faculty_student_map",
+      "column": "faculty_id",
+      "references": "faculty"
+    },
+    {
+      "table": "faculty_student_map",
+      "column": "student_id",
+      "references": "students"
+    },
+    {
+      "table": "placement",
+      "column": "student_id",
+      "references": "students"
+    },
+    {
+      "table": "student_learning_activity",
+      "column": "enrollment_record_id",
+      "references": "student_subject_enrollment"
+    },
+    {
+      "table": "student_learning_activity",
+      "column": "student_id",
+      "references": "students"
+    },
+    {
+      "table": "student_learning_activity",
+      "column": "subject_id",
+      "references": "subjects"
+    },
+    {
+      "table": "student_lifestyle_survey",
+      "column": "student_id",
+      "references": "students"
+    },
+    {
+      "table": "student_semester_summary",
+      "column": "student_id",
+      "references": "students"
+    },
+    {
+      "table": "student_skill_profile",
+      "column": "student_id",
+      "references": "students"
+    },
+    {
+      "table": "student_subject_enrollment",
+      "column": "department_code",
+      "references": "departments"
+    },
+    {
+      "table": "student_subject_enrollment",
+      "column": "faculty_id",
+      "references": "faculty"
+    },
+    {
+      "table": "student_subject_enrollment",
+      "column": "student_id",
+      "references": "students"
+    },
+    {
+      "table": "student_subject_enrollment",
+      "column": "subject_id",
+      "references": "subjects"
+    },
+    {
+      "table": "student_subject_performance",
+      "column": "enrollment_record_id",
+      "references": "student_subject_enrollment"
+    },
+    {
+      "table": "student_subject_performance",
+      "column": "student_id",
+      "references": "students"
+    },
+    {
+      "table": "student_subject_performance",
+      "column": "subject_id",
+      "references": "subjects"
+    },
+    {
+      "table": "students",
+      "column": "department_code",
+      "references": "departments"
+    }
+  ],
+  "indexes": [
+    {
+      "table": "attendance_weekly",
+      "name": "attendance_weekly_pkey",
+      "def": "CREATE UNIQUE INDEX attendance_weekly_pkey ON public.attendance_weekly USING btree (attendance_id)"
+    },
+    {
+      "table": "attendance_weekly",
+      "name": "idx_att_weekly_student_subj_week",
+      "def": "CREATE INDEX idx_att_weekly_student_subj_week ON public.attendance_weekly USING btree (student_id, subject_id, semester_no, week_number)"
+    },
+    {
+      "table": "attendance_weekly",
+      "name": "uq_attendance_weekly_grain",
+      "def": "CREATE UNIQUE INDEX uq_attendance_weekly_grain ON public.attendance_weekly USING btree (enrollment_record_id, week_number)"
+    },
+    {
+      "table": "career_preferences_v2",
+      "name": "career_preferences_v2_pkey",
+      "def": "CREATE UNIQUE INDEX career_preferences_v2_pkey ON public.career_preferences_v2 USING btree (career_preference_id)"
+    },
+    {
+      "table": "career_preferences_v2",
+      "name": "idx_career_pref_v2_domain",
+      "def": "CREATE INDEX idx_career_pref_v2_domain ON public.career_preferences_v2 USING btree (primary_interest_domain)"
+    },
+    {
+      "table": "career_preferences_v2",
+      "name": "uq_career_pref_v2_student",
+      "def": "CREATE UNIQUE INDEX uq_career_pref_v2_student ON public.career_preferences_v2 USING btree (student_id)"
+    },
+    {
+      "table": "faculty_student_map",
+      "name": "faculty_student_map_pkey",
+      "def": "CREATE UNIQUE INDEX faculty_student_map_pkey ON public.faculty_student_map USING btree (faculty_student_map_id)"
+    },
+    {
+      "table": "faculty_student_map",
+      "name": "idx_fac_stu_map_faculty",
+      "def": "CREATE INDEX idx_fac_stu_map_faculty ON public.faculty_student_map USING btree (faculty_id)"
+    },
+    {
+      "table": "faculty_student_map",
+      "name": "idx_fac_stu_map_student",
+      "def": "CREATE INDEX idx_fac_stu_map_student ON public.faculty_student_map USING btree (student_id)"
+    },
+    {
+      "table": "faculty_student_map",
+      "name": "uq_fac_stu_map",
+      "def": "CREATE UNIQUE INDEX uq_fac_stu_map ON public.faculty_student_map USING btree (faculty_id, student_id)"
+    },
+    {
+      "table": "placement",
+      "name": "idx_placement_status",
+      "def": "CREATE INDEX idx_placement_status ON public.placement USING btree (placement_status)"
+    },
+    {
+      "table": "placement",
+      "name": "placement_pkey",
+      "def": "CREATE UNIQUE INDEX placement_pkey ON public.placement USING btree (placement_id)"
+    },
+    {
+      "table": "placement",
+      "name": "placement_student_id_key",
+      "def": "CREATE UNIQUE INDEX placement_student_id_key ON public.placement USING btree (student_id)"
+    },
+    {
+      "table": "student_learning_activity",
+      "name": "idx_learning_activity_student_subj_week",
+      "def": "CREATE INDEX idx_learning_activity_student_subj_week ON public.student_learning_activity USING btree (student_id, subject_id, semester_no, week_number)"
+    },
+    {
+      "table": "student_learning_activity",
+      "name": "student_learning_activity_pkey",
+      "def": "CREATE UNIQUE INDEX student_learning_activity_pkey ON public.student_learning_activity USING btree (learning_activity_id)"
+    },
+    {
+      "table": "student_learning_activity",
+      "name": "uq_learning_activity_grain",
+      "def": "CREATE UNIQUE INDEX uq_learning_activity_grain ON public.student_learning_activity USING btree (enrollment_record_id, week_number)"
+    },
+    {
+      "table": "student_lifestyle_survey",
+      "name": "student_lifestyle_survey_pkey",
+      "def": "CREATE UNIQUE INDEX student_lifestyle_survey_pkey ON public.student_lifestyle_survey USING btree (survey_id)"
+    },
+    {
+      "table": "student_lifestyle_survey",
+      "name": "uq_student_lifestyle_grain",
+      "def": "CREATE UNIQUE INDEX uq_student_lifestyle_grain ON public.student_lifestyle_survey USING btree (student_id, semester_no)"
+    },
+    {
+      "table": "student_semester_summary",
+      "name": "idx_sem_summary_academic_year",
+      "def": "CREATE INDEX idx_sem_summary_academic_year ON public.student_semester_summary USING btree (academic_year)"
+    },
+    {
+      "table": "student_semester_summary",
+      "name": "idx_sem_summary_sem",
+      "def": "CREATE INDEX idx_sem_summary_sem ON public.student_semester_summary USING btree (semester_no)"
+    },
+    {
+      "table": "student_semester_summary",
+      "name": "idx_sem_summary_student",
+      "def": "CREATE INDEX idx_sem_summary_student ON public.student_semester_summary USING btree (student_id)"
+    },
+    {
+      "table": "student_semester_summary",
+      "name": "idx_sem_summary_year",
+      "def": "CREATE INDEX idx_sem_summary_year ON public.student_semester_summary USING btree (academic_year)"
+    },
+    {
+      "table": "student_semester_summary",
+      "name": "student_semester_summary_pkey",
+      "def": "CREATE UNIQUE INDEX student_semester_summary_pkey ON public.student_semester_summary USING btree (semester_summary_id)"
+    },
+    {
+      "table": "student_semester_summary",
+      "name": "uq_sem_summary",
+      "def": "CREATE UNIQUE INDEX uq_sem_summary ON public.student_semester_summary USING btree (student_id, semester_no, academic_year)"
+    },
+    {
+      "table": "student_skill_profile",
+      "name": "idx_skill_profile_domain",
+      "def": "CREATE INDEX idx_skill_profile_domain ON public.student_skill_profile USING btree (skill_domain)"
+    },
+    {
+      "table": "student_skill_profile",
+      "name": "idx_skill_profile_student_sem",
+      "def": "CREATE INDEX idx_skill_profile_student_sem ON public.student_skill_profile USING btree (student_id, semester_no)"
+    },
+    {
+      "table": "student_skill_profile",
+      "name": "student_skill_profile_pkey",
+      "def": "CREATE UNIQUE INDEX student_skill_profile_pkey ON public.student_skill_profile USING btree (student_skill_id)"
+    },
+    {
+      "table": "student_subject_enrollment",
+      "name": "idx_enrollment_academic_year",
+      "def": "CREATE INDEX idx_enrollment_academic_year ON public.student_subject_enrollment USING btree (academic_year)"
+    },
+    {
+      "table": "student_subject_enrollment",
+      "name": "idx_enrollment_faculty",
+      "def": "CREATE INDEX idx_enrollment_faculty ON public.student_subject_enrollment USING btree (faculty_id)"
+    },
+    {
+      "table": "student_subject_enrollment",
+      "name": "idx_enrollment_student",
+      "def": "CREATE INDEX idx_enrollment_student ON public.student_subject_enrollment USING btree (student_id)"
+    },
+    {
+      "table": "student_subject_enrollment",
+      "name": "idx_enrollment_subject",
+      "def": "CREATE INDEX idx_enrollment_subject ON public.student_subject_enrollment USING btree (subject_id)"
+    },
+    {
+      "table": "student_subject_enrollment",
+      "name": "idx_enrollment_year",
+      "def": "CREATE INDEX idx_enrollment_year ON public.student_subject_enrollment USING btree (academic_year)"
+    },
+    {
+      "table": "student_subject_enrollment",
+      "name": "student_subject_enrollment_pkey",
+      "def": "CREATE UNIQUE INDEX student_subject_enrollment_pkey ON public.student_subject_enrollment USING btree (enrollment_record_id)"
+    },
+    {
+      "table": "student_subject_enrollment",
+      "name": "uq_enrollment",
+      "def": "CREATE UNIQUE INDEX uq_enrollment ON public.student_subject_enrollment USING btree (student_id, subject_id, academic_year)"
+    },
+    {
+      "table": "student_subject_performance",
+      "name": "idx_performance_status",
+      "def": "CREATE INDEX idx_performance_status ON public.student_subject_performance USING btree (result_status)"
+    },
+    {
+      "table": "student_subject_performance",
+      "name": "idx_performance_student",
+      "def": "CREATE INDEX idx_performance_student ON public.student_subject_performance USING btree (student_id)"
+    },
+    {
+      "table": "student_subject_performance",
+      "name": "idx_performance_subject",
+      "def": "CREATE INDEX idx_performance_subject ON public.student_subject_performance USING btree (subject_id)"
+    },
+    {
+      "table": "student_subject_performance",
+      "name": "idx_performance_subject_sem",
+      "def": "CREATE INDEX idx_performance_subject_sem ON public.student_subject_performance USING btree (subject_id, semester_no)"
+    },
+    {
+      "table": "student_subject_performance",
+      "name": "student_subject_performance_enrollment_record_id_key",
+      "def": "CREATE UNIQUE INDEX student_subject_performance_enrollment_record_id_key ON public.student_subject_performance USING btree (enrollment_record_id)"
+    },
+    {
+      "table": "student_subject_performance",
+      "name": "student_subject_performance_pkey",
+      "def": "CREATE UNIQUE INDEX student_subject_performance_pkey ON public.student_subject_performance USING btree (performance_id)"
+    },
+    {
+      "table": "students",
+      "name": "idx_students_admission_year",
+      "def": "CREATE INDEX idx_students_admission_year ON public.students USING btree (admission_year)"
+    },
+    {
+      "table": "students",
+      "name": "idx_students_department",
+      "def": "CREATE INDEX idx_students_department ON public.students USING btree (department_code)"
+    },
+    {
+      "table": "students",
+      "name": "idx_students_dept",
+      "def": "CREATE INDEX idx_students_dept ON public.students USING btree (department_code)"
+    },
+    {
+      "table": "students",
+      "name": "idx_students_email",
+      "def": "CREATE INDEX idx_students_email ON public.students USING btree (email)"
+    },
+    {
+      "table": "students",
+      "name": "idx_students_enrollment_no",
+      "def": "CREATE INDEX idx_students_enrollment_no ON public.students USING btree (enrollment_no)"
+    },
+    {
+      "table": "students",
+      "name": "idx_students_roll_no",
+      "def": "CREATE INDEX idx_students_roll_no ON public.students USING btree (university_roll_no)"
+    },
+    {
+      "table": "students",
+      "name": "students_email_key",
+      "def": "CREATE UNIQUE INDEX students_email_key ON public.students USING btree (email)"
+    },
+    {
+      "table": "students",
+      "name": "students_enrollment_no_key",
+      "def": "CREATE UNIQUE INDEX students_enrollment_no_key ON public.students USING btree (enrollment_no)"
+    },
+    {
+      "table": "students",
+      "name": "students_pkey",
+      "def": "CREATE UNIQUE INDEX students_pkey ON public.students USING btree (student_id)"
+    },
+    {
+      "table": "students",
+      "name": "students_university_roll_no_key",
+      "def": "CREATE UNIQUE INDEX students_university_roll_no_key ON public.students USING btree (university_roll_no)"
+    }
+  ],
+  "live_counts": {
+    "students": 80,
+    "faculty_student_map": 80,
+    "lifestyle_survey": 80,
+    "student_semester_summary": 500,
+    "student_subject_enrollment": 3850,
+    "student_subject_performance": 3850
+  },
+  "existing_stu6a_students": 0,
+  "existing_stu6a_enrollment": 0,
+  "existing_stu6a_performance": 0,
+  "new_table_counts": {
+    "attendance_weekly": {
+      "total": 0,
+      "stu6a": 0
+    },
+    "student_learning_activity": {
+      "total": 0,
+      "stu6a": 0
+    },
+    "student_skill_profile": {
+      "total": 0,
+      "stu6a": 0
+    },
+    "student_lifestyle_survey": {
+      "total": 0,
+      "stu6a": 0
+    },
+    "placement": {
+      "total": 0,
+      "stu6a": 0
+    },
+    "career_preferences_v2": {
+      "total": 0,
+      "stu6a": 0
+    }
+  }
+}

@@ -197,6 +197,123 @@ class TestAttendanceValidation(unittest.TestCase):
         outcome = validate_att([attendance_row(student_id="STU000051")], ref=synthetic_timetable_ref())
         self.assertEqual(outcome.rule_counts.get("invalid_student_id"), 1)
 
+    def test_v1_scope_rejects_second_cohort_ids_by_default(self):
+        outcome = validate_att(
+            [attendance_row(student_id="STU6A0001", enrollment_no="2021010001")],
+            ref=synthetic_timetable_ref(),
+        )
+        self.assertEqual(outcome.rule_counts.get("invalid_student_id"), 1)
+
+    def test_v1_scope_rejects_second_cohort_enrollment_by_default(self):
+        outcome = validate_att(
+            [attendance_row(enrollment_no="2021010001")],
+            ref=synthetic_timetable_ref(),
+        )
+        self.assertEqual(outcome.rule_counts.get("invalid_enrollment_no"), 1)
+
+    def test_cohort_aware_scope_accepts_both_namespaces(self):
+        scope = Scope(
+            department_code="1", semester_no="7", academic_year="2026-2027",
+            student_id_pattern=r"^STU\d{6}$", subject_id_pattern=r"^SUB\d{4}$",
+            faculty_id_pattern=r"^FAC\d{3}$", enrollment_no_pattern=r"^2023\d{6}$",
+            student_id_min="STU000001", student_id_max="STU000050",
+            student_id_namespaces_extra=(
+                (r"^STU6A\d{4}$", "STU6A0001", "STU6A1200"),
+            ),
+            enrollment_no_namespaces_extra=(
+                (r"^2021\d{6}$", "", ""),
+            ),
+        )
+        v1 = validate_att([attendance_row()], ref=synthetic_timetable_ref(), scope=scope)
+        self.assertEqual(len(v1.quarantined), 0)
+        six_a = validate_att(
+            [
+                attendance_row(
+                    student_id="STU6A0088", enrollment_no="2021020088",
+                    subject_id="SUB0050",
+                )
+            ],
+            ref=synthetic_timetable_ref(),
+            scope=scope,
+        )
+        self.assertEqual(len(six_a.quarantined), 0)
+        self.assertEqual(len(six_a.accepted), 1)
+
+    def test_cohort_aware_scope_still_enforces_extra_range(self):
+        scope = Scope(
+            department_code="1", semester_no="7", academic_year="2026-2027",
+            student_id_pattern=r"^STU\d{6}$", subject_id_pattern=r"^SUB\d{4}$",
+            faculty_id_pattern=r"^FAC\d{3}$", enrollment_no_pattern=r"^2023\d{6}$",
+            student_id_min="STU000001", student_id_max="STU000050",
+            student_id_namespaces_extra=(
+                (r"^STU6A\d{4}$", "STU6A0001", "STU6A1200"),
+            ),
+            enrollment_no_namespaces_extra=(
+                (r"^2021\d{6}$", "", ""),
+            ),
+        )
+        outcome = validate_att(
+            [
+                attendance_row(
+                    student_id="STU6A9999", enrollment_no="2021020088",
+                    subject_id="SUB0050",
+                )
+            ],
+            ref=synthetic_timetable_ref(),
+            scope=scope,
+        )
+        self.assertEqual(outcome.rule_counts.get("invalid_student_id"), 1)
+
+    def test_cohort_aware_scope_mixed_rows(self):
+        scope = Scope(
+            department_code="1", semester_no="7", academic_year="2026-2027",
+            student_id_pattern=r"^STU\d{6}$", subject_id_pattern=r"^SUB\d{4}$",
+            faculty_id_pattern=r"^FAC\d{3}$", enrollment_no_pattern=r"^2023\d{6}$",
+            student_id_min="STU000001", student_id_max="STU000060",
+            student_id_namespaces_extra=(
+                (r"^STU6A\d{4}$", "STU6A0001", "STU6A1200"),
+            ),
+            enrollment_no_namespaces_extra=(
+                (r"^2021\d{6}$", "", ""),
+            ),
+        )
+        rows = []
+        for i in range(1, 51):
+            rows.append(attendance_row(
+                attendance_id=str(i), student_id=f"STU{i:06d}",
+                enrollment_no=f"2023{i:06d}",
+            ))
+        rows.append(attendance_row(
+            attendance_id="100", student_id="STU6A0100",
+            enrollment_no="2021020100", subject_id="SUB0050",
+            lecture_date="2026-06-23", day_name="Tuesday",
+            lecture_number="1",
+        ))
+        outcome = validate_att(rows, ref=synthetic_timetable_ref(), scope=scope)
+        self.assertEqual(len(outcome.quarantined), 0)
+        self.assertEqual(len(outcome.accepted), 51)
+
+    def test_from_config_wires_extra_namespaces(self):
+        from etl.config import EtlConfig
+
+        cfg = EtlConfig(
+            _env_file=None,
+            ETL_STUDENT_ID_PATTERN=r"^STU\d{6}$",
+            ETL_STUDENT_ID_MIN="STU000001",
+            ETL_STUDENT_ID_MAX="STU000050",
+            ETL_ENROLLMENT_NO_PATTERN=r"^2023\d{6}$",
+            ETL_STUDENT_ID_NAMESPACES_EXTRA=[
+                r"^STU6A\d{4}$|STU6A0001|STU6A1200",
+            ],
+            ETL_ENROLLMENT_NO_PATTERNS_EXTRA=[r"^2021\d{6}$"],
+        )
+        scope = Scope.from_config(cfg)
+        self.assertEqual(
+            scope.student_id_namespaces_extra,
+            ((r"^STU6A\d{4}$", "STU6A0001", "STU6A1200"),),
+        )
+        self.assertEqual(scope.enrollment_no_namespaces_extra, ((r"^2021\d{6}$", "", ""),))
+
     def test_invalid_subject_id(self):
         outcome = validate_att([attendance_row(subject_id="SUB0099")], ref=synthetic_timetable_ref())
         self.assertEqual(outcome.rule_counts.get("invalid_subject_id"), 1)

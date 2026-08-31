@@ -390,19 +390,25 @@ async def get_student_feedback_context(
 async def get_my_subjects(
     semester: Optional[str] = Query(None),
     academic_year: Optional[str] = Query(None),
+    batch: Optional[str] = Query(None, description="Student admission batch, e.g. 2021-22"),
     search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
     sort: str = Query("name"),
     order: str = Query("asc", pattern="^(asc|desc)$"),
+    all_terms: bool = Query(False, description="Explicitly request all years/semesters (no current-term default)"),
     user: dict = Depends(require_faculty_role),
     service: FacultyService = Depends(get_faculty_service)
 ):
-    semester_no = int(semester) if semester and semester.strip() else None
-    year = academic_year if academic_year and academic_year.strip() else None
+    semester_no = int(semester) if semester and semester.strip() and semester.strip() != "all" else None
+    year = (
+        academic_year if academic_year and academic_year.strip() and academic_year.strip() != "all"
+        else None
+    )
+    batch_val = batch if batch and batch.strip() and batch.strip() != "all" else None
     return await service.get_subjects(
         _faculty_id_or_error(user),
-        semester_no, year, search, page, page_size, sort, order,
+        semester_no, year, search, page, page_size, sort, order, all_terms, batch_val,
     )
 
 @router.get("/subjects/{subject_id}/history", response_model=FacultySubjectHistory)

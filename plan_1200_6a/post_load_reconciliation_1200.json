@@ -1,0 +1,318 @@
+{
+  "checks": {
+    "boundary_markers_semantics": {
+      "detail": {
+        "boundary_true_rows": 1200,
+        "boundary_wrong_semester": 0,
+        "target_not_available_rows": 0
+      },
+      "pass": true
+    },
+    "counts_exact_per_table": {
+      "detail": {
+        "attendance_weekly": {
+          "expected": 547200,
+          "prefix_rows": 547200
+        },
+        "career_preferences_v2": {
+          "expected": 1200,
+          "prefix_rows": 1200
+        },
+        "faculty_student_map": {
+          "expected": 1200,
+          "prefix_rows": 1200
+        },
+        "placement": {
+          "expected": 1200,
+          "prefix_rows": 1200
+        },
+        "student_learning_activity": {
+          "expected": 547200,
+          "prefix_rows": 547200
+        },
+        "student_lifestyle_survey": {
+          "expected": 9600,
+          "prefix_rows": 9600
+        },
+        "student_semester_summary": {
+          "expected": 9600,
+          "prefix_rows": 9600
+        },
+        "student_skill_profile": {
+          "expected": 19200,
+          "prefix_rows": 19200
+        },
+        "student_subject_enrollment": {
+          "expected": 68400,
+          "prefix_rows": 68400
+        },
+        "student_subject_performance": {
+          "expected": 68400,
+          "prefix_rows": 68400
+        },
+        "students": {
+          "expected": 1200,
+          "prefix_rows": 1200
+        }
+      },
+      "pass": true
+    },
+    "dup_attendance_grains": {
+      "detail": 0,
+      "pass": true
+    },
+    "dup_career": {
+      "detail": 0,
+      "pass": true
+    },
+    "dup_enrollment_grains": {
+      "detail": 0,
+      "pass": true
+    },
+    "dup_fsm": {
+      "detail": 0,
+      "pass": true
+    },
+    "dup_learning_grains": {
+      "detail": 0,
+      "pass": true
+    },
+    "dup_lifestyle_grains": {
+      "detail": 0,
+      "pass": true
+    },
+    "dup_performance": {
+      "detail": 0,
+      "pass": true
+    },
+    "dup_placement": {
+      "detail": 0,
+      "pass": true
+    },
+    "dup_skill": {
+      "detail": 0,
+      "pass": true
+    },
+    "dup_students": {
+      "detail": 0,
+      "pass": true
+    },
+    "dup_summary_grains": {
+      "detail": 0,
+      "pass": true
+    },
+    "fk_attendance_enrollment_ok": {
+      "detail": 0,
+      "pass": true
+    },
+    "fk_career_students_ok": {
+      "detail": 0,
+      "pass": true
+    },
+    "fk_fsm_students_ok": {
+      "detail": 0,
+      "pass": true
+    },
+    "fk_learning_enrollment_ok": {
+      "detail": 0,
+      "pass": true
+    },
+    "fk_performance_enrollment_ok": {
+      "detail": 0,
+      "pass": true
+    },
+    "fk_placement_students_ok": {
+      "detail": 0,
+      "pass": true
+    },
+    "fk_summary_students_ok": {
+      "detail": 0,
+      "pass": true
+    },
+    "lifestyle_stress_distribution_exact": {
+      "detail": {
+        "actual": {
+          "High": 2863,
+          "Low": 2181,
+          "Medium": 4556
+        },
+        "expected": {
+          "High": 2863,
+          "Low": 2181,
+          "Medium": 4556
+        }
+      },
+      "pass": true
+    },
+    "lifestyle_stress_enum_valid": {
+      "detail": {
+        "High": 2863,
+        "Low": 2181,
+        "Medium": 4556
+      },
+      "pass": true
+    },
+    "lifestyle_stress_no_nulls": {
+      "detail": 0,
+      "pass": true
+    },
+    "m1_m2_m3_no_leakage_static": {
+      "detail": {},
+      "pass": true
+    },
+    "masters_and_80cohort_unchanged": {
+      "detail": {
+        "legacy_80cohort_all_match": true,
+        "legacy_fingerprint_match": {
+          "attendance": true,
+          "career_preferences": true,
+          "departments": true,
+          "faculty": true,
+          "faculty_student_map": true,
+          "lifestyle_survey": true,
+          "student_semester_summary": true,
+          "student_subject_enrollment": true,
+          "student_subject_performance": true,
+          "students": true,
+          "subjects": true
+        },
+        "legacy_fingerprint_now": {
+          "attendance": {
+            "count": 3850,
+            "hash": "67bec73079a139fdb25e57ff33beb0e5"
+          },
+          "career_preferences": {
+            "count": 80,
+            "hash_projected_to_pre_ddl_columns": "ceaace3257948a434e1b30d2935b70d2"
+          },
+          "departments": {
+            "count": 2,
+            "hash_projected_to_pre_ddl_columns": "b25b0ee814cf9a6f8e63340a7137fe6e"
+          },
+          "faculty": {
+            "count": 25,
+            "hash_projected_to_pre_ddl_columns": "123b3bd3a5771cced29a527c5f480485"
+          },
+          "faculty_student_map": {
+            "baseline_count": 80,
+            "hash_projected_to_pre_ddl_columns_legacy": "78f8f26fd58549648139c6cdeb70c67d",
+            "legacy_count": 80,
+            "scope": "legacy_rows_excluding_6a"
+          },
+          "lifestyle_survey": {
+            "count": 80,
+            "hash": "1a426b311ebcc794117c64e2553dd2c3"
+          },
+          "student_semester_summary": {
+            "baseline_count": 500,
+            "hash_projected_to_pre_ddl_columns_legacy": "aae98d694541525b40895a60ae00be78",
+            "legacy_count": 500,
+            "scope": "legacy_rows_excluding_6a"
+          },
+          "student_subject_enrollment": {
+            "baseline_count": 3850,
+            "hash_projected_to_pre_ddl_columns_legacy": "cbe73a82763647fbfa87197de2dda927",
+            "legacy_count": 3850,
+            "scope": "legacy_rows_excluding_6a"
+          },
+          "student_subject_performance": {
+            "baseline_count": 3850,
+            "hash_projected_to_pre_ddl_columns_legacy": "2f4a2efa254fc243f66f5a091b87bcc0",
+            "legacy_count": 3850,
+            "scope": "legacy_rows_excluding_6a"
+          },
+          "students": {
+            "baseline_count": 80,
+            "hash_projected_to_pre_ddl_columns_legacy": "4cd71b6ea47fcc64197eed17a8ea1414",
+            "legacy_count": 80,
+            "scope": "legacy_rows_excluding_6a"
+          },
+          "subjects": {
+            "count": 99,
+            "hash_projected_to_pre_ddl_columns": "81e43928424beea82c8b38563c67c2ab"
+          }
+        },
+        "master_hashes_now": {
+          "departments": "b25b0ee814cf9a6f8e63340a7137fe6e",
+          "faculty": "123b3bd3a5771cced29a527c5f480485",
+          "subjects": "81e43928424beea82c8b38563c67c2ab"
+        },
+        "masters_baseline": {
+          "departments": "b25b0ee814cf9a6f8e63340a7137fe6e",
+          "faculty": "123b3bd3a5771cced29a527c5f480485",
+          "subjects": "81e43928424beea82c8b38563c67c2ab"
+        },
+        "masters_match": true
+      },
+      "pass": true
+    },
+    "performance_derived_marks_constraint": {
+      "detail": 0,
+      "pass": true
+    },
+    "performance_trigger_parity": {
+      "detail": {
+        "mismatched_fields": {},
+        "rows": 68400
+      },
+      "pass": true
+    },
+    "rls_intact": {
+      "detail": {
+        "helper_functions": {
+          "baseline": 4,
+          "now": 4
+        },
+        "note": "RLS stays enabled for all six target tables; tables with zero policies are deny-by-default by design (unchanged from pre-load). role postgres owns the tables; rolbypassrls=true lets the loader bypass RLS while application roles keep RLS enforcement",
+        "placement_policies": {
+          "baseline": 2,
+          "now": 2
+        },
+        "rls_enabled": true,
+        "rls_now": {
+          "attendance_weekly": {
+            "policies": 0,
+            "relrowsecurity": true
+          },
+          "career_preferences_v2": {
+            "policies": 0,
+            "relrowsecurity": true
+          },
+          "placement": {
+            "policies": 2,
+            "relrowsecurity": true
+          },
+          "student_learning_activity": {
+            "policies": 0,
+            "relrowsecurity": true
+          },
+          "student_lifestyle_survey": {
+            "policies": 0,
+            "relrowsecurity": true
+          },
+          "student_skill_profile": {
+            "policies": 0,
+            "relrowsecurity": true
+          }
+        },
+        "role": {
+          "rolbypassrls": true,
+          "rolname": "postgres",
+          "rolsuper": false
+        }
+      },
+      "pass": true
+    },
+    "students_STU6A0001_1200_all_present": {
+      "detail": {
+        "expected": 1200,
+        "found": 1200
+      },
+      "pass": true
+    }
+  },
+  "checks_passed": 29,
+  "checks_total": 29,
+  "failed_checks": [],
+  "pass": true
+}

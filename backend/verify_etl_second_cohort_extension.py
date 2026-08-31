@@ -34,11 +34,7 @@ from etl.second_cohort import (  # noqa: E402
     validate_second_cohort_payload,
 )
 
-DB_HOST = "aws-1-ap-south-1.pooler.supabase.com"
-DB_PORT = 6543
-DB_NAME = "postgres"
-DB_USER = "postgres.rtaqkxqdejelxsamnesm"
-DB_PASSWORD = "KenexAI@*195"
+from db_env import db_config  # noqa: E402
 
 ARTIFACTS = {
     "m1": ("m1_subject_endmarks.joblib", "3404d29e"),
@@ -73,9 +69,10 @@ async def fetch_fetchval(pool, sql):
 async def main():
     import asyncpg
 
+    db = db_config()
     pool = await asyncpg.create_pool(
-        host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER,
-        password=DB_PASSWORD, ssl="require", min_size=1, max_size=2,
+        host=db.host, port=db.port, database=db.name, user=db.user,
+        password=db.password, ssl="require", min_size=1, max_size=2,
         statement_cache_size=0,
     )
 

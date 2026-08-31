@@ -1,0 +1,2932 @@
+{
+  "b1b5_live_check": {
+    "all_values_in_live_checks": true,
+    "note": "Verification = mapped value literal must appear in the live CHECK definition for its column (constraints read live via pg_constraint).",
+    "per_column": [
+      {
+        "column": "faculty_student_map.mentor_role",
+        "live_check_definitions": [
+          "CHECK (((mentor_role)::text = ANY ((ARRAY['Academic Mentor'::character varying, 'Faculty Advisor'::character varying, 'Placement Mentor'::character varying])::\u2026"
+        ],
+        "mapped_values_in_live_check": {
+          "Academic Mentor": true,
+          "Faculty Advisor": true,
+          "Placement Mentor": true
+        },
+        "ok": true
+      },
+      {
+        "column": "faculty_student_map.status",
+        "live_check_definitions": [
+          "CHECK (((status)::text = ANY ((ARRAY['Active'::character varying, 'Inactive'::character varying])::text[])))"
+        ],
+        "mapped_values_in_live_check": {
+          "Active": true,
+          "Inactive": true
+        },
+        "ok": true
+      },
+      {
+        "column": "student_semester_summary.academic_standing",
+        "live_check_definitions": [
+          "CHECK (((academic_standing)::text = ANY ((ARRAY['Outstanding'::character varying, 'Excellent'::character varying, 'Good'::character varying, 'Average'::charact\u2026"
+        ],
+        "mapped_values_in_live_check": {
+          "Average": true,
+          "Excellent": true,
+          "Good": true,
+          "Needs Improvement": true,
+          "Outstanding": true
+        },
+        "ok": true
+      },
+      {
+        "column": "student_subject_performance.grade",
+        "live_check_definitions": [
+          "CHECK (((grade)::text = ANY ((ARRAY['O'::character varying, 'A+'::character varying, 'A'::character varying, 'B+'::character varying, 'B'::character varying, '\u2026"
+        ],
+        "mapped_values_in_live_check": {
+          "A": true,
+          "A+": true,
+          "B": true,
+          "B+": true,
+          "C": true,
+          "F": true,
+          "O": true
+        },
+        "ok": true
+      },
+      {
+        "column": "student_subject_performance.performance_category",
+        "live_check_definitions": [
+          "CHECK (((performance_category)::text = ANY ((ARRAY['Top'::character varying, 'Above Average'::character varying, 'Average'::character varying, 'Below Average':\u2026"
+        ],
+        "mapped_values_in_live_check": {
+          "Above Average": true,
+          "Average": true,
+          "Below Average": true,
+          "Low Performer": true,
+          "Top": true
+        },
+        "ok": true
+      },
+      {
+        "column": "student_subject_performance.result_status",
+        "live_check_definitions": [
+          "CHECK (((result_status)::text = ANY ((ARRAY['Pass'::character varying, 'Fail'::character varying])::text[])))"
+        ],
+        "mapped_values_in_live_check": {
+          "Fail": true,
+          "Pass": true
+        },
+        "ok": true
+      },
+      {
+        "column": "students.academic_standing",
+        "live_check_definitions": [
+          "CHECK (((academic_standing)::text = ANY ((ARRAY['Outstanding'::character varying, 'Excellent'::character varying, 'Good'::character varying, 'Average'::charact\u2026"
+        ],
+        "mapped_values_in_live_check": {
+          "Average": true,
+          "Excellent": true,
+          "Good": true,
+          "Needs Improvement": true,
+          "Outstanding": true
+        },
+        "ok": true
+      },
+      {
+        "column": "students.admission_quota",
+        "live_check_definitions": [
+          "CHECK (((admission_quota)::text = ANY ((ARRAY['ACPC'::character varying, 'Management'::character varying, 'TFW'::character varying])::text[])))"
+        ],
+        "mapped_values_in_live_check": {
+          "ACPC": true,
+          "Management": true,
+          "TFW": true
+        },
+        "ok": true
+      }
+    ]
+  },
+  "constraint_summary": {
+    "career_preferences": {
+      "columns": [
+        {
+          "column_default": null,
+          "column_name": "career_preference_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "student_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "enrollment_no",
+          "data_type": "bigint",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "preferred_domain",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "dream_job_role",
+          "data_type": "character varying",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "preferred_industry",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "preferred_work_mode",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "target_package_lpa",
+          "data_type": "numeric",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "higher_studies_interest",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "entrepreneurship_interest",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "certification_interest",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "internship_completed",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "placement_readiness_level",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "survey_date",
+          "data_type": "date",
+          "is_nullable": "NO"
+        }
+      ]
+    },
+    "departments": {
+      "columns": [
+        {
+          "column_default": null,
+          "column_name": "dept_code",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "department_name",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "department_short_name",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "degree",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "total_semesters",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": "'Active'::character varying",
+          "column_name": "status",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        }
+      ]
+    },
+    "faculty": {
+      "columns": [
+        {
+          "column_default": null,
+          "column_name": "faculty_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "faculty_code",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "full_name",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "gender",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "department_code",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "department_name",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "designation",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "qualification",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "specialization",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "experience_years",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "email",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "phone_number",
+          "data_type": "bigint",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "joining_date",
+          "data_type": "date",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "employment_type",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": "'Active'::character varying",
+          "column_name": "status",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        }
+      ]
+    },
+    "faculty_student_map": {
+      "columns": [
+        {
+          "column_default": null,
+          "column_name": "faculty_student_map_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "faculty_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "student_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "enrollment_no",
+          "data_type": "bigint",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "department",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "mentor_role",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "allocation_reason",
+          "data_type": "character varying",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "mentor_since",
+          "data_type": "date",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": "'Active'::character varying",
+          "column_name": "status",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        }
+      ]
+    },
+    "student_semester_summary": {
+      "columns": [
+        {
+          "column_default": null,
+          "column_name": "semester_summary_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "student_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "enrollment_no",
+          "data_type": "bigint",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "semester_no",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "academic_year",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "subjects_registered",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "credits_registered",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "credits_earned",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "semester_total_marks",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "semester_percentage",
+          "data_type": "numeric",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "semester_sgpa",
+          "data_type": "numeric",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "semester_grade",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "semester_attendance_percentage",
+          "data_type": "numeric",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "backlog_count",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "semester_result",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "academic_standing",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        }
+      ]
+    },
+    "student_subject_enrollment": {
+      "columns": [
+        {
+          "column_default": null,
+          "column_name": "enrollment_record_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "student_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "enrollment_no",
+          "data_type": "bigint",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "department_code",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "department_name",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "semester_no",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "academic_year",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "subject_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "subject_code",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "subject_name",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "credits",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "subject_type",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "faculty_id",
+          "data_type": "character varying",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "enrollment_date",
+          "data_type": "date",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": "'Active'::character varying",
+          "column_name": "enrollment_status",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        }
+      ]
+    },
+    "student_subject_performance": {
+      "columns": [
+        {
+          "column_default": null,
+          "column_name": "performance_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "enrollment_record_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "enrollment_no",
+          "data_type": "bigint",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "student_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "subject_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "semester_no",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "internal_marks",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "mid_sem_marks",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "end_sem_marks",
+          "data_type": "integer",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "total_marks",
+          "data_type": "integer",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "percentage",
+          "data_type": "numeric",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "grade",
+          "data_type": "character varying",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "grade_point",
+          "data_type": "integer",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "result_status",
+          "data_type": "character varying",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "attempt_number",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "performance_category",
+          "data_type": "character varying",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "remarks",
+          "data_type": "text",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "ct1_marks",
+          "data_type": "integer",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "ct2_marks",
+          "data_type": "integer",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "updated_by",
+          "data_type": "character varying",
+          "is_nullable": "YES"
+        }
+      ]
+    },
+    "students": {
+      "columns": [
+        {
+          "column_default": null,
+          "column_name": "student_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "enrollment_no",
+          "data_type": "bigint",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "university_roll_no",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "first_name",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "last_name",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "gender",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "date_of_birth",
+          "data_type": "date",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "blood_group",
+          "data_type": "character varying",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "category",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "admission_year",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "admission_date",
+          "data_type": "date",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "admission_type",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "admission_quota",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "department_code",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "department_name",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "current_semester",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "current_academic_year",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "domicile_state",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "city",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "guardian_name",
+          "data_type": "character varying",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "guardian_phone",
+          "data_type": "bigint",
+          "is_nullable": "YES"
+        },
+        {
+          "column_default": null,
+          "column_name": "email",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "student_phone_number",
+          "data_type": "bigint",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": "'Active'::character varying",
+          "column_name": "student_status",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "created_at",
+          "data_type": "timestamp without time zone",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "updated_at",
+          "data_type": "timestamp without time zone",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "full_name",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "latest_sgpa",
+          "data_type": "numeric",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "overall_cgpa",
+          "data_type": "numeric",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "overall_percentage",
+          "data_type": "numeric",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "overall_attendance_percentage",
+          "data_type": "numeric",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "total_credits_registered",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "total_credits_earned",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "total_backlogs",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "academic_standing",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        }
+      ]
+    },
+    "subjects": {
+      "columns": [
+        {
+          "column_default": null,
+          "column_name": "subject_id",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "subject_code",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "subject_name",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "department_code",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "department_name",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "semester_no",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "credits",
+          "data_type": "integer",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "subject_type",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": null,
+          "column_name": "assessment_type",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        },
+        {
+          "column_default": "'Active'::character varying",
+          "column_name": "status",
+          "data_type": "character varying",
+          "is_nullable": "NO"
+        }
+      ]
+    }
+  },
+  "constraints": [
+    {
+      "conname": "career_preferences_entrepreneurship_interest_check",
+      "contype": "c",
+      "def": "CHECK (((entrepreneurship_interest)::text = ANY ((ARRAY['Yes'::character varying, 'No'::character varying])::text[])))",
+      "rel": "career_preferences"
+    },
+    {
+      "conname": "career_preferences_higher_studies_interest_check",
+      "contype": "c",
+      "def": "CHECK (((higher_studies_interest)::text = ANY ((ARRAY['Yes'::character varying, 'No'::character varying])::text[])))",
+      "rel": "career_preferences"
+    },
+    {
+      "conname": "career_preferences_internship_completed_check",
+      "contype": "c",
+      "def": "CHECK (((internship_completed)::text = ANY ((ARRAY['Yes'::character varying, 'No'::character varying])::text[])))",
+      "rel": "career_preferences"
+    },
+    {
+      "conname": "career_preferences_placement_readiness_level_check",
+      "contype": "c",
+      "def": "CHECK (((placement_readiness_level)::text = ANY ((ARRAY['Low'::character varying, 'Medium'::character varying, 'High'::character varying])::text[])))",
+      "rel": "career_preferences"
+    },
+    {
+      "conname": "career_preferences_preferred_work_mode_check",
+      "contype": "c",
+      "def": "CHECK (((preferred_work_mode)::text = ANY ((ARRAY['Remote'::character varying, 'Hybrid'::character varying, 'Onsite'::character varying])::text[])))",
+      "rel": "career_preferences"
+    },
+    {
+      "conname": "career_preferences_target_package_lpa_check",
+      "contype": "c",
+      "def": "CHECK ((target_package_lpa >= (0)::numeric))",
+      "rel": "career_preferences"
+    },
+    {
+      "conname": "career_preferences_student_id_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (student_id) REFERENCES students(student_id)",
+      "rel": "career_preferences"
+    },
+    {
+      "conname": "career_preferences_pkey",
+      "contype": "p",
+      "def": "PRIMARY KEY (career_preference_id)",
+      "rel": "career_preferences"
+    },
+    {
+      "conname": "career_preferences_student_id_key",
+      "contype": "u",
+      "def": "UNIQUE (student_id)",
+      "rel": "career_preferences"
+    },
+    {
+      "conname": "departments_degree_check",
+      "contype": "c",
+      "def": "CHECK (((degree)::text = ANY ((ARRAY['B.Tech'::character varying, 'BBA'::character varying])::text[])))",
+      "rel": "departments"
+    },
+    {
+      "conname": "departments_status_check",
+      "contype": "c",
+      "def": "CHECK (((status)::text = ANY ((ARRAY['Active'::character varying, 'Inactive'::character varying])::text[])))",
+      "rel": "departments"
+    },
+    {
+      "conname": "departments_total_semesters_check",
+      "contype": "c",
+      "def": "CHECK ((total_semesters > 0))",
+      "rel": "departments"
+    },
+    {
+      "conname": "departments_pkey",
+      "contype": "p",
+      "def": "PRIMARY KEY (dept_code)",
+      "rel": "departments"
+    },
+    {
+      "conname": "departments_department_name_key",
+      "contype": "u",
+      "def": "UNIQUE (department_name)",
+      "rel": "departments"
+    },
+    {
+      "conname": "departments_department_short_name_key",
+      "contype": "u",
+      "def": "UNIQUE (department_short_name)",
+      "rel": "departments"
+    },
+    {
+      "conname": "faculty_designation_check",
+      "contype": "c",
+      "def": "CHECK (((designation)::text = 'Assistant Professor'::text))",
+      "rel": "faculty"
+    },
+    {
+      "conname": "faculty_employment_type_check",
+      "contype": "c",
+      "def": "CHECK (((employment_type)::text = 'Full Time'::text))",
+      "rel": "faculty"
+    },
+    {
+      "conname": "faculty_experience_years_check",
+      "contype": "c",
+      "def": "CHECK ((experience_years >= 0))",
+      "rel": "faculty"
+    },
+    {
+      "conname": "faculty_gender_check",
+      "contype": "c",
+      "def": "CHECK (((gender)::text = ANY ((ARRAY['Male'::character varying, 'Female'::character varying])::text[])))",
+      "rel": "faculty"
+    },
+    {
+      "conname": "faculty_status_check",
+      "contype": "c",
+      "def": "CHECK (((status)::text = ANY ((ARRAY['Active'::character varying, 'Inactive'::character varying])::text[])))",
+      "rel": "faculty"
+    },
+    {
+      "conname": "faculty_department_code_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (department_code) REFERENCES departments(dept_code)",
+      "rel": "faculty"
+    },
+    {
+      "conname": "faculty_pkey",
+      "contype": "p",
+      "def": "PRIMARY KEY (faculty_id)",
+      "rel": "faculty"
+    },
+    {
+      "conname": "faculty_email_key",
+      "contype": "u",
+      "def": "UNIQUE (email)",
+      "rel": "faculty"
+    },
+    {
+      "conname": "faculty_faculty_code_key",
+      "contype": "u",
+      "def": "UNIQUE (faculty_code)",
+      "rel": "faculty"
+    },
+    {
+      "conname": "faculty_student_map_allocation_reason_check",
+      "contype": "c",
+      "def": "CHECK (((allocation_reason)::text = ANY ((ARRAY['Academic Excellence'::character varying, 'Career Planning'::character varying, 'High Academic Risk'::character varying])::text[])))",
+      "rel": "faculty_student_map"
+    },
+    {
+      "conname": "faculty_student_map_mentor_role_check",
+      "contype": "c",
+      "def": "CHECK (((mentor_role)::text = ANY ((ARRAY['Academic Mentor'::character varying, 'Faculty Advisor'::character varying, 'Placement Mentor'::character varying])::text[])))",
+      "rel": "faculty_student_map"
+    },
+    {
+      "conname": "faculty_student_map_status_check",
+      "contype": "c",
+      "def": "CHECK (((status)::text = ANY ((ARRAY['Active'::character varying, 'Inactive'::character varying])::text[])))",
+      "rel": "faculty_student_map"
+    },
+    {
+      "conname": "faculty_student_map_faculty_id_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (faculty_id) REFERENCES faculty(faculty_id)",
+      "rel": "faculty_student_map"
+    },
+    {
+      "conname": "faculty_student_map_student_id_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (student_id) REFERENCES students(student_id)",
+      "rel": "faculty_student_map"
+    },
+    {
+      "conname": "faculty_student_map_pkey",
+      "contype": "p",
+      "def": "PRIMARY KEY (faculty_student_map_id)",
+      "rel": "faculty_student_map"
+    },
+    {
+      "conname": "uq_fac_stu_map",
+      "contype": "u",
+      "def": "UNIQUE (faculty_id, student_id)",
+      "rel": "faculty_student_map"
+    },
+    {
+      "conname": "student_semester_summary_academic_standing_check",
+      "contype": "c",
+      "def": "CHECK (((academic_standing)::text = ANY ((ARRAY['Outstanding'::character varying, 'Excellent'::character varying, 'Good'::character varying, 'Average'::character varying, 'Needs Improvement'::character varying])::text[])))",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_backlog_count_check",
+      "contype": "c",
+      "def": "CHECK ((backlog_count >= 0))",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_credits_earned_check",
+      "contype": "c",
+      "def": "CHECK ((credits_earned >= 0))",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_credits_registered_check",
+      "contype": "c",
+      "def": "CHECK ((credits_registered >= 0))",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_semester_attendance_percentage_check",
+      "contype": "c",
+      "def": "CHECK (((semester_attendance_percentage >= (0)::numeric) AND (semester_attendance_percentage <= (100)::numeric)))",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_semester_grade_check",
+      "contype": "c",
+      "def": "CHECK (((semester_grade)::text = ANY ((ARRAY['O'::character varying, 'A+'::character varying, 'A'::character varying, 'B+'::character varying, 'B'::character varying, 'C'::character varying, 'F'::character varying])::text[])))",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_semester_no_check",
+      "contype": "c",
+      "def": "CHECK (((semester_no >= 1) AND (semester_no <= 8)))",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_semester_percentage_check",
+      "contype": "c",
+      "def": "CHECK (((semester_percentage >= (0)::numeric) AND (semester_percentage <= (100)::numeric)))",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_semester_result_check",
+      "contype": "c",
+      "def": "CHECK (((semester_result)::text = ANY ((ARRAY['PASS'::character varying, 'ATKT'::character varying])::text[])))",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_semester_sgpa_check",
+      "contype": "c",
+      "def": "CHECK (((semester_sgpa >= (0)::numeric) AND (semester_sgpa <= (10)::numeric)))",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_semester_total_marks_check",
+      "contype": "c",
+      "def": "CHECK ((semester_total_marks >= 0))",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_subjects_registered_check",
+      "contype": "c",
+      "def": "CHECK ((subjects_registered > 0))",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_student_id_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (student_id) REFERENCES students(student_id)",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_semester_summary_pkey",
+      "contype": "p",
+      "def": "PRIMARY KEY (semester_summary_id)",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "uq_sem_summary",
+      "contype": "u",
+      "def": "UNIQUE (student_id, semester_no, academic_year)",
+      "rel": "student_semester_summary"
+    },
+    {
+      "conname": "student_subject_enrollment_credits_check",
+      "contype": "c",
+      "def": "CHECK ((credits > 0))",
+      "rel": "student_subject_enrollment"
+    },
+    {
+      "conname": "student_subject_enrollment_enrollment_status_check",
+      "contype": "c",
+      "def": "CHECK (((enrollment_status)::text = ANY ((ARRAY['Active'::character varying, 'Dropped'::character varying])::text[])))",
+      "rel": "student_subject_enrollment"
+    },
+    {
+      "conname": "student_subject_enrollment_semester_no_check",
+      "contype": "c",
+      "def": "CHECK (((semester_no >= 1) AND (semester_no <= 8)))",
+      "rel": "student_subject_enrollment"
+    },
+    {
+      "conname": "student_subject_enrollment_subject_type_check",
+      "contype": "c",
+      "def": "CHECK (((subject_type)::text = ANY ((ARRAY['Theory'::character varying, 'Laboratory'::character varying, 'Project'::character varying, 'Internship'::character varying])::text[])))",
+      "rel": "student_subject_enrollment"
+    },
+    {
+      "conname": "student_subject_enrollment_department_code_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (department_code) REFERENCES departments(dept_code)",
+      "rel": "student_subject_enrollment"
+    },
+    {
+      "conname": "student_subject_enrollment_faculty_id_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (faculty_id) REFERENCES faculty(faculty_id)",
+      "rel": "student_subject_enrollment"
+    },
+    {
+      "conname": "student_subject_enrollment_student_id_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (student_id) REFERENCES students(student_id)",
+      "rel": "student_subject_enrollment"
+    },
+    {
+      "conname": "student_subject_enrollment_subject_id_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (subject_id) REFERENCES subjects(subject_id)",
+      "rel": "student_subject_enrollment"
+    },
+    {
+      "conname": "student_subject_enrollment_pkey",
+      "contype": "p",
+      "def": "PRIMARY KEY (enrollment_record_id)",
+      "rel": "student_subject_enrollment"
+    },
+    {
+      "conname": "uq_enrollment",
+      "contype": "u",
+      "def": "UNIQUE (student_id, subject_id, academic_year)",
+      "rel": "student_subject_enrollment"
+    },
+    {
+      "conname": "student_subject_performance_attempt_number_check",
+      "contype": "c",
+      "def": "CHECK ((attempt_number >= 1))",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_end_sem_marks_check",
+      "contype": "c",
+      "def": "CHECK (((end_sem_marks >= 0) AND (end_sem_marks <= 70)))",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_grade_check",
+      "contype": "c",
+      "def": "CHECK (((grade)::text = ANY ((ARRAY['O'::character varying, 'A+'::character varying, 'A'::character varying, 'B+'::character varying, 'B'::character varying, 'C'::character varying, 'F'::character varying])::text[])))",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_grade_point_check",
+      "contype": "c",
+      "def": "CHECK (((grade_point >= 0) AND (grade_point <= 10)))",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_internal_marks_check",
+      "contype": "c",
+      "def": "CHECK (((internal_marks >= 0) AND (internal_marks <= 20)))",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_mid_sem_marks_check",
+      "contype": "c",
+      "def": "CHECK (((mid_sem_marks >= 0) AND (mid_sem_marks <= 50)))",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_percentage_check",
+      "contype": "c",
+      "def": "CHECK (((percentage >= (0)::numeric) AND (percentage <= (100)::numeric)))",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_performance_category_check",
+      "contype": "c",
+      "def": "CHECK (((performance_category)::text = ANY ((ARRAY['Top'::character varying, 'Above Average'::character varying, 'Average'::character varying, 'Below Average'::character varying, 'Low Performer'::character varying])::text[])))",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_result_status_check",
+      "contype": "c",
+      "def": "CHECK (((result_status)::text = ANY ((ARRAY['Pass'::character varying, 'Fail'::character varying])::text[])))",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_semester_no_check",
+      "contype": "c",
+      "def": "CHECK (((semester_no >= 1) AND (semester_no <= 8)))",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_total_marks_check",
+      "contype": "c",
+      "def": "CHECK (((total_marks >= 0) AND (total_marks <= 140)))",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_enrollment_record_id_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (enrollment_record_id) REFERENCES student_subject_enrollment(enrollment_record_id)",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_student_id_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (student_id) REFERENCES students(student_id)",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_subject_id_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (subject_id) REFERENCES subjects(subject_id)",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_pkey",
+      "contype": "p",
+      "def": "PRIMARY KEY (performance_id)",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "student_subject_performance_enrollment_record_id_key",
+      "contype": "u",
+      "def": "UNIQUE (enrollment_record_id)",
+      "rel": "student_subject_performance"
+    },
+    {
+      "conname": "students_academic_standing_check",
+      "contype": "c",
+      "def": "CHECK (((academic_standing)::text = ANY ((ARRAY['Outstanding'::character varying, 'Excellent'::character varying, 'Good'::character varying, 'Average'::character varying, 'Needs Improvement'::character varying])::text[])))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_admission_quota_check",
+      "contype": "c",
+      "def": "CHECK (((admission_quota)::text = ANY ((ARRAY['ACPC'::character varying, 'Management'::character varying, 'TFW'::character varying])::text[])))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_admission_type_check",
+      "contype": "c",
+      "def": "CHECK (((admission_type)::text = 'Regular'::text))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_blood_group_check",
+      "contype": "c",
+      "def": "CHECK (((blood_group)::text = ANY ((ARRAY['A+'::character varying, 'A-'::character varying, 'B+'::character varying, 'B-'::character varying, 'AB+'::character varying, 'AB-'::character varying, 'O+'::character varying, 'O-'::character varying])::text[])))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_category_check",
+      "contype": "c",
+      "def": "CHECK (((category)::text = ANY ((ARRAY['General'::character varying, 'OBC'::character varying, 'SC'::character varying, 'ST'::character varying, 'EWS'::character varying])::text[])))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_current_semester_check",
+      "contype": "c",
+      "def": "CHECK (((current_semester >= 1) AND (current_semester <= 8)))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_gender_check",
+      "contype": "c",
+      "def": "CHECK (((gender)::text = ANY ((ARRAY['Male'::character varying, 'Female'::character varying])::text[])))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_latest_sgpa_check",
+      "contype": "c",
+      "def": "CHECK (((latest_sgpa >= (0)::numeric) AND (latest_sgpa <= (10)::numeric)))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_overall_attendance_percentage_check",
+      "contype": "c",
+      "def": "CHECK (((overall_attendance_percentage >= (0)::numeric) AND (overall_attendance_percentage <= (100)::numeric)))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_overall_cgpa_check",
+      "contype": "c",
+      "def": "CHECK (((overall_cgpa >= (0)::numeric) AND (overall_cgpa <= (10)::numeric)))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_overall_percentage_check",
+      "contype": "c",
+      "def": "CHECK (((overall_percentage >= (0)::numeric) AND (overall_percentage <= (100)::numeric)))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_student_status_check",
+      "contype": "c",
+      "def": "CHECK (((student_status)::text = ANY ((ARRAY['Active'::character varying, 'Graduated'::character varying])::text[])))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_total_backlogs_check",
+      "contype": "c",
+      "def": "CHECK ((total_backlogs >= 0))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_total_credits_earned_check",
+      "contype": "c",
+      "def": "CHECK ((total_credits_earned >= 0))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_total_credits_registered_check",
+      "contype": "c",
+      "def": "CHECK ((total_credits_registered >= 0))",
+      "rel": "students"
+    },
+    {
+      "conname": "students_department_code_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (department_code) REFERENCES departments(dept_code)",
+      "rel": "students"
+    },
+    {
+      "conname": "students_pkey",
+      "contype": "p",
+      "def": "PRIMARY KEY (student_id)",
+      "rel": "students"
+    },
+    {
+      "conname": "students_email_key",
+      "contype": "u",
+      "def": "UNIQUE (email)",
+      "rel": "students"
+    },
+    {
+      "conname": "students_enrollment_no_key",
+      "contype": "u",
+      "def": "UNIQUE (enrollment_no)",
+      "rel": "students"
+    },
+    {
+      "conname": "students_university_roll_no_key",
+      "contype": "u",
+      "def": "UNIQUE (university_roll_no)",
+      "rel": "students"
+    },
+    {
+      "conname": "subjects_assessment_type_check",
+      "contype": "c",
+      "def": "CHECK (((assessment_type)::text = ANY ((ARRAY['Regular'::character varying, 'Project'::character varying, 'Internship'::character varying])::text[])))",
+      "rel": "subjects"
+    },
+    {
+      "conname": "subjects_credits_check",
+      "contype": "c",
+      "def": "CHECK ((credits > 0))",
+      "rel": "subjects"
+    },
+    {
+      "conname": "subjects_semester_no_check",
+      "contype": "c",
+      "def": "CHECK (((semester_no >= 1) AND (semester_no <= 8)))",
+      "rel": "subjects"
+    },
+    {
+      "conname": "subjects_status_check",
+      "contype": "c",
+      "def": "CHECK (((status)::text = ANY ((ARRAY['Active'::character varying, 'Inactive'::character varying])::text[])))",
+      "rel": "subjects"
+    },
+    {
+      "conname": "subjects_subject_type_check",
+      "contype": "c",
+      "def": "CHECK (((subject_type)::text = ANY ((ARRAY['Theory'::character varying, 'Laboratory'::character varying, 'Project'::character varying, 'Internship'::character varying])::text[])))",
+      "rel": "subjects"
+    },
+    {
+      "conname": "subjects_department_code_fkey",
+      "contype": "f",
+      "def": "FOREIGN KEY (department_code) REFERENCES departments(dept_code)",
+      "rel": "subjects"
+    },
+    {
+      "conname": "subjects_pkey",
+      "contype": "p",
+      "def": "PRIMARY KEY (subject_id)",
+      "rel": "subjects"
+    },
+    {
+      "conname": "subjects_subject_code_key",
+      "contype": "u",
+      "def": "UNIQUE (subject_code)",
+      "rel": "subjects"
+    }
+  ],
+  "ddl_audit": {
+    "alter_add_columns": [
+      {
+        "column": "division",
+        "table": "students"
+      },
+      {
+        "column": "cohort_id",
+        "table": "students"
+      },
+      {
+        "column": "source_dataset",
+        "table": "students"
+      },
+      {
+        "column": "generation_version",
+        "table": "students"
+      },
+      {
+        "column": "dataset_version",
+        "table": "students"
+      },
+      {
+        "column": "division",
+        "table": "student_subject_enrollment"
+      },
+      {
+        "column": "subject_domain",
+        "table": "student_subject_enrollment"
+      },
+      {
+        "column": "subject_skill",
+        "table": "student_subject_enrollment"
+      },
+      {
+        "column": "division",
+        "table": "student_subject_performance"
+      },
+      {
+        "column": "assignment_score",
+        "table": "student_subject_performance"
+      },
+      {
+        "column": "quiz_avg_marks",
+        "table": "student_subject_performance"
+      },
+      {
+        "column": "submission_delay_days",
+        "table": "student_subject_performance"
+      },
+      {
+        "column": "pre_endsem_assessment_pct",
+        "table": "student_subject_performance"
+      },
+      {
+        "column": "subject_domain",
+        "table": "student_subject_performance"
+      },
+      {
+        "column": "subject_skill",
+        "table": "student_subject_performance"
+      },
+      {
+        "column": "division",
+        "table": "student_semester_summary"
+      },
+      {
+        "column": "previous_sem_sgpa",
+        "table": "student_semester_summary"
+      },
+      {
+        "column": "sgpa_drift",
+        "table": "student_semester_summary"
+      },
+      {
+        "column": "sgpa_rolling_mean_3",
+        "table": "student_semester_summary"
+      },
+      {
+        "column": "previous_sem_backlog_count",
+        "table": "student_semester_summary"
+      },
+      {
+        "column": "backlog_change",
+        "table": "student_semester_summary"
+      },
+      {
+        "column": "cumulative_backlog_events",
+        "table": "student_semester_summary"
+      },
+      {
+        "column": "backlog_trajectory",
+        "table": "student_semester_summary"
+      },
+      {
+        "column": "attendance_aggregate_pct",
+        "table": "student_semester_summary"
+      },
+      {
+        "column": "is_m1_deployment_boundary",
+        "table": "student_semester_summary"
+      },
+      {
+        "column": "target_available_if_completed",
+        "table": "student_semester_summary"
+      },
+      {
+        "column": "mapping_id",
+        "table": "faculty_student_map"
+      },
+      {
+        "column": "semester_no",
+        "table": "faculty_student_map"
+      },
+      {
+        "column": "mapping_type",
+        "table": "faculty_student_map"
+      },
+      {
+        "column": "is_active",
+        "table": "faculty_student_map"
+      }
+    ],
+    "create_tables": [
+      "attendance_weekly",
+      "student_learning_activity",
+      "student_skill_profile",
+      "placement",
+      "student_lifestyle_survey",
+      "career_preferences_v2"
+    ],
+    "fk_references": [
+      {
+        "column": "student_id",
+        "table": "students"
+      },
+      {
+        "column": "enrollment_record_id",
+        "table": "student_subject_enrollment"
+      },
+      {
+        "column": "subject_id",
+        "table": "subjects"
+      },
+      {
+        "column": "student_id",
+        "table": "students"
+      },
+      {
+        "column": "enrollment_record_id",
+        "table": "student_subject_enrollment"
+      },
+      {
+        "column": "subject_id",
+        "table": "subjects"
+      },
+      {
+        "column": "student_id",
+        "table": "students"
+      },
+      {
+        "column": "student_id",
+        "table": "students"
+      },
+      {
+        "column": "student_id",
+        "table": "students"
+      },
+      {
+        "column": "student_id",
+        "table": "students"
+      }
+    ],
+    "forbidden": {
+      "ALTER_COLUMN_TYPE": false,
+      "ALTER_TABLE_DROP": false,
+      "DELETE": false,
+      "DROP": false,
+      "ON_CONFLICT_DATA": false,
+      "TRUNCATE": false,
+      "UPDATE": false
+    },
+    "index_columns": [
+      {
+        "column": "enrollment_record_id",
+        "table": "attendance_weekly"
+      },
+      {
+        "column": "week_number",
+        "table": "attendance_weekly"
+      },
+      {
+        "column": "student_id",
+        "table": "attendance_weekly"
+      },
+      {
+        "column": "subject_id",
+        "table": "attendance_weekly"
+      },
+      {
+        "column": "semester_no",
+        "table": "attendance_weekly"
+      },
+      {
+        "column": "week_number",
+        "table": "attendance_weekly"
+      },
+      {
+        "column": "enrollment_record_id",
+        "table": "student_learning_activity"
+      },
+      {
+        "column": "week_number",
+        "table": "student_learning_activity"
+      },
+      {
+        "column": "student_id",
+        "table": "student_learning_activity"
+      },
+      {
+        "column": "subject_id",
+        "table": "student_learning_activity"
+      },
+      {
+        "column": "semester_no",
+        "table": "student_learning_activity"
+      },
+      {
+        "column": "week_number",
+        "table": "student_learning_activity"
+      },
+      {
+        "column": "student_id",
+        "table": "student_skill_profile"
+      },
+      {
+        "column": "semester_no",
+        "table": "student_skill_profile"
+      },
+      {
+        "column": "skill_domain",
+        "table": "student_skill_profile"
+      },
+      {
+        "column": "placement_status",
+        "table": "placement"
+      },
+      {
+        "column": "student_id",
+        "table": "student_lifestyle_survey"
+      },
+      {
+        "column": "semester_no",
+        "table": "student_lifestyle_survey"
+      },
+      {
+        "column": "student_id",
+        "table": "career_preferences_v2"
+      },
+      {
+        "column": "primary_interest_domain",
+        "table": "career_preferences_v2"
+      },
+      {
+        "column": "department_code",
+        "table": "students"
+      },
+      {
+        "column": "admission_year",
+        "table": "students"
+      },
+      {
+        "column": "student_id",
+        "table": "student_subject_enrollment"
+      },
+      {
+        "column": "subject_id",
+        "table": "student_subject_enrollment"
+      },
+      {
+        "column": "faculty_id",
+        "table": "student_subject_enrollment"
+      },
+      {
+        "column": "academic_year",
+        "table": "student_subject_enrollment"
+      },
+      {
+        "column": "student_id",
+        "table": "student_subject_performance"
+      },
+      {
+        "column": "subject_id",
+        "table": "student_subject_performance"
+      },
+      {
+        "column": "semester_no",
+        "table": "student_subject_performance"
+      },
+      {
+        "column": "student_id",
+        "table": "student_semester_summary"
+      },
+      {
+        "column": "academic_year",
+        "table": "student_semester_summary"
+      }
+    ],
+    "missing_columns_referenced": [],
+    "missing_tables_referenced": []
+  },
+  "ddl_non_destructive": {
+    "has_stu6a_guard": true,
+    "no_alter_column_type_outside_comment": true,
+    "no_alter_drop": true,
+    "no_delete": true,
+    "no_drop": true,
+    "no_truncate": true,
+    "no_update": true
+  },
+  "eighty_cohort": {
+    "stu6a_rows": 0,
+    "students_count": 80
+  },
+  "faculty": {
+    "live_count": 25,
+    "referenced_count": 15,
+    "referenced_set": [
+      "FAC001",
+      "FAC002",
+      "FAC003",
+      "FAC004",
+      "FAC005",
+      "FAC006",
+      "FAC007",
+      "FAC008",
+      "FAC009",
+      "FAC010",
+      "FAC011",
+      "FAC012",
+      "FAC013",
+      "FAC014",
+      "FAC015"
+    ],
+    "unresolved": []
+  },
+  "gates": [
+    {
+      "detail": {
+        "attendance_weekly": true,
+        "career_preferences_v2": true,
+        "placement": true,
+        "student_learning_activity": true,
+        "student_lifestyle_survey": true,
+        "student_skill_profile": true
+      },
+      "gate": "3_new_tables_absent",
+      "passed": true
+    },
+    {
+      "detail": {
+        "stu6a_rows": 0,
+        "students_count": 80
+      },
+      "gate": "4_eighty_students_untouched",
+      "passed": true
+    },
+    {
+      "detail": {
+        "csv_ids_not_in_live": [],
+        "csv_subject_count": 57,
+        "extra_live_ids": [
+          "SUB0058",
+          "SUB0059",
+          "SUB0060",
+          "SUB0061",
+          "SUB0062",
+          "SUB0063",
+          "SUB0064",
+          "SUB0065",
+          "SUB0066",
+          "SUB0067",
+          "SUB0068",
+          "SUB0069",
+          "SUB0070",
+          "SUB0071",
+          "SUB0072",
+          "SUB0073",
+          "SUB0074",
+          "SUB0075",
+          "SUB0076",
+          "SUB0077",
+          "SUB0078",
+          "SUB0079",
+          "SUB0080",
+          "SUB0081",
+          "SUB0082",
+          "SUB0083",
+          "SUB0084",
+          "SUB0085",
+          "SUB0086",
+          "SUB0087",
+          "SUB0088",
+          "SUB0089",
+          "SUB0090",
+          "SUB0091",
+          "SUB0092",
+          "SUB0093",
+          "SUB0094",
+          "SUB0095",
+          "SUB0096",
+          "SUB0097",
+          "SUB0098",
+          "SUB0099"
+        ],
+        "extra_live_rows_not_in_csv": 42,
+        "live_ids_superset_of_csv": true,
+        "live_subject_count": 99,
+        "missing_attr_mismatch_examples": [],
+        "note": "Live has 99 subjects = CSE SUB0001..SUB0057 (57, matching the CSV exactly) + 42 BBA extras (SUB0058..SUB0099) that this migration does not touch."
+      },
+      "gate": "5_subject_catalog_cse57_matches_live",
+      "passed": true
+    },
+    {
+      "detail": {
+        "live_faculty_count": 25,
+        "referenced_faculty_ids": 15,
+        "unresolved": []
+      },
+      "gate": "6_faculty_references_resolve",
+      "passed": true
+    },
+    {
+      "detail": {
+        "add_column_targets": [
+          {
+            "column": "division",
+            "table": "students"
+          },
+          {
+            "column": "cohort_id",
+            "table": "students"
+          },
+          {
+            "column": "source_dataset",
+            "table": "students"
+          },
+          {
+            "column": "generation_version",
+            "table": "students"
+          },
+          {
+            "column": "dataset_version",
+            "table": "students"
+          },
+          {
+            "column": "division",
+            "table": "student_subject_enrollment"
+          },
+          {
+            "column": "subject_domain",
+            "table": "student_subject_enrollment"
+          },
+          {
+            "column": "subject_skill",
+            "table": "student_subject_enrollment"
+          },
+          {
+            "column": "division",
+            "table": "student_subject_performance"
+          },
+          {
+            "column": "assignment_score",
+            "table": "student_subject_performance"
+          },
+          {
+            "column": "quiz_avg_marks",
+            "table": "student_subject_performance"
+          },
+          {
+            "column": "submission_delay_days",
+            "table": "student_subject_performance"
+          },
+          {
+            "column": "pre_endsem_assessment_pct",
+            "table": "student_subject_performance"
+          },
+          {
+            "column": "subject_domain",
+            "table": "student_subject_performance"
+          },
+          {
+            "column": "subject_skill",
+            "table": "student_subject_performance"
+          },
+          {
+            "column": "division",
+            "table": "student_semester_summary"
+          },
+          {
+            "column": "previous_sem_sgpa",
+            "table": "student_semester_summary"
+          },
+          {
+            "column": "sgpa_drift",
+            "table": "student_semester_summary"
+          },
+          {
+            "column": "sgpa_rolling_mean_3",
+            "table": "student_semester_summary"
+          },
+          {
+            "column": "previous_sem_backlog_count",
+            "table": "student_semester_summary"
+          },
+          {
+            "column": "backlog_change",
+            "table": "student_semester_summary"
+          },
+          {
+            "column": "cumulative_backlog_events",
+            "table": "student_semester_summary"
+          },
+          {
+            "column": "backlog_trajectory",
+            "table": "student_semester_summary"
+          },
+          {
+            "column": "attendance_aggregate_pct",
+            "table": "student_semester_summary"
+          },
+          {
+            "column": "is_m1_deployment_boundary",
+            "table": "student_semester_summary"
+          },
+          {
+            "column": "target_available_if_completed",
+            "table": "student_semester_summary"
+          },
+          {
+            "column": "mapping_id",
+            "table": "faculty_student_map"
+          },
+          {
+            "column": "semester_no",
+            "table": "faculty_student_map"
+          },
+          {
+            "column": "mapping_type",
+            "table": "faculty_student_map"
+          },
+          {
+            "column": "is_active",
+            "table": "faculty_student_map"
+          }
+        ],
+        "create_tables": [
+          "attendance_weekly",
+          "student_learning_activity",
+          "student_skill_profile",
+          "placement",
+          "student_lifestyle_survey",
+          "career_preferences_v2"
+        ],
+        "forbidden_statements": {
+          "ALTER_COLUMN_TYPE": false,
+          "ALTER_TABLE_DROP": false,
+          "DELETE": false,
+          "DROP": false,
+          "ON_CONFLICT_DATA": false,
+          "TRUNCATE": false,
+          "UPDATE": false
+        },
+        "missing_columns_referenced": [],
+        "missing_tables_referenced": []
+      },
+      "gate": "7_ddl_matches_live_schema_and_additive",
+      "passed": true
+    },
+    {
+      "detail": {
+        "all_values_in_live_checks": true,
+        "note": "Verification = mapped value literal must appear in the live CHECK definition for its column (constraints read live via pg_constraint).",
+        "per_column": [
+          {
+            "column": "faculty_student_map.mentor_role",
+            "live_check_definitions": [
+              "CHECK (((mentor_role)::text = ANY ((ARRAY['Academic Mentor'::character varying, 'Faculty Advisor'::character varying, 'Placement Mentor'::character varying])::\u2026"
+            ],
+            "mapped_values_in_live_check": {
+              "Academic Mentor": true,
+              "Faculty Advisor": true,
+              "Placement Mentor": true
+            },
+            "ok": true
+          },
+          {
+            "column": "faculty_student_map.status",
+            "live_check_definitions": [
+              "CHECK (((status)::text = ANY ((ARRAY['Active'::character varying, 'Inactive'::character varying])::text[])))"
+            ],
+            "mapped_values_in_live_check": {
+              "Active": true,
+              "Inactive": true
+            },
+            "ok": true
+          },
+          {
+            "column": "student_semester_summary.academic_standing",
+            "live_check_definitions": [
+              "CHECK (((academic_standing)::text = ANY ((ARRAY['Outstanding'::character varying, 'Excellent'::character varying, 'Good'::character varying, 'Average'::charact\u2026"
+            ],
+            "mapped_values_in_live_check": {
+              "Average": true,
+              "Excellent": true,
+              "Good": true,
+              "Needs Improvement": true,
+              "Outstanding": true
+            },
+            "ok": true
+          },
+          {
+            "column": "student_subject_performance.grade",
+            "live_check_definitions": [
+              "CHECK (((grade)::text = ANY ((ARRAY['O'::character varying, 'A+'::character varying, 'A'::character varying, 'B+'::character varying, 'B'::character varying, '\u2026"
+            ],
+            "mapped_values_in_live_check": {
+              "A": true,
+              "A+": true,
+              "B": true,
+              "B+": true,
+              "C": true,
+              "F": true,
+              "O": true
+            },
+            "ok": true
+          },
+          {
+            "column": "student_subject_performance.performance_category",
+            "live_check_definitions": [
+              "CHECK (((performance_category)::text = ANY ((ARRAY['Top'::character varying, 'Above Average'::character varying, 'Average'::character varying, 'Below Average':\u2026"
+            ],
+            "mapped_values_in_live_check": {
+              "Above Average": true,
+              "Average": true,
+              "Below Average": true,
+              "Low Performer": true,
+              "Top": true
+            },
+            "ok": true
+          },
+          {
+            "column": "student_subject_performance.result_status",
+            "live_check_definitions": [
+              "CHECK (((result_status)::text = ANY ((ARRAY['Pass'::character varying, 'Fail'::character varying])::text[])))"
+            ],
+            "mapped_values_in_live_check": {
+              "Fail": true,
+              "Pass": true
+            },
+            "ok": true
+          },
+          {
+            "column": "students.academic_standing",
+            "live_check_definitions": [
+              "CHECK (((academic_standing)::text = ANY ((ARRAY['Outstanding'::character varying, 'Excellent'::character varying, 'Good'::character varying, 'Average'::charact\u2026"
+            ],
+            "mapped_values_in_live_check": {
+              "Average": true,
+              "Excellent": true,
+              "Good": true,
+              "Needs Improvement": true,
+              "Outstanding": true
+            },
+            "ok": true
+          },
+          {
+            "column": "students.admission_quota",
+            "live_check_definitions": [
+              "CHECK (((admission_quota)::text = ANY ((ARRAY['ACPC'::character varying, 'Management'::character varying, 'TFW'::character varying])::text[])))"
+            ],
+            "mapped_values_in_live_check": {
+              "ACPC": true,
+              "Management": true,
+              "TFW": true
+            },
+            "ok": true
+          }
+        ]
+      },
+      "gate": "8_b1b5_values_live_check_legal",
+      "passed": true
+    },
+    {
+      "detail": {
+        "function_def_matches_migration18": true,
+        "note": "0 CSE sem-7 rows in the 1,200 dataset have pct>=40 with end_sem<18; 8 such rows exist only in semesters 1/2/3/4/6 where the trigger does not fire.",
+        "sem7_edge_rows_pct40_end_lt18": 0,
+        "trigger_function_exists": true,
+        "triggers_on_performance": [
+          {
+            "rel": "student_subject_performance",
+            "tgdef": "CREATE TRIGGER trigger_update_performance BEFORE INSERT OR UPDATE ON public.student_subject_performance FOR EACH ROW EXECUTE FUNCTION trg_calculate_performance()",
+            "tgenabled": "b'O'",
+            "tgname": "trigger_update_performance"
+          }
+        ]
+      },
+      "gate": "9_performance_trigger_compatible",
+      "passed": true
+    },
+    {
+      "detail": {
+        "has_stu6a_guard": true,
+        "no_alter_column_type_outside_comment": true,
+        "no_alter_drop": true,
+        "no_delete": true,
+        "no_drop": true,
+        "no_truncate": true,
+        "no_update": true
+      },
+      "gate": "10_additive_non_destructive",
+      "passed": true
+    },
+    {
+      "detail": {
+        "connection_bypasses_rls": true,
+        "phase2_least_privilege_pending": true
+      },
+      "gate": "11_rls_design_documented",
+      "passed": true
+    }
+  ],
+  "indexes": [
+    {
+      "indexdef": "CREATE UNIQUE INDEX attendance_enrollment_record_id_key ON public.attendance USING btree (enrollment_record_id)",
+      "indexname": "attendance_enrollment_record_id_key",
+      "tablename": "attendance"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX attendance_pkey ON public.attendance USING btree (attendance_id)",
+      "indexname": "attendance_pkey",
+      "tablename": "attendance"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_attendance_pct ON public.attendance USING btree (attendance_percentage)",
+      "indexname": "idx_attendance_pct",
+      "tablename": "attendance"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_attendance_student ON public.attendance USING btree (student_id)",
+      "indexname": "idx_attendance_student",
+      "tablename": "attendance"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_attendance_subject ON public.attendance USING btree (subject_id)",
+      "indexname": "idx_attendance_subject",
+      "tablename": "attendance"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX career_preferences_pkey ON public.career_preferences USING btree (career_preference_id)",
+      "indexname": "career_preferences_pkey",
+      "tablename": "career_preferences"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX career_preferences_student_id_key ON public.career_preferences USING btree (student_id)",
+      "indexname": "career_preferences_student_id_key",
+      "tablename": "career_preferences"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_career_industry ON public.career_preferences USING btree (preferred_industry)",
+      "indexname": "idx_career_industry",
+      "tablename": "career_preferences"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_career_readiness ON public.career_preferences USING btree (placement_readiness_level)",
+      "indexname": "idx_career_readiness",
+      "tablename": "career_preferences"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_career_student ON public.career_preferences USING btree (student_id)",
+      "indexname": "idx_career_student",
+      "tablename": "career_preferences"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX departments_department_name_key ON public.departments USING btree (department_name)",
+      "indexname": "departments_department_name_key",
+      "tablename": "departments"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX departments_department_short_name_key ON public.departments USING btree (department_short_name)",
+      "indexname": "departments_department_short_name_key",
+      "tablename": "departments"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX departments_pkey ON public.departments USING btree (dept_code)",
+      "indexname": "departments_pkey",
+      "tablename": "departments"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_departments_short_name ON public.departments USING btree (department_short_name)",
+      "indexname": "idx_departments_short_name",
+      "tablename": "departments"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX faculty_email_key ON public.faculty USING btree (email)",
+      "indexname": "faculty_email_key",
+      "tablename": "faculty"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX faculty_faculty_code_key ON public.faculty USING btree (faculty_code)",
+      "indexname": "faculty_faculty_code_key",
+      "tablename": "faculty"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX faculty_pkey ON public.faculty USING btree (faculty_id)",
+      "indexname": "faculty_pkey",
+      "tablename": "faculty"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_faculty_code ON public.faculty USING btree (faculty_code)",
+      "indexname": "idx_faculty_code",
+      "tablename": "faculty"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_faculty_dept ON public.faculty USING btree (department_code)",
+      "indexname": "idx_faculty_dept",
+      "tablename": "faculty"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_faculty_email ON public.faculty USING btree (email)",
+      "indexname": "idx_faculty_email",
+      "tablename": "faculty"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX faculty_student_map_pkey ON public.faculty_student_map USING btree (faculty_student_map_id)",
+      "indexname": "faculty_student_map_pkey",
+      "tablename": "faculty_student_map"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_fac_stu_map_faculty ON public.faculty_student_map USING btree (faculty_id)",
+      "indexname": "idx_fac_stu_map_faculty",
+      "tablename": "faculty_student_map"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_fac_stu_map_student ON public.faculty_student_map USING btree (student_id)",
+      "indexname": "idx_fac_stu_map_student",
+      "tablename": "faculty_student_map"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX uq_fac_stu_map ON public.faculty_student_map USING btree (faculty_id, student_id)",
+      "indexname": "uq_fac_stu_map",
+      "tablename": "faculty_student_map"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_lifestyle_date ON public.lifestyle_survey USING btree (survey_date)",
+      "indexname": "idx_lifestyle_date",
+      "tablename": "lifestyle_survey"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_lifestyle_student ON public.lifestyle_survey USING btree (student_id)",
+      "indexname": "idx_lifestyle_student",
+      "tablename": "lifestyle_survey"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX lifestyle_survey_pkey ON public.lifestyle_survey USING btree (lifestyle_id)",
+      "indexname": "lifestyle_survey_pkey",
+      "tablename": "lifestyle_survey"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX uq_lifestyle ON public.lifestyle_survey USING btree (student_id, survey_date)",
+      "indexname": "uq_lifestyle",
+      "tablename": "lifestyle_survey"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_sem_summary_sem ON public.student_semester_summary USING btree (semester_no)",
+      "indexname": "idx_sem_summary_sem",
+      "tablename": "student_semester_summary"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_sem_summary_student ON public.student_semester_summary USING btree (student_id)",
+      "indexname": "idx_sem_summary_student",
+      "tablename": "student_semester_summary"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_sem_summary_year ON public.student_semester_summary USING btree (academic_year)",
+      "indexname": "idx_sem_summary_year",
+      "tablename": "student_semester_summary"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX student_semester_summary_pkey ON public.student_semester_summary USING btree (semester_summary_id)",
+      "indexname": "student_semester_summary_pkey",
+      "tablename": "student_semester_summary"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX uq_sem_summary ON public.student_semester_summary USING btree (student_id, semester_no, academic_year)",
+      "indexname": "uq_sem_summary",
+      "tablename": "student_semester_summary"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_enrollment_faculty ON public.student_subject_enrollment USING btree (faculty_id)",
+      "indexname": "idx_enrollment_faculty",
+      "tablename": "student_subject_enrollment"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_enrollment_student ON public.student_subject_enrollment USING btree (student_id)",
+      "indexname": "idx_enrollment_student",
+      "tablename": "student_subject_enrollment"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_enrollment_subject ON public.student_subject_enrollment USING btree (subject_id)",
+      "indexname": "idx_enrollment_subject",
+      "tablename": "student_subject_enrollment"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_enrollment_year ON public.student_subject_enrollment USING btree (academic_year)",
+      "indexname": "idx_enrollment_year",
+      "tablename": "student_subject_enrollment"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX student_subject_enrollment_pkey ON public.student_subject_enrollment USING btree (enrollment_record_id)",
+      "indexname": "student_subject_enrollment_pkey",
+      "tablename": "student_subject_enrollment"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX uq_enrollment ON public.student_subject_enrollment USING btree (student_id, subject_id, academic_year)",
+      "indexname": "uq_enrollment",
+      "tablename": "student_subject_enrollment"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_performance_status ON public.student_subject_performance USING btree (result_status)",
+      "indexname": "idx_performance_status",
+      "tablename": "student_subject_performance"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_performance_student ON public.student_subject_performance USING btree (student_id)",
+      "indexname": "idx_performance_student",
+      "tablename": "student_subject_performance"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_performance_subject ON public.student_subject_performance USING btree (subject_id)",
+      "indexname": "idx_performance_subject",
+      "tablename": "student_subject_performance"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX student_subject_performance_enrollment_record_id_key ON public.student_subject_performance USING btree (enrollment_record_id)",
+      "indexname": "student_subject_performance_enrollment_record_id_key",
+      "tablename": "student_subject_performance"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX student_subject_performance_pkey ON public.student_subject_performance USING btree (performance_id)",
+      "indexname": "student_subject_performance_pkey",
+      "tablename": "student_subject_performance"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_students_dept ON public.students USING btree (department_code)",
+      "indexname": "idx_students_dept",
+      "tablename": "students"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_students_email ON public.students USING btree (email)",
+      "indexname": "idx_students_email",
+      "tablename": "students"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_students_enrollment_no ON public.students USING btree (enrollment_no)",
+      "indexname": "idx_students_enrollment_no",
+      "tablename": "students"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_students_roll_no ON public.students USING btree (university_roll_no)",
+      "indexname": "idx_students_roll_no",
+      "tablename": "students"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX students_email_key ON public.students USING btree (email)",
+      "indexname": "students_email_key",
+      "tablename": "students"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX students_enrollment_no_key ON public.students USING btree (enrollment_no)",
+      "indexname": "students_enrollment_no_key",
+      "tablename": "students"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX students_pkey ON public.students USING btree (student_id)",
+      "indexname": "students_pkey",
+      "tablename": "students"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX students_university_roll_no_key ON public.students USING btree (university_roll_no)",
+      "indexname": "students_university_roll_no_key",
+      "tablename": "students"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_subjects_code ON public.subjects USING btree (subject_code)",
+      "indexname": "idx_subjects_code",
+      "tablename": "subjects"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_subjects_dept ON public.subjects USING btree (department_code)",
+      "indexname": "idx_subjects_dept",
+      "tablename": "subjects"
+    },
+    {
+      "indexdef": "CREATE INDEX idx_subjects_semester ON public.subjects USING btree (semester_no)",
+      "indexname": "idx_subjects_semester",
+      "tablename": "subjects"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX subjects_pkey ON public.subjects USING btree (subject_id)",
+      "indexname": "subjects_pkey",
+      "tablename": "subjects"
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX subjects_subject_code_key ON public.subjects USING btree (subject_code)",
+      "indexname": "subjects_subject_code_key",
+      "tablename": "subjects"
+    }
+  ],
+  "label": "cse6a_1200_ddl_preflight",
+  "overall_gate": true,
+  "performance_trigger": {
+    "function_def": "CREATE OR REPLACE FUNCTION public.trg_calculate_performance()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\n    DECLARE\n        v_department_name VARCHAR;\n    BEGIN\n        -- LIVE SEMESTER PROTECTION\n        SELECT department_name INTO v_department_name\n        FROM student_subject_enrollment\n        WHERE enrollment_record_id = NEW.enrollment_record_id;\n\n        -- HISTORY PROTECTION: Skip calculation if it is NOT a live semester\n        IF NOT ((v_department_name = 'CSE' AND NEW.semester_no = 7) OR\n                (v_department_name = 'BBA' AND NEW.semester_no = 5)) THEN\n            RETURN NEW;\n        END IF;\n\n        -- STRICT COMPLETENESS RULE: derived marks are only ever calculated\n        -- when all three components are present. A NULL component means\n        -- \"mark not entered / incomplete\" and forces every derived field\n        -- (including remarks) to NULL. NULL is never converted to 0 and\n        -- partial sums are never stored. CT1/CT2 are not part of this scheme.\n        IF NEW.internal_marks IS NOT NULL\n           AND NEW.mid_sem_marks IS NOT NULL\n           AND NEW.end_sem_marks IS NOT NULL THEN\n            NEW.total_marks := NEW.internal_marks + NEW.mid_sem_marks + NEW.end_sem_marks;\n\n            NEW.percentage := ROUND((NEW.total_marks::NUMERIC / 140.0) * 100.0, 2);\n\n            IF NEW.percentage >= 90 THEN\n                NEW.grade := 'O'; NEW.grade_point := 10;\n            ELSIF NEW.percentage >= 80 THEN\n                NEW.grade := 'A+'; NEW.grade_point := 9;\n            ELSIF NEW.percentage >= 70 THEN\n                NEW.grade := 'A'; NEW.grade_point := 8;\n            ELSIF NEW.percentage >= 60 THEN\n                NEW.grade := 'B+'; NEW.grade_point := 7;\n            ELSIF NEW.percentage >= 50 THEN\n                NEW.grade := 'B'; NEW.grade_point := 6;\n            ELSIF NEW.percentage >= 40 THEN\n                NEW.grade := 'C'; NEW.grade_point := 5;\n            ELSE\n                NEW.grade := 'F'; NEW.grade_point := 0;\n            END IF;\n\n            -- Result Status (Pass >= 40%, matching the authoritative config)\n            IF NEW.percentage >= 40 THEN\n                NEW.result_status := 'Pass';\n            ELSE\n                NEW.result_status := 'Fail';\n            END IF;\n\n            -- Performance Category (authoritative bands from config.py)\n            IF NEW.percentage >= 90 THEN\n                NEW.performance_category := 'Top';\n            ELSIF NEW.percentage >= 80 THEN\n                NEW.performance_category := 'Above Average';\n            ELSIF NEW.percentage >= 60 THEN\n                NEW.performance_category := 'Average';\n            ELSIF NEW.percentage >= 40 THEN\n                NEW.performance_category := 'Below Average';\n            ELSE\n                NEW.performance_category := 'Low Performer';\n            END IF;\n\n            -- Automatic Remarks (authoritative bands from config.py)\n            IF NEW.percentage >= 90 THEN\n                NEW.remarks := 'Excellent performance';\n            ELSIF NEW.percentage >= 75 THEN\n                NEW.remarks := 'Good performance';\n            ELSIF NEW.percentage >= 60 THEN\n                NEW.remarks := 'Satisfactory performance';\n            ELSIF NEW.percentage >= 40 THEN\n                NEW.remarks := 'Needs improvement';\n            ELSE\n                NEW.remarks := 'At risk - improvement required';\n            END IF;\n        ELSE\n            -- Incomplete marks -> no derived values may remain.\n            NEW.total_marks := NULL;\n            NEW.percentage := NULL;\n            NEW.grade := NULL;\n            NEW.grade_point := NULL;\n            NEW.result_status := NULL;\n            NEW.performance_category := NULL;\n            NEW.remarks := NULL;\n        END IF;\n\n        -- Set Activity Tracking\n        NEW.updated_at := NOW();\n\n        RETURN NEW;\n    END;\n    $function$\n",
+    "function_def_matches_migration18": true,
+    "migration18_sha": "801a3dbbeddf9a00266296815dab79312878d2dc3681c88f09cce7a32a100c71",
+    "trigger_function_exists": true,
+    "triggers_on_performance": [
+      {
+        "rel": "student_subject_performance",
+        "tgdef": "CREATE TRIGGER trigger_update_performance BEFORE INSERT OR UPDATE ON public.student_subject_performance FOR EACH ROW EXECUTE FUNCTION trg_calculate_performance()",
+        "tgenabled": "b'O'",
+        "tgname": "trigger_update_performance"
+      }
+    ]
+  },
+  "phase": "PHASE_1_LIVE_READ_ONLY_PREFLIGHT",
+  "phase2_execute_ddl": true,
+  "pre_ddl_fingerprint": {
+    "attendance": {
+      "count": 3850,
+      "hash": "67bec73079a139fdb25e57ff33beb0e5"
+    },
+    "career_preferences": {
+      "count": 80,
+      "hash": "ceaace3257948a434e1b30d2935b70d2"
+    },
+    "departments": {
+      "count": 2,
+      "hash": "b25b0ee814cf9a6f8e63340a7137fe6e"
+    },
+    "faculty": {
+      "count": 25,
+      "hash": "123b3bd3a5771cced29a527c5f480485"
+    },
+    "faculty_student_map": {
+      "count": 80,
+      "hash": "78f8f26fd58549648139c6cdeb70c67d"
+    },
+    "lifestyle_survey": {
+      "count": 80,
+      "hash": "1a426b311ebcc794117c64e2553dd2c3"
+    },
+    "student_semester_summary": {
+      "count": 500,
+      "hash": "aae98d694541525b40895a60ae00be78"
+    },
+    "student_subject_enrollment": {
+      "count": 3850,
+      "hash": "cbe73a82763647fbfa87197de2dda927"
+    },
+    "student_subject_performance": {
+      "count": 3850,
+      "hash": "2f4a2efa254fc243f66f5a091b87bcc0"
+    },
+    "students": {
+      "count": 80,
+      "hash": "4cd71b6ea47fcc64197eed17a8ea1414"
+    },
+    "subjects": {
+      "count": 99,
+      "hash": "81e43928424beea82c8b38563c67c2ab"
+    }
+  },
+  "rls": {
+    "connection_bypasses_rls": true,
+    "current_policies": [],
+    "enforceable_now": false,
+    "migration_enables_rls_on": [
+      "attendance_weekly",
+      "student_learning_activity",
+      "student_skill_profile",
+      "placement",
+      "student_lifestyle_survey",
+      "career_preferences_v2",
+      "career_preferences"
+    ],
+    "migration_policies": [
+      "placement_admin_all",
+      "placement_faculty_mentee"
+    ],
+    "phase2_least_privilege_pending": true,
+    "phase2_note": "The connection role has rolsuper=False but rolbypassrls=True, so row-level security is BYPASSED for this session: enabling RLS today is non-breaking, but none of it is enforceable now. Real enforcement requires a dedicated app_worker role WITHOUT bypassrls plus per-role Admin/Faculty/Student policies on each table BEFORE any app connection switches to that role; enabling RLS with zero policies would deny ALL row access to a non-bypass role."
+  },
+  "session": {
+    "current_database": "postgres",
+    "current_schema": "public",
+    "current_user": "postgres",
+    "is_superuser_guc": false,
+    "rls_enforceable_now": false,
+    "role_bypassrls": true,
+    "role_superuser": false,
+    "row_security_guc": "on",
+    "server_version": "PostgreSQL 17.6"
+  },
+  "subject_catalog": {
+    "csv_count": 57,
+    "csv_ids": [
+      "SUB0001",
+      "SUB0002",
+      "SUB0003",
+      "SUB0004",
+      "SUB0005",
+      "SUB0006",
+      "SUB0007",
+      "SUB0008",
+      "SUB0009",
+      "SUB0010",
+      "SUB0011",
+      "SUB0012",
+      "SUB0013",
+      "SUB0014",
+      "SUB0015",
+      "SUB0016",
+      "SUB0017",
+      "SUB0018",
+      "SUB0019",
+      "SUB0020",
+      "SUB0021",
+      "SUB0022",
+      "SUB0023",
+      "SUB0024",
+      "SUB0025",
+      "SUB0026",
+      "SUB0027",
+      "SUB0028",
+      "SUB0029",
+      "SUB0030",
+      "SUB0031",
+      "SUB0032",
+      "SUB0033",
+      "SUB0034",
+      "SUB0035",
+      "SUB0036",
+      "SUB0037",
+      "SUB0038",
+      "SUB0039",
+      "SUB0040",
+      "SUB0041",
+      "SUB0042",
+      "SUB0043",
+      "SUB0044",
+      "SUB0045",
+      "SUB0046",
+      "SUB0047",
+      "SUB0048",
+      "SUB0049",
+      "SUB0050",
+      "SUB0051",
+      "SUB0052",
+      "SUB0053",
+      "SUB0054",
+      "SUB0055",
+      "SUB0056",
+      "SUB0057"
+    ],
+    "csv_ids_superset_of_live_needed": true,
+    "exact_attribute_row_match": false,
+    "extra_live_ids": [
+      "SUB0058",
+      "SUB0059",
+      "SUB0060",
+      "SUB0061",
+      "SUB0062",
+      "SUB0063",
+      "SUB0064",
+      "SUB0065",
+      "SUB0066",
+      "SUB0067",
+      "SUB0068",
+      "SUB0069",
+      "SUB0070",
+      "SUB0071",
+      "SUB0072",
+      "SUB0073",
+      "SUB0074",
+      "SUB0075",
+      "SUB0076",
+      "SUB0077",
+      "SUB0078",
+      "SUB0079",
+      "SUB0080",
+      "SUB0081",
+      "SUB0082",
+      "SUB0083",
+      "SUB0084",
+      "SUB0085",
+      "SUB0086",
+      "SUB0087",
+      "SUB0088",
+      "SUB0089",
+      "SUB0090",
+      "SUB0091",
+      "SUB0092",
+      "SUB0093",
+      "SUB0094",
+      "SUB0095",
+      "SUB0096",
+      "SUB0097",
+      "SUB0098",
+      "SUB0099"
+    ],
+    "live_count": 99,
+    "live_ids": [
+      "SUB0001",
+      "SUB0002",
+      "SUB0003",
+      "SUB0004",
+      "SUB0005",
+      "SUB0006",
+      "SUB0007",
+      "SUB0008",
+      "SUB0009",
+      "SUB0010",
+      "SUB0011",
+      "SUB0012",
+      "SUB0013",
+      "SUB0014",
+      "SUB0015",
+      "SUB0016",
+      "SUB0017",
+      "SUB0018",
+      "SUB0019",
+      "SUB0020",
+      "SUB0021",
+      "SUB0022",
+      "SUB0023",
+      "SUB0024",
+      "SUB0025",
+      "SUB0026",
+      "SUB0027",
+      "SUB0028",
+      "SUB0029",
+      "SUB0030",
+      "SUB0031",
+      "SUB0032",
+      "SUB0033",
+      "SUB0034",
+      "SUB0035",
+      "SUB0036",
+      "SUB0037",
+      "SUB0038",
+      "SUB0039",
+      "SUB0040",
+      "SUB0041",
+      "SUB0042",
+      "SUB0043",
+      "SUB0044",
+      "SUB0045",
+      "SUB0046",
+      "SUB0047",
+      "SUB0048",
+      "SUB0049",
+      "SUB0050",
+      "SUB0051",
+      "SUB0052",
+      "SUB0053",
+      "SUB0054",
+      "SUB0055",
+      "SUB0056",
+      "SUB0057",
+      "SUB0058",
+      "SUB0059",
+      "SUB0060",
+      "SUB0061",
+      "SUB0062",
+      "SUB0063",
+      "SUB0064",
+      "SUB0065",
+      "SUB0066",
+      "SUB0067",
+      "SUB0068",
+      "SUB0069",
+      "SUB0070",
+      "SUB0071",
+      "SUB0072",
+      "SUB0073",
+      "SUB0074",
+      "SUB0075",
+      "SUB0076",
+      "SUB0077",
+      "SUB0078",
+      "SUB0079",
+      "SUB0080",
+      "SUB0081",
+      "SUB0082",
+      "SUB0083",
+      "SUB0084",
+      "SUB0085",
+      "SUB0086",
+      "SUB0087",
+      "SUB0088",
+      "SUB0089",
+      "SUB0090",
+      "SUB0091",
+      "SUB0092",
+      "SUB0093",
+      "SUB0094",
+      "SUB0095",
+      "SUB0096",
+      "SUB0097",
+      "SUB0098",
+      "SUB0099"
+    ]
+  },
+  "tables_new_absent": {
+    "attendance_weekly": true,
+    "career_preferences_v2": true,
+    "placement": true,
+    "student_learning_activity": true,
+    "student_lifestyle_survey": true,
+    "student_skill_profile": true
+  }
+}

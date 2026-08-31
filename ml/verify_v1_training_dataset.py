@@ -11,7 +11,6 @@ Does NOT train models or generate predictions.
 """
 from __future__ import annotations
 
-import os
 import sys
 import time
 from pathlib import Path
@@ -24,6 +23,12 @@ _ML_SRC = str(Path(__file__).resolve().parents[0] / "src")
 if _ML_SRC not in sys.path:
     sys.path.insert(0, _ML_SRC)
 
+_BACKEND = str(Path(__file__).resolve().parents[1] / "backend")
+if _BACKEND not in sys.path:
+    sys.path.insert(0, _BACKEND)
+
+from db_env import db_config  # noqa: E402
+
 from features.v1_config import V1Config  # noqa: E402
 from features.v1_dataset import build_v1_dataset  # noqa: E402
 from features.v1_split import prepare_v1_dataset  # noqa: E402
@@ -33,13 +38,14 @@ from features.v1_split_validation import validate_v1_split  # noqa: E402
 
 
 def get_connection():
-    """Create a psycopg2 connection from environment variables."""
+    """Create a psycopg2 connection from the repository environment."""
+    db = db_config()
     return psycopg2.connect(
-        host=os.getenv("DB_HOST", "aws-1-ap-south-1.pooler.supabase.com"),
-        port=int(os.getenv("DB_PORT", "6543")),
-        dbname=os.getenv("DB_NAME", "postgres"),
-        user=os.getenv("DB_USER", "postgres.rtaqkxqdejelxsamnesm"),
-        password=os.getenv("DB_PASSWORD", "KenexAI@*195"),
+        host=db.host,
+        port=db.port,
+        dbname=db.name,
+        user=db.user,
+        password=db.password,
     )
 
 

@@ -332,11 +332,13 @@ class FacultySubjectsSummary(BaseModel):
 class FacultySubjectsFilters(BaseModel):
     semesters: List[int]
     academic_years: List[str]
+    batches: List[str] = []
 
 class FacultySubjectsAppliedFilters(BaseModel):
     semester: Optional[int]
     academic_year: Optional[str]
     search: Optional[str]
+    batch: Optional[str] = None
 
 class FacultySubjectsResponse(BaseModel):
     faculty_id: str

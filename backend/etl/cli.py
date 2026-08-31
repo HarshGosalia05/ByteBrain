@@ -22,6 +22,7 @@ import argparse
 import asyncio
 import json
 import sys
+from pathlib import Path
 from typing import List, Optional, Sequence
 
 from etl.exceptions import EXIT_LOAD_DERIVE_FAILURE, EXIT_SUCCESS
@@ -79,6 +80,36 @@ def build_parser() -> argparse.ArgumentParser:
 
     stages = sub.add_parser("stages", help="List the canonical ETL stage contract.")
     stages.add_argument("--json", action="store_true", help="Print as JSON.")
+
+    load1200 = sub.add_parser(
+        "load_1200",
+        help="CSE 6A 1,200-cohort ordered data-load runner (dry-run default; zero DB writes).",
+    )
+    mode = load1200.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=True,
+        help="Plan + verify; zero DB writes (default).",
+    )
+    mode.add_argument(
+        "--apply",
+        action="store_true",
+        help="Execute the ordered inserts (per-step transactions).",
+    )
+    mode.add_argument(
+        "--reconcile",
+        action="store_true",
+        help="Re-run the read-only post-load reconciliation against live (needs a prior --apply).",
+    )
+    load1200.add_argument("--datasets", type=Path, default=None,
+                          help="Path to the New_1200_data_scale directory.")
+    load1200.add_argument("--preflight", type=Path, default=None,
+                          help="Path to preflight_1200_live.json.")
+    load1200.add_argument("--baseline", type=Path, default=None,
+                          help="Path to phase2_ddl_apply_live.json.")
+    load1200.add_argument("--out", type=Path, default=None,
+                          help="Report output path (default plan_1200_6a/phase5_load_*.json).")
     return parser
 
 
@@ -180,11 +211,36 @@ def _stages_command(args: argparse.Namespace) -> int:
     return EXIT_SUCCESS
 
 
+def _load_1200_command(args: argparse.Namespace) -> int:
+    from etl import load_1200
+
+    return load_1200.main(argv=load_1200_cli_args(args))
+
+
+def load_1200_cli_args(args: argparse.Namespace) -> List[str]:
+    argv: List[str] = []
+    if args.apply:
+        argv.append("--apply")
+    elif args.reconcile:
+        argv.append("--reconcile")
+    if args.datasets is not None:
+        argv += ["--datasets", str(args.datasets)]
+    if args.preflight is not None:
+        argv += ["--preflight", str(args.preflight)]
+    if args.baseline is not None:
+        argv += ["--baseline", str(args.baseline)]
+    if args.out is not None:
+        argv += ["--out", str(args.out)]
+    return argv
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.command == "stages":
         return _stages_command(args)
+    if args.command == "load_1200":
+        return _load_1200_command(args)
     return _run_command(args)
 
 
