@@ -108,6 +108,8 @@ export function SubjectBarChart({
   const bottomMargin = isVeryDense ? 20 : isDense ? 12 : 4
   const tickFontSize = isVeryDense ? 9 : isDense ? 10 : 11
   const barGap = isVeryDense ? "12%" : isDense ? "18%" : "28%"
+  const tickInterval = isDense ? "preserveStartEnd" : 0
+  const maxBar = compact ? 32 : isVeryDense ? 28 : isDense ? 36 : 48
 
   function formatTick(value: string | number): string {
     const text = String(value)
@@ -119,7 +121,7 @@ export function SubjectBarChart({
   }
 
   return (
-    <div ref={frameRef} className="w-full">
+    <div ref={frameRef} className="w-full min-w-0">
       {bars && (
         <div className="mb-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
           {bars.map((b, i) => (
@@ -148,7 +150,7 @@ export function SubjectBarChart({
             tickLine={false}
             axisLine={false}
             stroke="var(--muted-foreground)"
-            interval={0}
+            interval={tickInterval}
             angle={angle}
             textAnchor="end"
             height={labelHeight}
@@ -196,7 +198,7 @@ export function SubjectBarChart({
               name={s.name}
               fill={bars ? s.color : `url(#${uid}-bar)`}
               radius={[6, 6, 2, 2]}
-              maxBarSize={compact ? 32 : 48}
+              maxBarSize={maxBar}
               isAnimationActive
               animationDuration={600}
               animationEasing="ease-out"

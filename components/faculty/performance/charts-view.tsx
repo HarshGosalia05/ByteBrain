@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   Award,
@@ -9,14 +10,19 @@ import {
   Gauge,
   GraduationCap,
   Repeat,
+  Search,
   TrendingUp,
   Users,
+  X,
 } from "lucide-react"
 
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { SubjectBarChart, type ChartReferenceLine } from "@/components/shared/charts/bar-chart"
 import { TrendChart } from "@/components/shared/charts/trend-chart"
 import { ChartCard } from "@/components/shared/data/chart-card"
 import { scopeStamp } from "@/lib/csv"
+import { cn } from "@/lib/utils"
 import type {
   PerformanceDistributions,
   PerformanceSubjectBreakdown,
@@ -59,6 +65,9 @@ function thresholdBandLine(
   return [{ x: boundary, position: "end", label: `Baseline ${threshold}%` }]
 }
 
+const selectClassName =
+  "h-9 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-auto"
+
 export function ChartsView({
   distributions,
   subjectBreakdown,
@@ -68,6 +77,10 @@ export function ChartsView({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedSemester, setSelectedSemester] = useState("")
+  const [selectedSubject, setSelectedSubject] = useState("")
 
   const handleSubjectClick = (entry: Record<string, string | number>) => {
     const subjectId = String(entry.subject_id ?? "")
@@ -114,9 +127,47 @@ export function ChartsView({
     count: c.count,
   }))
 
-  const subjectRows = subjectBreakdown.data?.items ?? []
+  const subjectRows = useMemo(() => subjectBreakdown.data?.items ?? [], [subjectBreakdown.data])
+
+  const uniqueSemesters = useMemo(() => {
+    const sems = new Set<number>()
+    for (const s of subjectRows) sems.add(s.semester_no)
+    return Array.from(sems).sort((a, b) => a - b)
+  }, [subjectRows])
+
+  const uniqueSubjects = useMemo(() => {
+    const map = new Map<string, { subject_id: string; subject_code: string; subject_name: string }>()
+    for (const s of subjectRows) {
+      if (!map.has(s.subject_id)) {
+        map.set(s.subject_id, { subject_id: s.subject_id, subject_code: s.subject_code, subject_name: s.subject_name })
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.subject_code.localeCompare(b.subject_code))
+  }, [subjectRows])
+
+  const filteredSubjectRows = useMemo(() => {
+    let rows = subjectRows
+    if (selectedSemester) {
+      rows = rows.filter((s) => String(s.semester_no) === selectedSemester)
+    }
+    if (selectedSubject) {
+      rows = rows.filter((s) => s.subject_id === selectedSubject)
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      rows = rows.filter(
+        (s) =>
+          s.subject_code.toLowerCase().includes(q) ||
+          s.subject_name.toLowerCase().includes(q),
+      )
+    }
+    return rows
+  }, [subjectRows, selectedSemester, selectedSubject, searchQuery])
+
+  const hasSubjectFilters = Boolean(selectedSemester || selectedSubject || searchQuery.trim())
+
   const subjectChart = (valueKey: "average_performance" | "average_attendance" | "pass_percentage" | "enrollments") =>
-    subjectRows.map((s) => ({
+    filteredSubjectRows.map((s) => ({
       label: s.subject_code,
       subject_id: s.subject_id,
       value: (s[valueKey] as number | null) ?? 0,
@@ -264,16 +315,95 @@ export function ChartsView({
           <h3 className="mb-3 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
             Subject comparison
           </h3>
+          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:gap-3">
+            <div className="relative flex-1 sm:max-w-[240px]">
+              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search subjects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 pl-8 text-sm"
+              />
+            </div>
+            <select
+              className={selectClassName}
+              value={selectedSemester}
+              onChange={(e) => setSelectedSemester(e.target.value)}
+              aria-label="Filter by semester"
+            >
+              <option value="">All Semesters</option>
+              {uniqueSemesters.map((s) => (
+                <option key={s} value={String(s)}>
+                  Semester {s}
+                </option>
+              ))}
+            </select>
+            <select
+              className={cn(selectClassName, "sm:max-w-[220px]")}
+              value={selectedSubject}
+              onChange={(e) => setSelectedSubject(e.target.value)}
+              aria-label="Filter by subject"
+            >
+              <option value="">All Subjects</option>
+              {uniqueSubjects.map((s) => (
+                <option key={s.subject_id} value={s.subject_id}>
+                  {s.subject_code} - {s.subject_name}
+                </option>
+              ))}
+            </select>
+            {hasSubjectFilters && (
+              <button
+                onClick={() => {
+                  setSearchQuery("")
+                  setSelectedSemester("")
+                  setSelectedSubject("")
+                }}
+                className="flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="size-3.5" />
+                Clear
+              </button>
+            )}
+          </div>
+          {hasSubjectFilters && (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Filters:</span>
+              {selectedSemester && (
+                <Badge variant="secondary" className="gap-1">
+                  Semester {selectedSemester}
+                  <button onClick={() => setSelectedSemester("")} className="ml-0.5 hover:text-foreground">
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+              {selectedSubject && (
+                <Badge variant="secondary" className="gap-1">
+                  {uniqueSubjects.find((s) => s.subject_id === selectedSubject)?.subject_code ?? selectedSubject}
+                  <button onClick={() => setSelectedSubject("")} className="ml-0.5 hover:text-foreground">
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+              {searchQuery.trim() && (
+                <Badge variant="secondary" className="gap-1">
+                  Search: &quot;{searchQuery.trim()}&quot;
+                  <button onClick={() => setSearchQuery("")} className="ml-0.5 hover:text-foreground">
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-4">
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <ChartCard
                 title="Average performance by subject"
                 subtitle="Subject average percentage"
-                status={subjError ? "error" : subjectRows.length ? "ready" : "empty"}
+                status={subjError ? "error" : filteredSubjectRows.length ? "ready" : "empty"}
                 errorDescription={subjError ?? undefined}
                 emptyIcon={Gauge}
                 emptyTitle="No subjects in this scope"
-                emptyDescription="Subjects you teach will appear here once enrollments are recorded."
+                emptyDescription={hasSubjectFilters ? "Try adjusting your filters." : "Subjects you teach will appear here once enrollments are recorded."}
                 exportFileName={`faculty_performance_${scope}_subject_performance.csv`}
                 exportColumns={[
                   { key: "label", label: "Subject" },
@@ -294,11 +424,11 @@ export function ChartsView({
               <ChartCard
                 title="Average attendance by subject"
                 subtitle="Subject average attendance %"
-                status={subjError ? "error" : subjectRows.length ? "ready" : "empty"}
+                status={subjError ? "error" : filteredSubjectRows.length ? "ready" : "empty"}
                 errorDescription={subjError ?? undefined}
                 emptyIcon={CalendarCheck}
                 emptyTitle="No subjects in this scope"
-                emptyDescription="Subjects you teach will appear here once enrollments are recorded."
+                emptyDescription={hasSubjectFilters ? "Try adjusting your filters." : "Subjects you teach will appear here once enrollments are recorded."}
                 exportFileName={`faculty_performance_${scope}_subject_attendance.csv`}
                 exportColumns={[
                   { key: "label", label: "Subject" },
@@ -317,15 +447,15 @@ export function ChartsView({
               </ChartCard>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <ChartCard
                 title="Pass rate by subject"
                 subtitle="Subject pass percentage"
-                status={subjError ? "error" : subjectRows.length ? "ready" : "empty"}
+                status={subjError ? "error" : filteredSubjectRows.length ? "ready" : "empty"}
                 errorDescription={subjError ?? undefined}
                 emptyIcon={BookOpen}
                 emptyTitle="No subjects in this scope"
-                emptyDescription="Subjects you teach will appear here once enrollments are recorded."
+                emptyDescription={hasSubjectFilters ? "Try adjusting your filters." : "Subjects you teach will appear here once enrollments are recorded."}
                 exportFileName={`faculty_performance_${scope}_subject_pass_rate.csv`}
                 exportColumns={[
                   { key: "label", label: "Subject" },
@@ -346,11 +476,11 @@ export function ChartsView({
               <ChartCard
                 title="Enrollment by subject"
                 subtitle="Students per subject"
-                status={subjError ? "error" : subjectRows.length ? "ready" : "empty"}
+                status={subjError ? "error" : filteredSubjectRows.length ? "ready" : "empty"}
                 errorDescription={subjError ?? undefined}
                 emptyIcon={Users}
                 emptyTitle="No subjects in this scope"
-                emptyDescription="Subjects you teach will appear here once enrollments are recorded."
+                emptyDescription={hasSubjectFilters ? "Try adjusting your filters." : "Subjects you teach will appear here once enrollments are recorded."}
                 exportFileName={`faculty_performance_${scope}_subject_enrollments.csv`}
                 exportColumns={[
                   { key: "label", label: "Subject" },

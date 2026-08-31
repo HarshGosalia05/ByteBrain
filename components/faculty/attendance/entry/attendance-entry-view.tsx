@@ -467,7 +467,7 @@ export function AttendanceEntryView({
               <SelectContent>
                 <SelectList>
                   {subjectOptions.map((subject) => (
-                    <SelectItem key={subject.subject_id} value={subject.subject_id}>
+                    <SelectItem key={`${subject.subject_id}-${subject.semester_no}-${subject.academic_year}`} value={subject.subject_id}>
                       {subject.subject_code} · {subject.subject_name}
                     </SelectItem>
                   ))}

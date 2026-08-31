@@ -46,7 +46,7 @@ export function ChartCard({
     Boolean(exportRows && exportRows.length > 0)
 
   return (
-    <section className={cn("rounded-xl bg-card p-4 ring-1 ring-foreground/10 print:break-inside-avoid", className)}>
+    <section className={cn("min-w-0 rounded-xl bg-card p-4 ring-1 ring-foreground/10 print:break-inside-avoid", className)}>
       <div className="mb-4 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold">{title}</h2>

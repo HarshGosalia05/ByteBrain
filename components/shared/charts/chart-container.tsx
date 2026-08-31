@@ -20,7 +20,7 @@ export function ChartContainer({
   }, [])
 
   return (
-    <div style={{ height }} className={className}>
+    <div style={{ height }} className={`min-w-0 ${className}`}>
       {mounted ? (
         <ResponsiveContainer width="100%" height="100%">
           {children}

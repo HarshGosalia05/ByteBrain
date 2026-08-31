@@ -156,8 +156,8 @@ export function GovernanceView({ governance, healthScore }: GovernanceViewProps)
             <p className="text-sm text-muted-foreground">{health.scope_reason}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {health.subjects.map((s) => (
-              <div key={s.subject_id} className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
+            {health.subjects.map((s, idx) => (
+              <div key={`${s.subject_id ?? "null"}-${idx}`} className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-mono text-xs text-muted-foreground">{s.subject_code}</p>

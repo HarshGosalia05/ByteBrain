@@ -107,11 +107,13 @@ export function ChartsView({
     subject_id: s.subject_id,
     value: s.credits ?? 0,
   }))
-  const hoursData = subjectItems.map((s) => ({
-    label: s.subject_code,
-    subject_id: s.subject_id,
-    value: s.weekly_hours ?? 0,
-  }))
+  const hoursData = subjectItems
+    .filter((s) => (s.weekly_hours ?? 0) > 0)
+    .map((s) => ({
+      label: s.subject_code,
+      subject_id: s.subject_id,
+      value: s.weekly_hours ?? 0,
+    }))
   const studentsData = subjectItems.map((s) => ({
     label: s.subject_code,
     subject_id: s.subject_id,
@@ -205,7 +207,7 @@ export function ChartsView({
           <h3 className="mb-3 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
             Teaching load
           </h3>
-          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <ChartCard
               title="Subject credit distribution"
               subtitle="Credits per subject offering"
@@ -330,7 +332,7 @@ export function ChartsView({
           <h3 className="mb-3 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
             Subject mix
           </h3>
-          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <ChartCard
               title="Subject mix distribution"
               subtitle="Offerings by subject type"

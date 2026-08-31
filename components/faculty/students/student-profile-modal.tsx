@@ -657,7 +657,7 @@ export function StudentProfileModal({
                                 {subjectRows.map((sub) => {
                                   const below = sub.attendance_percentage != null && sub.attendance_percentage < 75
                                   return (
-                                    <TableRow key={sub.subject_id}>
+                                    <TableRow key={`${sub.subject_id}-${sub.semester_no}-${sub.academic_year}`}>
                                       <TableCell>
                                         <div className="flex flex-col">
                                           <span className="text-sm font-medium">{sub.subject_name}</span>
@@ -745,7 +745,7 @@ export function StudentProfileModal({
                                 {data.subject_performance.map((sub) => {
                                   const poor = isPoorSubject(sub)
                                   return (
-                                    <TableRow key={sub.subject_id} className={cn(poor && "bg-destructive/5 hover:bg-destructive/10")}>
+                                    <TableRow key={`${sub.subject_id}-${sub.semester_no}-${sub.academic_year}`} className={cn(poor && "bg-destructive/5 hover:bg-destructive/10")}>
                                       <TableCell>
                                         <div className="flex flex-col">
                                           <span className="text-sm font-medium">{sub.subject_name}</span>
