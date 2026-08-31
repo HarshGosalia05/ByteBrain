@@ -1,0 +1,40 @@
+{
+  "source_csv": "C:\\Users\\HET SHAH\\ByteBrain\\backend\\datasets\\1200_randomly_allotted_unique_names.csv",
+  "source_mapping_count": 1200,
+  "target_cohort_count": 1200,
+  "tables_updated": [
+    "students"
+  ],
+  "columns_updated": [
+    "first_name",
+    "last_name",
+    "full_name"
+  ],
+  "names_changed": 1200,
+  "old_cohort_preservation": "PASS",
+  "non_name_field_integrity": "PASS",
+  "cross_table_name_consistency": "PASS",
+  "before_row_counts": {
+    "students_total": 1280,
+    "old_cohort": 80,
+    "new_cohort": 1200
+  },
+  "after_row_counts": {
+    "students_total": 1280,
+    "old_cohort": 80,
+    "new_cohort": 1200
+  },
+  "transaction_result": "COMMIT",
+  "final_result": "PASS",
+  "verification_details": [
+    "PASS: Old cohort unchanged",
+    "PASS: All new cohort names match CSV mapping",
+    "PASS: enrollment_no unchanged",
+    "PASS: admission_year unchanged",
+    "PASS: department_name unchanged",
+    "PASS: current_semester unchanged",
+    "PASS: current_academic_year unchanged",
+    "PASS: Total row count unchanged (1280)"
+  ],
+  "timestamp": "2026-08-31T11:26:37.856905"
+}
