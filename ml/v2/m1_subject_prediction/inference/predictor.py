@@ -279,9 +279,11 @@ class M1V2Predictor:
                 "predicted_at": datetime.now(timezone.utc).isoformat(),
                 "readiness_status": "NO_DATA",
                 "reason": (
-                    f"Student {student_id} is outside the deployment cohort for this "
-                    f"model (expected id prefix '{deployment_prefix}'). Prediction is "
-                    "not available for out-of-cohort students."
+                    "Not enough current-semester academic data is available to "
+                    "generate a reliable subject prediction yet. This prediction "
+                    "requires current-semester pre-exam assessment, attendance, "
+                    "and learning activity records which are not yet present in "
+                    "the dataset."
                 ),
                 "subjects": [],
             }

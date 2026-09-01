@@ -22,10 +22,12 @@ from app.services.prediction_contract_service import (
     PredictionContractService,
 )
 from app.services.m1v2_prediction_service import M1V2PredictionService
+from app.services.m1v3_prediction_service import M1V3PredictionService
 from app.services.m2v2_prediction_service import M2V2PredictionService
 from app.services.m3v2_prediction_service import M3V2PredictionService
 from app.services.faculty_service import FacultyService
 from app.schemas import m1v2 as schemas
+from app.schemas import m1v3 as m1v3_schemas
 from app.schemas import m2v2 as m2v2_schemas
 from app.schemas import m3v2 as m3v2_schemas
 
@@ -48,6 +50,12 @@ def get_m1v2_prediction_service(
     pool: asyncpg.Pool = Depends(get_db_pool),
 ) -> M1V2PredictionService:
     return M1V2PredictionService(pool)
+
+
+def get_m1v3_prediction_service(
+    pool: asyncpg.Pool = Depends(get_db_pool),
+) -> M1V3PredictionService:
+    return M1V3PredictionService(pool)
 
 
 def get_m2v2_prediction_service(
@@ -155,7 +163,6 @@ async def predict_m1(
     "/m1v2/{student_id}",
     response_model=schemas.M1V2PredictionResponse,
     responses={
-        404: {"model": schemas.M1V2Error},
         503: {"model": schemas.M1V2Error},
         500: {"model": schemas.M1V2Error},
     },
@@ -179,8 +186,6 @@ async def predict_m1_v2(
 
     try:
         result = await service.predict(student_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except FileNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -195,6 +200,54 @@ async def predict_m1_v2(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"M1 V2 prediction failed: {str(e)}",
+        )
+    return result
+
+
+@router.get(
+    "/m1v3/{student_id}",
+    response_model=m1v3_schemas.M1V3PredictionResponse,
+    responses={
+        503: {"model": m1v3_schemas.M1V3Error},
+        500: {"model": m1v3_schemas.M1V3Error},
+    },
+    tags=["predictions"],
+)
+async def predict_m1_v3(
+    student_id: str,
+    service: M1V3PredictionService = Depends(get_m1v3_prediction_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
+    user: dict = Depends(get_current_user),
+):
+    """Predict end-semester marks per subject with the M1 V3 model (synthetic-trained).
+
+    Uses real production data from the database (read-only). The model was trained
+    on a synthetic dataset and uses 8 features: internal_marks, mid_sem_marks,
+    attendance_percentage, credits, semester_no, subject_type, department_name, gender.
+
+    Attendance is sourced from the attendance table (attendance_percentage column).
+
+    If required real inputs are unavailable, readiness_status is NO_DATA with a
+    clear explanation. No values are fabricated or imputed for missing data.
+    """
+    await authorize_prediction_access(user, student_id, faculty_service)
+
+    try:
+        result = await service.predict(student_id)
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"M1 V3 artifact unavailable: {e}",
+        )
+    except (ConnectionError, RuntimeError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"M1 V3 prediction failed: {str(e)}",
         )
     return result
 

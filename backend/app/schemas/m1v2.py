@@ -56,6 +56,7 @@ class M1V2PredictionResponse(BaseModel):
     model_version: str
     algorithm: str | None = None
     readiness_status: Literal["READY", "NO_DATA"]
+    reason: str | None = None
     current_semester: int | None = None
     prediction_count: int
     predicted_at: datetime

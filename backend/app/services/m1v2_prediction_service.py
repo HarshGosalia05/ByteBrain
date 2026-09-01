@@ -93,23 +93,21 @@ class M1V2PredictionService:
 
         self._guard_readiness(result, student_id)
         result["model_id"] = "m1_v2"
+        if "prediction_count" not in result:
+            result["prediction_count"] = len(result.get("subjects", []))
         return result
 
     # -- helpers --------------------------------------------------------------
 
     @staticmethod
     def _guard_readiness(result: dict[str, Any], student_id: str) -> None:
-        """Map NO_DATA outcomes to a not-found/missing-data ValueError.
+        """Validate prediction result structure.
 
-        The predictor returns a structured NO_DATA payload (never an exception)
-        for a nonexistent student or a student with no performance records.
+        NO_DATA outcomes are returned as 200 with readiness_status="NO_DATA"
+        and a human-readable reason — not as a 404. This preserves the honest
+        unavailable-data state while allowing the frontend to display the reason.
         """
-        if result.get("readiness_status") == "NO_DATA":
-            reason = result.get("reason") or "No data available"
-            raise ValueError(
-                f"Prediction unavailable for student {student_id}: {reason}"
-            )
-        if not result.get("subjects"):
+        if not result.get("subjects") and result.get("readiness_status") != "NO_DATA":
             raise ValueError(
                 f"No prediction subjects for student {student_id}"
             )

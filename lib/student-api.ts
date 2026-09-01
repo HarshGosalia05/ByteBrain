@@ -645,6 +645,17 @@ export function getStudentM1V2(): Promise<BffResult<M1V2PredictionData>> {
   )
 }
 
+// M1 V3 — Subject Marks Prediction (synthetic-trained model).
+// Uses real production data: internal_marks, mid_sem_marks, attendance_percentage,
+// credits, semester_no, subject_type, department_name, gender.
+
+export function getStudentM1V3(): Promise<BffResult<import("./m1v3-prediction").M1V3PredictionData>> {
+  return callApiV1<import("./m1v3-prediction").M1V3PredictionData>(
+    (studentId) => `/predict/m1v3/${encodeURIComponent(studentId)}`,
+    BFF_TTL_MS,
+  )
+}
+
 // M2 V2 — Next-Semester Performance Prediction (validated production model).
 // README: reuses /predict/m2v2/{student_id}; readiness_status of NO_DATA
 // (including the deployment boundary — the current cohort is in the final /

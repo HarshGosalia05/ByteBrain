@@ -522,6 +522,7 @@ const M1V2_FACULTY_BODY = {
   model_version: "2.0",
   algorithm: "ridge",
   readiness_status: "READY",
+  reason: null,
   current_semester: 3,
   prediction_count: 1,
   predicted_at: "2026-09-01T08:00:00Z",
@@ -583,13 +584,22 @@ test("getFacultyStudentM1V2 caches per faculty+student within TTL", async () => 
   assert.equal(getCalls("/predict/m1v2").length, 1)
 })
 
-test("getFacultyStudentM1V2 maps 404 (NO_DATA / out of scope) to not_found", async () => {
-  route("/predict/m1v2/STU-MISSING", 404, { detail: "no record" })
+test("getFacultyStudentM1V2 returns 200 with NO_DATA for unavailable predictions", async () => {
+  const NO_DATA_BODY = {
+    ...M1V2_FACULTY_BODY,
+    readiness_status: "NO_DATA",
+    reason: "Not enough current-semester academic data is available",
+    subjects: [],
+    prediction_count: 0,
+  }
+  route("/predict/m1v2/STU-MISSING", 200, NO_DATA_BODY)
 
   const result = await facultyApi.getFacultyStudentM1V2("STU-MISSING")
-  assert.equal(result.ok, false)
-  if (result.ok) return
-  assert.equal(result.error.code, "not_found")
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.readiness_status, "NO_DATA")
+    assert.equal(result.data.subjects.length, 0)
+  }
 })
 
 test("getFacultyStudentM1V2 rejects non-faculty / unlinked / anonymous", async () => {

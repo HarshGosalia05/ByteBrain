@@ -760,7 +760,7 @@ test("signOutAllStudentDevices POSTs to backend", async () => {
 // ---------------------------------------------------------------------------
 // M1 V2 — Subject Marks Prediction (validated production model).
 // The per-student route /predict/m1v2/{student_id} is consumed by the student
-// BFF. NO_DATA surfaces as a 404 on this route; errors map to BffError codes.
+// BFF. NO_DATA is returned as 200 with readiness_status="NO_DATA" and a reason.
 // ---------------------------------------------------------------------------
 
 const M1V2_BODY = {
@@ -769,6 +769,7 @@ const M1V2_BODY = {
   model_version: "2.0",
   algorithm: "ridge",
   readiness_status: "READY",
+  reason: null,
   current_semester: 3,
   prediction_count: 2,
   predicted_at: "2026-09-01T08:00:00Z",
@@ -840,19 +841,29 @@ test("getStudentM1V2 auth gating (401 / 403 / 400) applies", async () => {
   if (!unlinked.ok) assert.equal(unlinked.error.status, 400)
 })
 
-test("getStudentM1V2 maps 404 (NO_DATA) and is cached across reads", async () => {
+test("getStudentM1V2 returns 200 with NO_DATA for unavailable predictions", async () => {
+  const NO_DATA_BODY = {
+    ...M1V2_BODY,
+    readiness_status: "NO_DATA",
+    reason: "Not enough current-semester academic data is available",
+    subjects: [],
+    prediction_count: 0,
+  }
+  route("/predict/m1v2/STU-A", 200, NO_DATA_BODY)
+  const result = await studentApi.getStudentM1V2()
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.readiness_status, "NO_DATA")
+    assert.equal(result.data.subjects.length, 0)
+  }
+})
+
+test("getStudentM1V2 is cached across reads", async () => {
   route("/predict/m1v2/STU-A", 200, M1V2_BODY)
   await studentApi.getStudentM1V2()
   await studentApi.getStudentM1V2()
   const gets = getCalls("/predict/m1v2")
   assert.equal(gets.length, 1, "second read must hit the cache")
-
-  routes.clear()
-  route("/predict/m1v2/STU-A", 404, { detail: "no records" })
-  await studentApi.invalidateBffKeys(DEFAULT_SESSION.student_id, [""])
-  const missing = await studentApi.getStudentM1V2()
-  assert.equal(missing.ok, false)
-  if (!missing.ok) assert.equal(missing.error.code, "not_found")
 })
 
 test("getStudentM1V2 maps 503 network/backend failure", async () => {

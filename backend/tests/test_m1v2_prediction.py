@@ -355,13 +355,15 @@ class TestRealInferencePath(unittest.TestCase):
 # -----------------------------------------------------------------------------
 
 class TestErrorHandling(unittest.TestCase):
-    def test_invalid_student_raises_value_error(self):
-        # Student not present in DB -> NO_DATA -> ValueError (mapped to 404).
+    def test_invalid_student_returns_no_data(self):
+        # Student not present in DB -> NO_DATA with honest reason.
         svc = M1V2PredictionService(FakePool(FakeConn(existing=False)))
-        with self.assertRaises(ValueError):
-            run(svc.predict("STU6ANOPE"))
+        result = run(svc.predict("STU6ANOPE"))
+        self.assertEqual(result["readiness_status"], "NO_DATA")
+        self.assertEqual(result["subjects"], [])
+        self.assertIsNotNone(result.get("reason"))
 
-    def test_student_row_but_no_performance_raises_value_error(self):
+    def test_student_row_but_no_performance_returns_no_data(self):
         class NoPerfConn(FakeConn):
             async def fetch(self, query, *args):
                 if "FROM student_subject_performance" in query:
@@ -369,10 +371,11 @@ class TestErrorHandling(unittest.TestCase):
                 return super().fetch(query, *args)
 
         svc = M1V2PredictionService(FakePool(NoPerfConn()))
-        with self.assertRaises(ValueError):
-            run(svc.predict("STU6A0001"))
+        result = run(svc.predict("STU6A0001"))
+        self.assertEqual(result["readiness_status"], "NO_DATA")
+        self.assertEqual(result["subjects"], [])
 
-    def test_no_subjects_raises_value_error(self):
+    def test_no_subjects_returns_no_data(self):
         class EmptyPerfConn(FakeConn):
             async def fetch(self, query, *args):
                 if "FROM student_subject_performance" in query:
@@ -380,8 +383,9 @@ class TestErrorHandling(unittest.TestCase):
                 return super().fetch(query, *args)
 
         svc = M1V2PredictionService(FakePool(EmptyPerfConn()))
-        with self.assertRaises(ValueError):
-            run(svc.predict("STU6A0001"))
+        result = run(svc.predict("STU6A0001"))
+        self.assertEqual(result["readiness_status"], "NO_DATA")
+        self.assertEqual(result["subjects"], [])
 
     def test_none_pool_raises_runtime_error(self):
         with self.assertRaises(RuntimeError):
@@ -439,8 +443,10 @@ class TestM1V2Endpoint(unittest.TestCase):
         app = self.client.app
         app.dependency_overrides[get_db_pool] = lambda: FakePool(FakeConn(existing=False))
         r = self.client.get("/predict/m1v2/STU6ANOPE")
-        self.assertEqual(r.status_code, 404)
-        self.assertIn("detail", r.json())
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(body["readiness_status"], "NO_DATA")
+        self.assertEqual(len(body.get("subjects", [])), 0)
 
     def test_http_student_self_allowed(self):
         from fastapi import FastAPI
@@ -548,8 +554,8 @@ class TestDeploymentCohortGuard(unittest.TestCase):
 
     def test_out_of_cohort_student_is_no_data_not_zero(self):
         # Legacy 2023 cohort student id (STU00...) has performance rows but is
-        # outside the STU6A deployment cohort. It must be NO_DATA / 404, never
-        # a fabricated 0.0 prediction.
+        # outside the STU6A deployment cohort. It must be NO_DATA with honest
+        # reason, never a fabricated 0.0 prediction.
         from v2.m1_subject_prediction import config as v2config
         legacy_id = "STU000002"
         self.assertNotEqual(legacy_id[:5], v2config.COHORT_ID_PREFIX)
@@ -559,16 +565,17 @@ class TestDeploymentCohortGuard(unittest.TestCase):
                 return {"student_id": legacy_id, "gender": "Male",
                         "current_semester": 7}
 
-        with self.assertRaises(ValueError) as ctx:
-            run(M1V2PredictionService(FakePool(LegacyPerfConn())).predict(legacy_id))
-        self.assertIn("outside the deployment cohort", str(ctx.exception))
+        result = run(M1V2PredictionService(FakePool(LegacyPerfConn())).predict(legacy_id))
+        self.assertEqual(result["readiness_status"], "NO_DATA")
+        self.assertEqual(result["subjects"], [])
+        self.assertIn("reason", result)
 
     def test_in_cohort_student_is_ready(self):
         result = self._predict("STU6A0001")
         self.assertEqual(result["readiness_status"], "READY")
         self.assertGreater(result["prediction_count"], 0)
 
-    def test_http_out_of_cohort_is_404(self):
+    def test_http_out_of_cohort_returns_200_no_data(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         from app.api.dependencies import get_db_pool
@@ -590,8 +597,10 @@ class TestDeploymentCohortGuard(unittest.TestCase):
         }
         app.dependency_overrides[get_faculty_service] = lambda: _Admin()
         r = TestClient(app).get("/predict/m1v2/STU000002")
-        self.assertEqual(r.status_code, 404)
-        self.assertIn("detail", r.json())
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(body["readiness_status"], "NO_DATA")
+        self.assertIn("reason", body)
 
     def test_in_cohort_missing_pre_exam_signal_is_no_data_not_zero(self):
         # Within the deployment cohort, a subject whose pre_exam signal is
@@ -606,9 +615,10 @@ class TestDeploymentCohortGuard(unittest.TestCase):
                     return rows
                 return await super().fetch(query, *args)
 
-        with self.assertRaises(ValueError) as ctx:
-            run(M1V2PredictionService(FakePool(NoPreExamConn())).predict("STU6A0001"))
-        self.assertIn("pre-exam assessment", str(ctx.exception))
+        result = run(M1V2PredictionService(FakePool(NoPreExamConn())).predict("STU6A0001"))
+        self.assertEqual(result["readiness_status"], "NO_DATA")
+        self.assertEqual(result["subjects"], [])
+        self.assertIn("pre-exam assessment", result.get("reason", ""))
 
     def test_in_cohort_subject_missing_signal_is_skipped_others_kept(self):
         # If only ONE subject lacks the pre-exam signal, it is excluded while

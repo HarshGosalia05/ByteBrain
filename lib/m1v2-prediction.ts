@@ -37,6 +37,7 @@ export type M1V2PredictionData = {
   model_version: string
   algorithm: string | null
   readiness_status: M1V2ReadinessStatus
+  reason: string | null
   current_semester: number | null
   prediction_count: number
   predicted_at: string

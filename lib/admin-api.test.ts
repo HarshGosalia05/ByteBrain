@@ -445,6 +445,7 @@ const M1V2_ADMIN_BODY = {
   model_version: "2.0",
   algorithm: "ridge",
   readiness_status: "READY",
+  reason: null,
   current_semester: 5,
   prediction_count: 1,
   predicted_at: "2026-09-01T08:00:00Z",
@@ -501,12 +502,24 @@ test("getAdminStudentM1V2 URL-encodes the student id and caches within TTL", asy
   assert.equal(getCalls("/predict/m1v2").length, 1)
 })
 
-test("getAdminStudentM1V2 maps 404 / 503 and gates non-admin", async () => {
-  route("/predict/m1v2/STU-NOPE", 404, { detail: "no record" })
-  const missing = await adminApi.getAdminStudentM1V2("STU-NOPE")
-  assert.equal(missing.ok, false)
-  if (!missing.ok) assert.equal(missing.error.status, 404)
+test("getAdminStudentM1V2 returns 200 with NO_DATA for unavailable predictions", async () => {
+  const NO_DATA_BODY = {
+    ...M1V2_ADMIN_BODY,
+    readiness_status: "NO_DATA",
+    reason: "Not enough current-semester academic data is available",
+    subjects: [],
+    prediction_count: 0,
+  }
+  route("/predict/m1v2/STU-NOPE", 200, NO_DATA_BODY)
+  const result = await adminApi.getAdminStudentM1V2("STU-NOPE")
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.readiness_status, "NO_DATA")
+    assert.equal(result.data.subjects.length, 0)
+  }
+})
 
+test("getAdminStudentM1V2 maps 503 and gates non-admin", async () => {
   route("/predict/m1v2/STU-DOWN", 503, { detail: "down" })
   const down = await adminApi.getAdminStudentM1V2("STU-DOWN")
   assert.equal(down.ok, false)

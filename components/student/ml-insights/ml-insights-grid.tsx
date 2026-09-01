@@ -2,11 +2,13 @@ import { Sparkles, CircleAlert } from "lucide-react"
 
 import { EmptyState } from "@/components/shared/state/empty-state"
 import type { M1V2PredictionData } from "@/lib/m1v2-prediction"
+import type { M1V3PredictionData } from "@/lib/m1v3-prediction"
 import type { M2V2PredictionData } from "@/lib/m2v2-prediction"
 import type { M3V2PredictionData } from "@/lib/m3v2-prediction"
 import type { StudentCareerGuidance, StudentMlInsights } from "@/lib/student-api"
 
 import { M1V2Card } from "./m1v2-card"
+import { M1V3Card } from "./m1v3-card"
 import { M2V2Card } from "./m2v2-card"
 import { M3V2Card } from "./m3v2-card"
 import { M4CareerGuidanceCard } from "./m4-career-guidance-card"
@@ -32,6 +34,8 @@ function hasAnyData(
   guidance: StudentCareerGuidance | null,
   m1v2: M1V2PredictionData | null,
   m1v2NoData: boolean,
+  m1v3: M1V3PredictionData | null,
+  m1v3NoData: boolean,
   m2v2: M2V2PredictionData | null,
   m2v2NoData: boolean,
   m3v2: M3V2PredictionData | null,
@@ -42,9 +46,11 @@ function hasAnyData(
     m4Available ||
     (guidance?.data_available ?? false) ||
     m1v2NoData ||
+    m1v3NoData ||
     m2v2NoData ||
     m3v2NoData ||
     (m1v2?.subjects.length ?? 0) > 0 ||
+    (m1v3?.subjects.length ?? 0) > 0 ||
     (m2v2?.readiness_status ?? "") === "READY" ||
     (m3v2?.readiness_status ?? "") === "READY"
   )
@@ -55,6 +61,10 @@ export function MlInsightsGrid({
   guidance = null,
   m1v2 = null,
   m1v2NoData = false,
+  m1v2Reason = null,
+  m1v3 = null,
+  m1v3NoData = false,
+  m1v3Reason = null,
   m2v2 = null,
   m2v2NoData = false,
   m3v2 = null,
@@ -64,12 +74,16 @@ export function MlInsightsGrid({
   guidance?: StudentCareerGuidance | null
   m1v2?: M1V2PredictionData | null
   m1v2NoData?: boolean
+  m1v2Reason?: string | null
+  m1v3?: M1V3PredictionData | null
+  m1v3NoData?: boolean
+  m1v3Reason?: string | null
   m2v2?: M2V2PredictionData | null
   m2v2NoData?: boolean
   m3v2?: M3V2PredictionData | null
   m3v2NoData?: boolean
 }) {
-  if (!hasAnyData(data, guidance, m1v2, m1v2NoData, m2v2, m2v2NoData, m3v2, m3v2NoData)) {
+  if (!hasAnyData(data, guidance, m1v2, m1v2NoData, m1v3, m1v3NoData, m2v2, m2v2NoData, m3v2, m3v2NoData)) {
     return (
       <EmptyState
         icon={Sparkles}
@@ -81,11 +95,18 @@ export function MlInsightsGrid({
 
   return (
     <div className="flex flex-col gap-6">
-      {m1v2 && <M1V2Card data={m1v2} />}
-      {m1v2NoData && !m1v2 && (
+      {m1v3 && <M1V3Card data={m1v3} />}
+      {m1v3NoData && !m1v3 && (
         <V2NoDataNote
-          title="Subject predictions not available yet"
-          message="Subject-level predictions are not available because the required academic data for the current semester is not yet present in the dataset."
+          title="Prediction unavailable"
+          message={m1v3Reason ?? "Not enough current-semester academic data is available to generate a reliable subject prediction yet."}
+        />
+      )}
+      {!m1v3 && m1v2 && <M1V2Card data={m1v2} />}
+      {!m1v3 && m1v2NoData && !m1v2 && (
+        <V2NoDataNote
+          title="Prediction unavailable"
+          message={m1v2Reason ?? "Not enough current-semester academic data is available to generate a reliable subject prediction yet."}
         />
       )}
       {m2v2 && <M2V2Card data={m2v2} />}
