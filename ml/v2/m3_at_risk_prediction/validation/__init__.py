@@ -1,0 +1,1 @@
+"""M3 v2 — validation (GroupKFold + temporal holdout + metrics)."""

@@ -1,0 +1,1 @@
+"""M3 v2 — data loading (read-only Supabase extraction)."""

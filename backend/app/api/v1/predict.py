@@ -21,7 +21,13 @@ from app.services.prediction_insights_service import PredictionInsightsService
 from app.services.prediction_contract_service import (
     PredictionContractService,
 )
+from app.services.m1v2_prediction_service import M1V2PredictionService
+from app.services.m2v2_prediction_service import M2V2PredictionService
+from app.services.m3v2_prediction_service import M3V2PredictionService
 from app.services.faculty_service import FacultyService
+from app.schemas import m1v2 as schemas
+from app.schemas import m2v2 as m2v2_schemas
+from app.schemas import m3v2 as m3v2_schemas
 
 router = APIRouter(prefix="/predict", tags=["predictions"])
 
@@ -36,6 +42,24 @@ def get_contract_prediction_service(
     pool: asyncpg.Pool = Depends(get_db_pool),
 ) -> PredictionContractService:
     return PredictionContractService(pool)
+
+
+def get_m1v2_prediction_service(
+    pool: asyncpg.Pool = Depends(get_db_pool),
+) -> M1V2PredictionService:
+    return M1V2PredictionService(pool)
+
+
+def get_m2v2_prediction_service(
+    pool: asyncpg.Pool = Depends(get_db_pool),
+) -> M2V2PredictionService:
+    return M2V2PredictionService(pool)
+
+
+def get_m3v2_prediction_service(
+    pool: asyncpg.Pool = Depends(get_db_pool),
+) -> M3V2PredictionService:
+    return M3V2PredictionService(pool)
 
 
 def get_generation_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> PredictionGenerationService:
@@ -125,6 +149,160 @@ async def predict_m1(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Prediction failed: {str(e)}",
         )
+
+
+@router.get(
+    "/m1v2/{student_id}",
+    response_model=schemas.M1V2PredictionResponse,
+    responses={
+        404: {"model": schemas.M1V2Error},
+        503: {"model": schemas.M1V2Error},
+        500: {"model": schemas.M1V2Error},
+    },
+    tags=["predictions"],
+)
+async def predict_m1_v2(
+    student_id: str,
+    service: M1V2PredictionService = Depends(get_m1v2_prediction_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
+    user: dict = Depends(get_current_user),
+):
+    """Predict end-semester marks per subject with the validated M1 V2 model.
+
+    Explicit, version controlled M1 V2 path (39-feature contract). Reads real
+    student data (read-only) and returns per-subject predicted end-sem marks
+    in [0, 70]. Uses the SAME authorization rule as every other /predict route
+    (student: own id; faculty: within authorized scope; admin: any). The legacy
+    /predict/m1/{student_id} endpoint is unchanged.
+    """
+    await authorize_prediction_access(user, student_id, faculty_service)
+
+    try:
+        result = await service.predict(student_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"M1 V2 artifact unavailable: {e}",
+        )
+    except (ConnectionError, RuntimeError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"M1 V2 prediction failed: {str(e)}",
+        )
+    return result
+
+
+@router.get(
+    "/m2v2/{student_id}",
+    response_model=m2v2_schemas.M2V2PredictionResponse,
+    responses={
+        404: {"model": m2v2_schemas.M2V2Error},
+        503: {"model": m2v2_schemas.M2V2Error},
+        500: {"model": m2v2_schemas.M2V2Error},
+    },
+    tags=["predictions"],
+)
+async def predict_m2_v2(
+    student_id: str,
+    service: M2V2PredictionService = Depends(get_m2v2_prediction_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
+    user: dict = Depends(get_current_user),
+):
+    """Predict next-semester SGPA and percentage with the validated M2 V2 model.
+
+    Explicit, version controlled M2 V2 path (T -> T+1 contract). Reads real
+    student data (read-only) and returns predicted next-semester
+    ``semester_sgpa``/``semester_percentage`` from the student's last completed
+    NORMAL academic observation semester. Uses the SAME authorization rule as
+    every other /predict route. The legacy /predict/m2/{student_id} endpoint is
+    unchanged.
+
+    If the student has no upcoming regular academic semester (e.g. currently in
+    the final / internship semester 8), readiness is NO_DATA and the service
+    surfaces a 404 — no fabricated forward prediction is returned.
+    """
+    await authorize_prediction_access(user, student_id, faculty_service)
+
+    try:
+        result = await service.predict(student_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"M2 V2 artifact unavailable: {e}",
+        )
+    except (ConnectionError, RuntimeError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"M2 V2 prediction failed: {str(e)}",
+        )
+    return result
+
+
+@router.get(
+    "/m3v2/{student_id}",
+    response_model=m3v2_schemas.M3V2PredictionResponse,
+    responses={
+        404: {"model": m3v2_schemas.M3V2Error},
+        503: {"model": m3v2_schemas.M3V2Error},
+        500: {"model": m3v2_schemas.M3V2Error},
+    },
+    tags=["predictions"],
+)
+async def predict_m3_v2(
+    student_id: str,
+    service: M3V2PredictionService = Depends(get_m3v2_prediction_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
+    user: dict = Depends(get_current_user),
+):
+    """Estimate a student's academic-risk probability with the validated M3 V2 model.
+
+    Explicit, version controlled M3 V2 path (T -> T+1 binary at-risk contract).
+    Reads real student T-only data (read-only) and returns the estimated
+    probability of entering an academic-risk state (backlog/ATKT) in the student's
+    next NORMAL academic semester, classified with the artifact's tuned threshold,
+    plus the top signals contributing to the estimate.
+
+    The estimate is NOT a certainty and does NOT claim causality. Uses the SAME
+    authorization rule as every other /predict route (student: own id; faculty:
+    within authorized scope; admin: any). The BLOCKED legacy /predict/m3/
+    endpoint is unchanged.
+    """
+    await authorize_prediction_access(user, student_id, faculty_service)
+
+    try:
+        result = await service.predict(student_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"M3 V2 artifact unavailable: {e}",
+        )
+    except (ConnectionError, RuntimeError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"M3 V2 prediction failed: {str(e)}",
+        )
+    return result
 
 
 @router.get(

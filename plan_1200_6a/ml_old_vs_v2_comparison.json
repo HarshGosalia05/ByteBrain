@@ -1,0 +1,69 @@
+{
+  "document": "ml_old_vs_v2_comparison",
+  "status": "COMPARISON_COMPLETE_RECOMMENDATION_ISSUED",
+  "date": "2026-09-01",
+  "safety": {
+    "nothing_deleted": true,
+    "no_legacy_model_modified": true,
+    "no_retraining": true,
+    "no_supabase_change": true,
+    "artifacts_loaded_read_only": true,
+    "guardrails": "Legacy retirement/cleanup is a separate later task and is NOT executed here."
+  },
+  "winners": [
+    {
+      "model": "M1",
+      "name": "Subject end-marks (regression)",
+      "old": {"implementation": "ml/src/m1/", "artifact": "ml/artifacts/models/m1_subject_endmarks.joblib", "algorithm": "hist_gbm", "features": 12, "cohort": "80 students / 3293 rows (synthetic)", "metrics": {"cv_mae": 3.18, "cv_r2": 0.82, "temporal_mae": 3.23}, "metrics_trustworthy": false, "reasons_not_trustworthy": ["Synthetic near-stationary data", "same-semester features correlate 0.81-0.87 with target"]},
+      "new": {"implementation": "ml/v2/m1_subject_prediction/", "artifact": "ml/v2/m1_subject_prediction/artifacts/models/m1_v2_subject_endmarks.joblib", "algorithm": "ridge", "features": 39, "cohort": "1200 students / 67200 rows (real)", "cv_mae": 6.319, "cv_r2": 0.434, "temporal_mae": 6.302, "temporal_r2": 0.423, "lift_beats_mean_baseline_pct": 25, "lift_beats_prior_sem_baseline_pct": 16, "leakage": "PASS"},
+      "winner": "V2",
+      "confidence": "High",
+      "reason": "OLD M1 is a synthetic-data artifact; V2 is the only real-data, baseline-corrected, leak-checked estimator."
+    },
+    {
+      "model": "M2",
+      "name": "Next-semester performance (SGPA / percentage, regression)",
+      "old": {"implementation": "ml/src/m2/ + ml/src/features/v1_m2_regression.py", "artifact": "ml/artifacts/models/m2_next_semester_performance.joblib", "algorithm": "hist_gbm per-target", "features": "11 raw -> 12 encoded", "cohort": "80-300/420 rows (synthetic)", "metrics": {"percentage": {"mae": 1.102, "r2": 0.9972}, "sgpa": {"mae": 0.152, "r2": 0.9911}}, "metrics_trustworthy": false, "reasons_not_trustworthy": ["R^2 ~0.99 is a verified autocorrelation artifact", "semester_percentage corr 0.9919 with next-pct"]},
+      "new": {"implementation": "ml/v2/m2_next_semester_prediction/", "artifact": "ml/v2/m2_next_semester_prediction/artifacts/models/m2_v2_next_semester.joblib", "algorithm": {"next_semester_sgpa": "random_forest", "next_semester_percentage": "ridge"}, "features": 34, "cohort": "1200 students / 6000 train / 1200 holdout (real)", "cv": {"sgpa": {"mae": 0.1932, "r2": 0.7003}, "percentage": {"mae": 2.4898, "r2": 0.8160}}, "temporal": {"sgpa": {"mae": 0.2235, "r2": 0.5910}, "percentage": {"mae": 2.9745, "r2": 0.7371}}, "lift_beats_carryforward_sgpa_pct": 18.6, "lift_beats_carryforward_percentage_pct": 15.3, "leakage": "PASS"},
+      "winner": "V2",
+      "confidence": "High",
+      "reason": "OLD M2 R^2 ~0.99 is a proven autocorrelation artifact; V2 proves real lift over carry-forward on a held-out transition."
+    },
+    {
+      "model": "M3",
+      "name": "At-risk classification",
+      "old": {"implementation": "ml/src/features/v1_*m3* + ml/src/retrain_m3.py", "artifact": "ml/artifacts/models/m3_next_semester_at_risk.joblib", "algorithm": "logistic_regression Pipeline", "features": "11 raw -> 12 encoded", "cohort": "392 neg / 28 pos from only 6 students (synthetic)", "metrics": {"accuracy": 1.0, "precision": 0.8, "recall": 0.8, "f1": 0.8, "roc_auc": 1.0}, "metrics_trustworthy": false, "reasons_not_trustworthy": ["Only 6 unique positive students (small-sample artifact)", "validation gate FAIL", "inference BLOCKED", "retrain_m3.py has leakage/label divergences"], "production_status": "BLOCKED"},
+      "new": {"implementation": "ml/v2/m3_at_risk_prediction/", "artifact": "ml/v2/m3_at_risk_prediction/artifacts/models/m3_v2_at_risk.joblib", "algorithm": "random_forest", "features": 35, "threshold": 0.64, "cohort": "7200 rows train; holdout 28 pos / 1172 neg (real)", "temporal_holdout_recall": 0.571, "temporal_holdout_pr_auc": 0.282, "base_rate_pr_auc": 0.023, "baseline_recall": 0.0, "leakage": "PASS", "deployment_boundary": "Live cohort at semester 8 -> NO_DATA (honest boundary)"},
+      "winner": "V2",
+      "confidence": "Medium",
+      "further_validation_needed": true,
+      "reason": "OLD M3 is statistically invalid (6 positive students, gate FAIL, BLOCKED). V2 is the only load-bearing classifier but remains provisional until a genuinely unseen cohort supplies sufficient real positives."
+    }
+  ],
+  "retirement_classifications": [
+    {"asset": "OLD M1 artifact + ml/src/m1/*", "action": "ARCHIVE"},
+    {"asset": "OLD M2 artifact + ml/src/m2/* + v1_m2_regression.py", "action": "ARCHIVE"},
+    {"asset": "OLD M3 artifact + ml/src/features/v1_*m3*", "action": "ARCHIVE"},
+    {"asset": "ml/src/retrain_m3.py", "action": "BLOCKED_FROM_REUSE"},
+    {"asset": "OLD M1/M2/M3 reports", "action": "ARCHIVE_DO_NOT_QUOTE_METRICS"},
+    {"asset": "V2 M1/M2/M3 artifacts + backend + frontend", "action": "KEEP_OR_PROMOTE"}
+  ],
+  "regression_safety": {
+    "ml_suite_passed": 841,
+    "backend": "1442 passed (excluding pre-existing unrelated asyncio ordering issue in test_analytics*)",
+    "frontend": "150/150",
+    "typecheck": "PASS",
+    "no_legacy_model_supabase_touched": true
+  },
+  "sources": [
+    "plan_1200_6a/existing_ml_audit.md",
+    "plan_1200_6a/ml_v2_architecture.md",
+    "ml/reports/m1_report.md",
+    "ml/reports/m1_verification.md",
+    "ml/reports/m2_report.md",
+    "ml/reports/m3_report.md",
+    "ml/v2/m1_subject_prediction/reports/m1_v2_validation_report.md",
+    "ml/v2/m2_next_semester_prediction/reports/m2_v2_validation_report.md",
+    "ml/v2/m3_at_risk_prediction/reports/m3_v2_validation_report.md"
+  ]
+}

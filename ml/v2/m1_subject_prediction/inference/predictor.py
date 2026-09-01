@@ -257,6 +257,35 @@ class M1V2Predictor:
                 "subjects": [],
             }
 
+        # Deployment cohort guard.
+        #
+        # M1 V2 was trained and validated ONLY on the CSE 6A cohort whose
+        # student ids start with COHORT_ID_PREFIX (STU6A) and whose V2 feature
+        # sources (pre_endsem_assessment_pct, attendance_weekly, learning
+        # activity, etc.) are populated by the 6A ETL. Students outside that
+        # cohort (e.g. legacy 2023 STU00 students) have those columns NULL, so
+        # running inference on them fabricates a near-all-zero, out-of-
+        # distribution vector that the model clips to TARGET_MIN (0.0) — which
+        # renders as a false "0.0/70 F At Risk". A missing/unsupported cohort
+        # must surface as NO_DATA, never as a fabricated 0.0 prediction.
+        deployment_prefix = (
+            str(self._metadata.get("student_prefix") or config.COHORT_ID_PREFIX)
+            or config.COHORT_ID_PREFIX
+        ).strip()
+        if not student_id.startswith(deployment_prefix):
+            return {
+                "student_id": student_id,
+                "model_version": self._metadata.get("model_version", "2.0"),
+                "predicted_at": datetime.now(timezone.utc).isoformat(),
+                "readiness_status": "NO_DATA",
+                "reason": (
+                    f"Student {student_id} is outside the deployment cohort for this "
+                    f"model (expected id prefix '{deployment_prefix}'). Prediction is "
+                    "not available for out-of-cohort students."
+                ),
+                "subjects": [],
+            }
+
         current_semester = int(stu_row["current_semester"])
 
         # Fetch performance records for CURRENT semester
@@ -322,6 +351,20 @@ class M1V2Predictor:
         subject_predictions = []
         for _, prow in current_perf.iterrows():
             enrollment_id = prow["enrollment_record_id"]
+
+            # Missing-data guard: never fabricate a 0 for an absent Tier-1
+            # pre-exam signal. If the required pre-exam composite assessment is
+            # not present for this subject (NULL or NaN), predicting 0 (or any
+            # value) from a partial vector is misleading. Skip it so the subject
+            # is not included; if none remain, readiness becomes NO_DATA below.
+            pre_exam_signal = prow.get("pre_endsem_assessment_pct")
+            if pre_exam_signal is None or (
+                isinstance(pre_exam_signal, float) and np.isnan(pre_exam_signal)
+            ):
+                continue
+
+            subject_id = str(prow.get("subject_id", ""))
+            subject_semester = int(prow.get("semester_no", current_semester))
 
             # Enrollment features
             if len(enr_df) > 0:
@@ -419,8 +462,8 @@ class M1V2Predictor:
             grade_band, grade_label = _grade_from_marks(pred_marks)
 
             subject_predictions.append({
-                "subject_id": str(prow.get("subject_id", "")),
-                "semester_no": int(prow.get("semester_no", current_semester)),
+                "subject_id": subject_id,
+                "semester_no": subject_semester,
                 "predicted_end_sem_marks": round(pred_marks, 2),
                 "target_max": config.TARGET_MAX,
                 "grade_band": grade_band,
@@ -435,17 +478,32 @@ class M1V2Predictor:
 
         elapsed_ms = (time.time() - t_start) * 1000.0
 
-        return {
+        if subject_predictions:
+            readiness_status = "READY"
+            reason = None
+        else:
+            readiness_status = "NO_DATA"
+            reason = (
+                "No current-semester subject has the required pre-exam assessment "
+                "signal (pre_endsem_assessment_pct) to support a prediction. "
+                "Prediction was not run to avoid fabricating a value from "
+                "incomplete data."
+            )
+
+        payload = {
             "student_id": student_id,
             "model_version": self._metadata.get("model_version", "2.0"),
             "algorithm": self._metadata.get("algorithm", "unknown"),
             "predicted_at": datetime.now(timezone.utc).isoformat(),
-            "readiness_status": "READY" if subject_predictions else "NO_DATA",
+            "readiness_status": readiness_status,
             "current_semester": current_semester,
             "prediction_count": len(subject_predictions),
             "inference_ms": round(elapsed_ms, 2),
             "subjects": subject_predictions,
         }
+        if reason is not None:
+            payload["reason"] = reason
+        return payload
 
 
 # ──────────────────────────────────────────────────────────────────────────────

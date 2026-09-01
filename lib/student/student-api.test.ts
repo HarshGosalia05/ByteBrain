@@ -756,3 +756,304 @@ test("signOutAllStudentDevices POSTs to backend", async () => {
   assert.equal(hit.length, 1)
   assert.equal(hit[0].init?.method, "POST")
 })
+
+// ---------------------------------------------------------------------------
+// M1 V2 — Subject Marks Prediction (validated production model).
+// The per-student route /predict/m1v2/{student_id} is consumed by the student
+// BFF. NO_DATA surfaces as a 404 on this route; errors map to BffError codes.
+// ---------------------------------------------------------------------------
+
+const M1V2_BODY = {
+  student_id: "STU-A",
+  model_id: "m1_v2",
+  model_version: "2.0",
+  algorithm: "ridge",
+  readiness_status: "READY",
+  current_semester: 3,
+  prediction_count: 2,
+  predicted_at: "2026-09-01T08:00:00Z",
+  inference_ms: 3.2,
+  subjects: [
+    {
+      subject_id: "SUB001",
+      semester_no: 3,
+      predicted_end_sem_marks: 55.5,
+      target_max: 70,
+      grade_band: "Average",
+      grade_label: "B+",
+      input_features: {
+        internal_marks: 17.0,
+        mid_sem_marks: 14.5,
+        att_total_pct: 92.4,
+        pre_endsem_assessment_pct: 61.0,
+      },
+    },
+  ],
+  note: "Predicted end-sem marks are model estimates, not actual results.",
+}
+
+test("getStudentM1V2 fetches /predict/m1v2 with own student id and parses typed result", async () => {
+  route("/predict/m1v2/STU-A", 200, M1V2_BODY)
+
+  const result = await studentApi.getStudentM1V2()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.model_id, "m1_v2")
+  assert.equal(result.data.model_version, "2.0")
+  assert.equal(result.data.readiness_status, "READY")
+  assert.equal(result.data.subjects.length, 1)
+  const subject = result.data.subjects[0]
+  assert.equal(subject.predicted_end_sem_marks, 55.5)
+  assert.equal(subject.grade_band, "Average")
+  assert.ok(subject.predicted_end_sem_marks <= subject.target_max)
+
+  const hit = getCalls("/predict/m1v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m1v2/STU-A")
+})
+
+test("getStudentM1V2 url-encodes the student id", async () => {
+  activeSession = { ...DEFAULT_SESSION, student_id: "STU A/1" }
+  route("/predict/m1v2/STU%20A%2F1", 200, M1V2_BODY)
+
+  const result = await studentApi.getStudentM1V2()
+  assert.equal(result.ok, true)
+  const hit = getCalls("/predict/m1v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m1v2/STU%20A%2F1")
+})
+
+test("getStudentM1V2 auth gating (401 / 403 / 400) applies", async () => {
+  activeSession = null
+  const noSession = await studentApi.getStudentM1V2()
+  assert.equal(noSession.ok, false)
+  if (!noSession.ok) assert.equal(noSession.error.status, 401)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Faculty" }
+  const wrongRole = await studentApi.getStudentM1V2()
+  assert.equal(wrongRole.ok, false)
+  if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
+
+  activeSession = { ...DEFAULT_SESSION, student_id: null }
+  const unlinked = await studentApi.getStudentM1V2()
+  assert.equal(unlinked.ok, false)
+  if (!unlinked.ok) assert.equal(unlinked.error.status, 400)
+})
+
+test("getStudentM1V2 maps 404 (NO_DATA) and is cached across reads", async () => {
+  route("/predict/m1v2/STU-A", 200, M1V2_BODY)
+  await studentApi.getStudentM1V2()
+  await studentApi.getStudentM1V2()
+  const gets = getCalls("/predict/m1v2")
+  assert.equal(gets.length, 1, "second read must hit the cache")
+
+  routes.clear()
+  route("/predict/m1v2/STU-A", 404, { detail: "no records" })
+  await studentApi.invalidateBffKeys(DEFAULT_SESSION.student_id, [""])
+  const missing = await studentApi.getStudentM1V2()
+  assert.equal(missing.ok, false)
+  if (!missing.ok) assert.equal(missing.error.code, "not_found")
+})
+
+test("getStudentM1V2 maps 503 network/backend failure", async () => {
+  route("/predict/m1v2/STU-A", 503, { detail: "down" })
+  const result = await studentApi.getStudentM1V2()
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.equal(result.error.status, 503)
+})
+
+// ---------------------------------------------------------------------------
+// M2 V2 — Next-Semester Performance Prediction (validated production model).
+// The per-student route /predict/m2v2/{student_id} is consumed by the student
+// BFF. NO_DATA (incl. the deployment boundary: current cohort in the final /
+// internship semester has no upcoming regular semester) surfaces as a 404.
+// ---------------------------------------------------------------------------
+
+const M2V2_BODY = {
+  student_id: "STU-A",
+  model_id: "m2_v2",
+  model_version: "2.0",
+  readiness_status: "READY",
+  observation_semester: 6,
+  prediction_takes_effect_semester: 7,
+  predicted_next_semester_sgpa: 8.12,
+  predicted_next_semester_percentage: 76.4,
+  algorithm: { next_semester_sgpa: "random_forest", next_semester_percentage: "ridge" },
+  reason: null,
+  predicted_at: "2026-09-01T08:00:00Z",
+  inference_ms: 2.1,
+  note: "Predicted next-semester SGPA/percentage are model estimates.",
+}
+
+test("getStudentM2V2 fetches /predict/m2v2 with own student id and parses typed result", async () => {
+  route("/predict/m2v2/STU-A", 200, M2V2_BODY)
+
+  const result = await studentApi.getStudentM2V2()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.model_id, "m2_v2")
+  assert.equal(result.data.readiness_status, "READY")
+  assert.equal(result.data.prediction_takes_effect_semester, 7)
+  assert.equal(result.data.predicted_next_semester_sgpa, 8.12)
+  assert.equal(result.data.predicted_next_semester_percentage, 76.4)
+
+  const hit = getCalls("/predict/m2v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2v2/STU-A")
+})
+
+test("getStudentM2V2 url-encodes the student id", async () => {
+  activeSession = { ...DEFAULT_SESSION, student_id: "STU A/1" }
+  route("/predict/m2v2/STU%20A%2F1", 200, M2V2_BODY)
+
+  const result = await studentApi.getStudentM2V2()
+  assert.equal(result.ok, true)
+  const hit = getCalls("/predict/m2v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2v2/STU%20A%2F1")
+})
+
+test("getStudentM2V2 auth gating (401 / 403 / 400) applies", async () => {
+  activeSession = null
+  const noSession = await studentApi.getStudentM2V2()
+  assert.equal(noSession.ok, false)
+  if (!noSession.ok) assert.equal(noSession.error.status, 401)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Faculty" }
+  const wrongRole = await studentApi.getStudentM2V2()
+  assert.equal(wrongRole.ok, false)
+  if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
+
+  activeSession = { ...DEFAULT_SESSION, student_id: null }
+  const unlinked = await studentApi.getStudentM2V2()
+  assert.equal(unlinked.ok, false)
+  if (!unlinked.ok) assert.equal(unlinked.error.status, 400)
+})
+
+test("getStudentM2V2 maps 404 (NO_DATA / deployment boundary) and is cached", async () => {
+  route("/predict/m2v2/STU-A", 200, M2V2_BODY)
+  await studentApi.getStudentM2V2()
+  await studentApi.getStudentM2V2()
+  const gets = getCalls("/predict/m2v2")
+  assert.equal(gets.length, 1, "second read must hit the cache")
+
+  routes.clear()
+  route("/predict/m2v2/STU-A", 404, { detail: "no upcoming normal academic semester" })
+  await studentApi.invalidateBffKeys(DEFAULT_SESSION.student_id, [""])
+  const missing = await studentApi.getStudentM2V2()
+  assert.equal(missing.ok, false)
+  if (!missing.ok) assert.equal(missing.error.code, "not_found")
+})
+
+test("getStudentM2V2 maps 503 network/backend failure", async () => {
+  route("/predict/m2v2/STU-A", 503, { detail: "down" })
+  const result = await studentApi.getStudentM2V2()
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.equal(result.error.status, 503)
+})
+
+// ---------------------------------------------------------------------------
+// M3 V2 — At-Risk Student Prediction (validated production model).
+// The per-student route /predict/m3v2/{student_id} is consumed by the student
+// BFF. probability_at_risk is a model ESTIMATE (never a guarantee). NO_DATA
+// (incl. the deployment boundary: the current cohort is in the final /
+// internship semester with no upcoming regular semester) surfaces as a 404.
+// ---------------------------------------------------------------------------
+
+const M3V2_BODY = {
+  student_id: "STU-A",
+  model_id: "m3_v2",
+  model_version: "2.0",
+  readiness_status: "READY",
+  observation_semester: 6,
+  prediction_takes_effect_semester: 7,
+  probability_at_risk: 0.09,
+  threshold: 0.64,
+  is_estimated_at_risk: false,
+  signals: [{ feature: "semester_percentage", raw_value: 76.4, importance: 0.2 }],
+  algorithm: { is_at_risk_next_sem: "random_forest" },
+  reason: null,
+  predicted_at: "2026-09-01T08:00:00Z",
+  inference_ms: 2.1,
+  note: "Estimated academic-risk probability is a model estimate.",
+}
+
+test("getStudentM3V2 fetches /predict/m3v2 with own student id and parses typed result", async () => {
+  route("/predict/m3v2/STU-A", 200, M3V2_BODY)
+
+  const result = await studentApi.getStudentM3V2()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.model_id, "m3_v2")
+  assert.equal(result.data.readiness_status, "READY")
+  assert.equal(result.data.prediction_takes_effect_semester, 7)
+  assert.equal(result.data.probability_at_risk, 0.09)
+  assert.equal(result.data.is_estimated_at_risk, false)
+
+  const hit = getCalls("/predict/m3v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m3v2/STU-A")
+})
+
+test("getStudentM3V2 url-encodes the student id", async () => {
+  activeSession = { ...DEFAULT_SESSION, student_id: "STU A/1" }
+  route("/predict/m3v2/STU%20A%2F1", 200, M3V2_BODY)
+
+  const result = await studentApi.getStudentM3V2()
+  assert.equal(result.ok, true)
+  const hit = getCalls("/predict/m3v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m3v2/STU%20A%2F1")
+})
+
+test("getStudentM3V2 auth gating (401 / 403 / 400) applies", async () => {
+  activeSession = null
+  const noSession = await studentApi.getStudentM3V2()
+  assert.equal(noSession.ok, false)
+  if (!noSession.ok) assert.equal(noSession.error.status, 401)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Faculty" }
+  const wrongRole = await studentApi.getStudentM3V2()
+  assert.equal(wrongRole.ok, false)
+  if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
+
+  activeSession = { ...DEFAULT_SESSION, student_id: null }
+  const unlinked = await studentApi.getStudentM3V2()
+  assert.equal(unlinked.ok, false)
+  if (!unlinked.ok) assert.equal(unlinked.error.status, 400)
+})
+
+test("getStudentM3V2 maps 404 (NO_DATA / deployment boundary) and is cached", async () => {
+  route("/predict/m3v2/STU-A", 200, M3V2_BODY)
+  await studentApi.getStudentM3V2()
+  await studentApi.getStudentM3V2()
+  const gets = getCalls("/predict/m3v2")
+  assert.equal(gets.length, 1, "second read must hit the cache")
+
+  routes.clear()
+  route("/predict/m3v2/STU-A", 404, { detail: "no upcoming normal academic semester" })
+  await studentApi.invalidateBffKeys(DEFAULT_SESSION.student_id, [""])
+  const missing = await studentApi.getStudentM3V2()
+  assert.equal(missing.ok, false)
+  if (!missing.ok) assert.equal(missing.error.code, "not_found")
+})
+
+test("getStudentM3V2 maps 503 network/backend failure", async () => {
+  route("/predict/m3v2/STU-A", 503, { detail: "down" })
+  const result = await studentApi.getStudentM3V2()
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.equal(result.error.status, 503)
+})
+
+test("getStudentM3V2 keeps the at-risk estimate framing honest", async () => {
+  // is_estimated_at_risk is driven by the tuned threshold + probability estimate.
+  // It must parse into the shared M3V2PredictionData shape and the signals list
+  // (feature contributions to the model estimate) round-trips unchanged.
+  route("/predict/m3v2/STU-A", 200, M3V2_BODY)
+  const result = await studentApi.getStudentM3V2()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.signals.length, 1)
+  assert.equal(result.data.signals[0].feature, "semester_percentage")
+  assert.equal(result.data.algorithm?.["is_at_risk_next_sem"], "random_forest")
+})

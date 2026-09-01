@@ -1,6 +1,6 @@
 "use client"
 
-import { BookOpen, GraduationCap, TrendingUp, Info } from "lucide-react"
+import { BookOpen, GraduationCap, TrendingUp, Info, CircleAlert } from "lucide-react"
 import type { AcademicPredictionIntelligence } from "@/lib/admin-api"
 import { StatCard } from "@/components/shared/data/stat-card"
 import { ChartCard } from "@/components/shared/data/chart-card"
@@ -27,6 +27,55 @@ export function AcademicPredictionCard({ data }: { data: AcademicPredictionIntel
 
   return (
     <div className="flex flex-col gap-6">
+      {/* M1 V2 availability notice — documented limitation, never fabricated */}
+      <div className="flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
+        <CircleAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="flex flex-col gap-0.5">
+          <p className="text-sm font-medium">M1 V2 cohort analytics (not yet available)</p>
+          <p className="text-xs text-muted-foreground">
+            Institutional M1 V2 (Subject Marks Prediction) aggregate statistics are unavailable
+            because the backend exposes M1 V2 per-student only, with no cohort endpoint and no
+            persistence wiring. The validated M1 V2 predictions are surfaced per student for the
+            Student and Faculty/Mentor experiences. No aggregate figures are shown here to avoid
+            presenting unverified statistics.
+          </p>
+        </div>
+      </div>
+
+      {/* M2 V2 availability notice — documented limitation, never fabricated */}
+      <div className="flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
+        <CircleAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="flex flex-col gap-0.5">
+          <p className="text-sm font-medium">M2 V2 cohort analytics (not yet available)</p>
+          <p className="text-xs text-muted-foreground">
+            Institutional M2 V2 (Next-Semester Performance Prediction) aggregate statistics are
+            unavailable because the backend exposes M2 V2 per-student only, with no cohort endpoint
+            and no persistence wiring. The validated M2 V2 predictions are surfaced per student for
+            the Student and Faculty/Mentor experiences. Additionally, the current cohort is in the
+            final / internship semester and has no upcoming regular academic semester, so their
+            per-student M2 V2 predictions are NO_DATA by design. No aggregate figures are shown here
+            to avoid presenting unverified statistics.
+          </p>
+        </div>
+      </div>
+
+      {/* M3 V2 availability notice — documented limitation, never fabricated */}
+      <div className="flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
+        <CircleAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="flex flex-col gap-0.5">
+          <p className="text-sm font-medium">M3 V2 at-risk cohort analytics (not yet available)</p>
+          <p className="text-xs text-muted-foreground">
+            Institutional M3 V2 (At-Risk Student Prediction) aggregate risk statistics are
+            unavailable for the same reason as M1/M2 V2: the backend exposes M3 V2 per-student only,
+            with no cohort endpoint and no persistence wiring. The validated M3 V2 at-risk estimate
+            is surfaced per student for the Student and Faculty/Mentor experiences. The current
+            cohort is in the final / internship semester with no upcoming regular academic semester,
+            so their per-student M3 V2 estimates are NO_DATA by design and must not be fabricated.
+            No aggregate figures are shown here to avoid presenting unverified statistics.
+          </p>
+        </div>
+      </div>
+
       {/* M1 & M2 Header KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

@@ -1,4 +1,7 @@
 import { getSessionUser, type SessionUser } from "./student-session.ts"
+import type { M1V2PredictionData } from "./m1v2-prediction"
+import type { M2V2PredictionData } from "./m2v2-prediction"
+import type { M3V2PredictionData } from "./m3v2-prediction"
 
 const FASTAPI_URL = (process.env.FASTAPI_URL ?? "http://localhost:8000").replace(/\/+$/, "")
 const BFF_TTL_MS = 60_000
@@ -627,6 +630,44 @@ export type StudentMlInsights = {
 export function getStudentMlInsights(): Promise<BffResult<StudentMlInsights>> {
   return callApiV1<StudentMlInsights>(
     (studentId) => `/predict/insights/${encodeURIComponent(studentId)}`,
+    BFF_TTL_MS,
+  )
+}
+
+// M1 V2 — Subject Marks Prediction (validated production model).
+// README: reuses /predict/m1v2/{student_id}; readiness_status of NO_DATA is
+// surfaced by the backend as a 404 on this per-student route.
+
+export function getStudentM1V2(): Promise<BffResult<M1V2PredictionData>> {
+  return callApiV1<M1V2PredictionData>(
+    (studentId) => `/predict/m1v2/${encodeURIComponent(studentId)}`,
+    BFF_TTL_MS,
+  )
+}
+
+// M2 V2 — Next-Semester Performance Prediction (validated production model).
+// README: reuses /predict/m2v2/{student_id}; readiness_status of NO_DATA
+// (including the deployment boundary — the current cohort is in the final /
+// internship semester with no upcoming NORMAL academic semester) is surfaced by
+// the backend as a 404 on this per-student route.
+
+export function getStudentM2V2(): Promise<BffResult<M2V2PredictionData>> {
+  return callApiV1<M2V2PredictionData>(
+    (studentId) => `/predict/m2v2/${encodeURIComponent(studentId)}`,
+    BFF_TTL_MS,
+  )
+}
+
+// M3 V2 — At-Risk Student Prediction (validated production model).
+// README: reuses /predict/m3v2/{student_id}. probability_at_risk is a model
+// ESTIMATE, never a guarantee. readiness_status of NO_DATA (including the
+// deployment boundary — the current cohort is in the final / internship
+// semester with no upcoming NORMAL academic semester) is surfaced by the
+// backend as a 404 on this per-student route.
+
+export function getStudentM3V2(): Promise<BffResult<M3V2PredictionData>> {
+  return callApiV1<M3V2PredictionData>(
+    (studentId) => `/predict/m3v2/${encodeURIComponent(studentId)}`,
     BFF_TTL_MS,
   )
 }

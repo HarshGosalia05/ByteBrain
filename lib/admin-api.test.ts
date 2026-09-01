@@ -431,4 +431,249 @@ test("getAdminMlFeedbackHealth requires an admin session", async () => {
   assert.equal(calls.length, 0)
 })
 
+// ---------------------------------------------------------------------------
+// getAdminStudentM1V2 — M1 V2 Subject Marks Prediction (typed client only).
+// The backend exposes M1 V2 per-student only (no cohort aggregate, not wired
+// into persisted ml_predictions). The Admin UI documents this as a limitation
+// and never fabricates cohort statistics; the typed client keeps the API
+// surface complete for a future per-student drill-down.
+// ---------------------------------------------------------------------------
+
+const M1V2_ADMIN_BODY = {
+  student_id: "STU-X",
+  model_id: "m1_v2",
+  model_version: "2.0",
+  algorithm: "ridge",
+  readiness_status: "READY",
+  current_semester: 5,
+  prediction_count: 1,
+  predicted_at: "2026-09-01T08:00:00Z",
+  inference_ms: 3.2,
+  subjects: [
+    {
+      subject_id: "SUB001",
+      semester_no: 5,
+      predicted_end_sem_marks: 58.0,
+      target_max: 70,
+      grade_band: "Above Average",
+      grade_label: "A-",
+      input_features: {
+        internal_marks: 18.0,
+        mid_sem_marks: 15.0,
+        att_total_pct: 90.0,
+        pre_endsem_assessment_pct: 68.0,
+      },
+    },
+  ],
+  note: "Predicted end-sem marks are model estimates, not actual results.",
+}
+
+test("getAdminStudentM1V2 hits the generic predict route with admin auth", async () => {
+  route("/predict/m1v2/STU-X", 200, M1V2_ADMIN_BODY)
+
+  const result = await adminApi.getAdminStudentM1V2("STU-X")
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.model_id, "m1_v2")
+  assert.equal(result.data.readiness_status, "READY")
+  assert.equal(result.data.subjects[0].grade_band, "Above Average")
+
+  const hit = getCalls("/predict/m1v2")
+  assert.equal(hit.length, 1)
+  // Generic predict route (NOT under /admin/).
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m1v2/STU-X")
+  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const headers = hit[0].init?.headers as Record<string, string>
+  assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
+})
+
+test("getAdminStudentM1V2 URL-encodes the student id and caches within TTL", async () => {
+  route("/predict/m1v2/STU%20A%2F2", 200, M1V2_ADMIN_BODY)
+
+  const result = await adminApi.getAdminStudentM1V2("STU A/2")
+  assert.equal(result.ok, true)
+  const encodedHit = getCalls("/predict/m1v2")
+  assert.equal(encodedHit.length, 1)
+  assert.equal(encodedHit[0].url, "http://localhost:8000/api/v1/predict/m1v2/STU%20A%2F2")
+
+  // Second read must hit the module cache for the same admin+student key.
+  await adminApi.getAdminStudentM1V2("STU A/2")
+  assert.equal(getCalls("/predict/m1v2").length, 1)
+})
+
+test("getAdminStudentM1V2 maps 404 / 503 and gates non-admin", async () => {
+  route("/predict/m1v2/STU-NOPE", 404, { detail: "no record" })
+  const missing = await adminApi.getAdminStudentM1V2("STU-NOPE")
+  assert.equal(missing.ok, false)
+  if (!missing.ok) assert.equal(missing.error.status, 404)
+
+  route("/predict/m1v2/STU-DOWN", 503, { detail: "down" })
+  const down = await adminApi.getAdminStudentM1V2("STU-DOWN")
+  assert.equal(down.ok, false)
+  if (!down.ok) assert.equal(down.error.status, 503)
+
+  activeSession = null
+  const anon = await adminApi.getAdminStudentM1V2("STU-X")
+  assert.equal(anon.ok, false)
+  if (!anon.ok) assert.equal(anon.error.status, 401)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Faculty", faculty_id: "FAC-A" }
+  const wrongRole = await adminApi.getAdminStudentM1V2("STU-X")
+  assert.equal(wrongRole.ok, false)
+  if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
+})
+
+// ---------------------------------------------------------------------------
+// getAdminStudentM2V2 — M2 V2 Next-Semester Performance Prediction (typed
+// client only). Backend exposes M2 V2 per-student only; the Admin UI documents
+// this as a limitation and never fabricates cohort statistics.
+// ---------------------------------------------------------------------------
+
+const M2V2_ADMIN_BODY = {
+  student_id: "STU-X",
+  model_id: "m2_v2",
+  model_version: "2.0",
+  readiness_status: "READY",
+  observation_semester: 6,
+  prediction_takes_effect_semester: 7,
+  predicted_next_semester_sgpa: 8.45,
+  predicted_next_semester_percentage: 80.0,
+  algorithm: { next_semester_sgpa: "random_forest", next_semester_percentage: "ridge" },
+  reason: null,
+  predicted_at: "2026-09-01T08:00:00Z",
+  inference_ms: 2.2,
+  note: "Predicted next-semester SGPA/percentage are model estimates.",
+}
+
+test("getAdminStudentM2V2 hits the generic predict route with admin auth", async () => {
+  route("/predict/m2v2/STU-X", 200, M2V2_ADMIN_BODY)
+
+  const result = await adminApi.getAdminStudentM2V2("STU-X")
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.model_id, "m2_v2")
+  assert.equal(result.data.readiness_status, "READY")
+  assert.equal(result.data.predicted_next_semester_sgpa, 8.45)
+
+  const hit = getCalls("/predict/m2v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2v2/STU-X")
+  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const headers = hit[0].init?.headers as Record<string, string>
+  assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
+})
+
+test("getAdminStudentM2V2 URL-encodes the student id and caches within TTL", async () => {
+  route("/predict/m2v2/STU%20A%2F2", 200, M2V2_ADMIN_BODY)
+
+  const result = await adminApi.getAdminStudentM2V2("STU A/2")
+  assert.equal(result.ok, true)
+  const encodedHit = getCalls("/predict/m2v2")
+  assert.equal(encodedHit.length, 1)
+  assert.equal(encodedHit[0].url, "http://localhost:8000/api/v1/predict/m2v2/STU%20A%2F2")
+
+  await adminApi.getAdminStudentM2V2("STU A/2")
+  assert.equal(getCalls("/predict/m2v2").length, 1)
+})
+
+test("getAdminStudentM2V2 maps 404 / 503 and gates non-admin", async () => {
+  route("/predict/m2v2/STU-NOPE", 404, { detail: "no record" })
+  const missing = await adminApi.getAdminStudentM2V2("STU-NOPE")
+  assert.equal(missing.ok, false)
+  if (!missing.ok) assert.equal(missing.error.status, 404)
+
+  route("/predict/m2v2/STU-DOWN", 503, { detail: "down" })
+  const down = await adminApi.getAdminStudentM2V2("STU-DOWN")
+  assert.equal(down.ok, false)
+  if (!down.ok) assert.equal(down.error.status, 503)
+
+  activeSession = null
+  const anon = await adminApi.getAdminStudentM2V2("STU-X")
+  assert.equal(anon.ok, false)
+  if (!anon.ok) assert.equal(anon.error.status, 401)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Faculty", faculty_id: "FAC-A" }
+  const wrongRole = await adminApi.getAdminStudentM2V2("STU-X")
+  assert.equal(wrongRole.ok, false)
+  if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
+})
+
+// ---------------------------------------------------------------------------
+// getAdminStudentM3V2 — M3 V2 At-Risk Student Prediction (typed client only).
+// Backend exposes M3 V2 per-student only; the Admin UI honestly documents this
+// as a limitation and never fabricates cohort at-risk statistics.
+// ---------------------------------------------------------------------------
+
+const M3V2_ADMIN_BODY = {
+  student_id: "STU-X",
+  model_id: "m3_v2",
+  model_version: "2.0",
+  readiness_status: "READY",
+  observation_semester: 6,
+  prediction_takes_effect_semester: 7,
+  probability_at_risk: 0.18,
+  threshold: 0.64,
+  is_estimated_at_risk: false,
+  signals: [{ feature: "backlog_count", raw_value: 0, importance: 0.31 }],
+  algorithm: { is_at_risk_next_sem: "random_forest" },
+  reason: null,
+  predicted_at: "2026-09-01T08:00:00Z",
+  inference_ms: 2.2,
+  note: "Estimated academic-risk probability is a model estimate.",
+}
+
+test("getAdminStudentM3V2 hits the generic predict route with admin auth", async () => {
+  route("/predict/m3v2/STU-X", 200, M3V2_ADMIN_BODY)
+
+  const result = await adminApi.getAdminStudentM3V2("STU-X")
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.model_id, "m3_v2")
+  assert.equal(result.data.readiness_status, "READY")
+  assert.equal(result.data.probability_at_risk, 0.18)
+  assert.equal(result.data.is_estimated_at_risk, false)
+
+  const hit = getCalls("/predict/m3v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m3v2/STU-X")
+  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const headers = hit[0].init?.headers as Record<string, string>
+  assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
+})
+
+test("getAdminStudentM3V2 URL-encodes the student id and caches within TTL", async () => {
+  route("/predict/m3v2/STU%20A%2F2", 200, M3V2_ADMIN_BODY)
+
+  const result = await adminApi.getAdminStudentM3V2("STU A/2")
+  assert.equal(result.ok, true)
+  const encodedHit = getCalls("/predict/m3v2")
+  assert.equal(encodedHit.length, 1)
+  assert.equal(encodedHit[0].url, "http://localhost:8000/api/v1/predict/m3v2/STU%20A%2F2")
+
+  await adminApi.getAdminStudentM3V2("STU A/2")
+  assert.equal(getCalls("/predict/m3v2").length, 1)
+})
+
+test("getAdminStudentM3V2 maps 404 / 503 and gates non-admin", async () => {
+  route("/predict/m3v2/STU-NOPE", 404, { detail: "no record" })
+  const missing = await adminApi.getAdminStudentM3V2("STU-NOPE")
+  assert.equal(missing.ok, false)
+  if (!missing.ok) assert.equal(missing.error.status, 404)
+
+  route("/predict/m3v2/STU-DOWN", 503, { detail: "down" })
+  const down = await adminApi.getAdminStudentM3V2("STU-DOWN")
+  assert.equal(down.ok, false)
+  if (!down.ok) assert.equal(down.error.status, 503)
+
+  activeSession = null
+  const anon = await adminApi.getAdminStudentM3V2("STU-X")
+  assert.equal(anon.ok, false)
+  if (!anon.ok) assert.equal(anon.error.status, 401)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Faculty", faculty_id: "FAC-A" }
+  const wrongRole = await adminApi.getAdminStudentM3V2("STU-X")
+  assert.equal(wrongRole.ok, false)
+  if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
+})
+
 

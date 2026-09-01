@@ -1,0 +1,1 @@
+"""M3 v2 — features (point-in-time builder + leakage gate)."""

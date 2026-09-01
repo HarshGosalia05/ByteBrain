@@ -1,4 +1,7 @@
 import { getSessionUser } from "./student-session.ts"
+import type { M1V2PredictionData } from "./m1v2-prediction"
+import type { M2V2PredictionData } from "./m2v2-prediction"
+import type { M3V2PredictionData } from "./m3v2-prediction"
 
 export type { SessionUser } from "./student-session.ts"
 
@@ -911,6 +914,239 @@ export function getAdminMLIntelligence(
   return callFastapi<AdminMlIntelligenceData>("ml-intelligence", BFF_TTL_MS, {
     query: filters as Record<string, string | number | null | undefined>,
   })
+}
+
+// M1 V2 — Subject Marks Prediction (validated production model).
+//
+// The per-student endpoint lives at the generic /predict/m1v2/{student_id}
+// route (not under /admin/), so we build the URL directly while reusing the
+// Admin role guard + BFF cache. Server-side authorize_prediction_access allows
+// Admin to read any student's M1 V2 prediction.
+//
+// NOTE (production limitation, user-confirmed): the backend exposes M1 V2
+// predictions per-student only. There is NO M1 V2 cohort/aggregate endpoint,
+// and M1 V2 is not wired into persisted ml_predictions. Consequently the Admin
+// ML Intelligence page documents M1 V2 cohort analytics as "not yet available"
+// rather than fabricating aggregate statistics. This typed client exists to
+// keep the API surface complete for a future per-student drill-down, but the
+// Admin UI does not render fabricated cohort numbers.
+
+async function callAdminPredictM1V2<T>(
+  studentId: string,
+  ttlMs: number,
+): Promise<BffResult<T>> {
+  const user = await getSessionUser()
+  if (!user) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to view this.",
+      },
+    }
+  }
+  if (user.role !== "Admin") {
+    return {
+      ok: false,
+      error: {
+        status: 403,
+        code: "unauthorized",
+        message: "This account is not allowed to view admin analytics.",
+      },
+    }
+  }
+
+  const path = `predict/m1v2/${encodeURIComponent(studentId)}`
+  const key = `${user.user_id}:${path}`
+  const hit = bffCache.get(key)
+  if (hit && hit.expiresAt > Date.now()) {
+    return Promise.resolve(hit.value as BffResult<T>)
+  }
+
+  try {
+    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!res.ok) {
+      return { ok: false, error: toBffError(res.status) }
+    }
+    const data = (await res.json()) as T
+    const result: BffResult<T> = {
+      ok: true,
+      data,
+      fetchedAt: new Date().toISOString(),
+    }
+    bffCache.set(key, { value: result, expiresAt: Date.now() + ttlMs })
+    return result
+  } catch {
+    return {
+      ok: false,
+      error: {
+        status: 503,
+        code: "unavailable",
+        message: "The academic service is temporarily unavailable. Please try again later.",
+      },
+    }
+  }
+}
+
+export function getAdminStudentM1V2(
+  studentId: string
+): Promise<BffResult<M1V2PredictionData>> {
+  return callAdminPredictM1V2<M1V2PredictionData>(studentId, BFF_TTL_MS)
+}
+
+// M2 V2 — Next-Semester Performance Prediction (validated production model).
+// Also a per-student route at /predict/m2v2/{student_id} (not under /admin/).
+// Reuses the Admin role guard + BFF cache. Server-side authorize_prediction_access
+// allows Admin to read any student's M2 V2 prediction.
+
+async function callAdminPredictM2V2<T>(
+  studentId: string,
+  ttlMs: number,
+): Promise<BffResult<T>> {
+  const user = await getSessionUser()
+  if (!user) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to view this.",
+      },
+    }
+  }
+  if (user.role !== "Admin") {
+    return {
+      ok: false,
+      error: {
+        status: 403,
+        code: "unauthorized",
+        message: "This account is not allowed to view admin analytics.",
+      },
+    }
+  }
+
+  const path = `predict/m2v2/${encodeURIComponent(studentId)}`
+  const key = `${user.user_id}:${path}`
+  const hit = bffCache.get(key)
+  if (hit && hit.expiresAt > Date.now()) {
+    return Promise.resolve(hit.value as BffResult<T>)
+  }
+
+  try {
+    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!res.ok) {
+      return { ok: false, error: toBffError(res.status) }
+    }
+    const data = (await res.json()) as T
+    const result: BffResult<T> = {
+      ok: true,
+      data,
+      fetchedAt: new Date().toISOString(),
+    }
+    bffCache.set(key, { value: result, expiresAt: Date.now() + ttlMs })
+    return result
+  } catch {
+    return {
+      ok: false,
+      error: {
+        status: 503,
+        code: "unavailable",
+        message: "The academic service is temporarily unavailable. Please try again later.",
+      },
+    }
+  }
+}
+
+export function getAdminStudentM2V2(
+  studentId: string
+): Promise<BffResult<M2V2PredictionData>> {
+  return callAdminPredictM2V2<M2V2PredictionData>(studentId, BFF_TTL_MS)
+}
+
+// M3 V2 — At-Risk Student Prediction (validated production model).
+// Also a per-student route at /predict/m3v2/{student_id} (not under /admin/).
+// Reuses the Admin role guard + BFF cache. Server-side authorize_prediction_access
+// allows Admin to read any student's M3 V2 at-risk estimate.
+// probability_at_risk is a model ESTIMATE, never a guarantee.
+
+export function getAdminStudentM3V2(
+  studentId: string
+): Promise<BffResult<M3V2PredictionData>> {
+  return callAdminPredictM3V2<M3V2PredictionData>(studentId, BFF_TTL_MS)
+}
+
+async function callAdminPredictM3V2<T>(
+  studentId: string,
+  ttlMs: number,
+): Promise<BffResult<T>> {
+  const user = await getSessionUser()
+  if (!user) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to view this.",
+      },
+    }
+  }
+  if (user.role !== "Admin") {
+    return {
+      ok: false,
+      error: {
+        status: 403,
+        code: "unauthorized",
+        message: "This account is not allowed to view admin analytics.",
+      },
+    }
+  }
+
+  const path = `predict/m3v2/${encodeURIComponent(studentId)}`
+  const key = `${user.user_id}:${path}`
+  const hit = bffCache.get(key)
+  if (hit && hit.expiresAt > Date.now()) {
+    return Promise.resolve(hit.value as BffResult<T>)
+  }
+
+  try {
+    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!res.ok) {
+      return { ok: false, error: toBffError(res.status) }
+    }
+    const data = (await res.json()) as T
+    const result: BffResult<T> = {
+      ok: true,
+      data,
+      fetchedAt: new Date().toISOString(),
+    }
+    bffCache.set(key, { value: result, expiresAt: Date.now() + ttlMs })
+    return result
+  } catch {
+    return {
+      ok: false,
+      error: {
+        status: 503,
+        code: "unavailable",
+        message: "The academic service is temporarily unavailable. Please try again later.",
+      },
+    }
+  }
 }
 
 // =============================================================================

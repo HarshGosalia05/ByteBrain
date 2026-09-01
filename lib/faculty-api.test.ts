@@ -508,3 +508,284 @@ test("submitPredictionFeedback requires a session", async () => {
   assert.equal(result.error.status, 401)
   assert.equal(getCalls("/feedback").length, 0)
 })
+
+// ---------------------------------------------------------------------------
+// getFacultyStudentM1V2 — M1 V2 Subject Marks Prediction
+// Hits the generic /predict/m1v2/{student_id} route (NOT under /faculty/) with
+// the Faculty bearer token. Server-side authorize_prediction_access enforces
+// faculty scope (incl. mentees under the mentorship relationship).
+// ---------------------------------------------------------------------------
+
+const M1V2_FACULTY_BODY = {
+  student_id: "STU-A",
+  model_id: "m1_v2",
+  model_version: "2.0",
+  algorithm: "ridge",
+  readiness_status: "READY",
+  current_semester: 3,
+  prediction_count: 1,
+  predicted_at: "2026-09-01T08:00:00Z",
+  inference_ms: 3.2,
+  subjects: [
+    {
+      subject_id: "SUB001",
+      semester_no: 3,
+      predicted_end_sem_marks: 45.2,
+      target_max: 70,
+      grade_band: "Below Average",
+      grade_label: "C+",
+      input_features: {
+        internal_marks: 14.0,
+        mid_sem_marks: 11.0,
+        att_total_pct: 71.0,
+        pre_endsem_assessment_pct: 42.0,
+      },
+    },
+  ],
+  note: "Predicted end-sem marks are model estimates, not actual results.",
+}
+
+test("getFacultyStudentM1V2 hits the generic predict route with faculty auth", async () => {
+  route("/predict/m1v2/STU-A", 200, M1V2_FACULTY_BODY)
+
+  const result = await facultyApi.getFacultyStudentM1V2("STU-A")
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.model_id, "m1_v2")
+  assert.equal(result.data.model_version, "2.0")
+  assert.equal(result.data.readiness_status, "READY")
+  assert.equal(result.data.subjects[0].grade_band, "Below Average")
+
+  const hit = getCalls("/predict/m1v2")
+  assert.equal(hit.length, 1)
+  // M1 V2 lives outside /faculty/ — verify the exact generic route.
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m1v2/STU-A")
+  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const headers = hit[0].init?.headers as Record<string, string>
+  assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
+})
+
+test("getFacultyStudentM1V2 URL-encodes the student id", async () => {
+  route("/predict/m1v2/STU%20A%2F1", 200, M1V2_FACULTY_BODY)
+
+  const result = await facultyApi.getFacultyStudentM1V2("STU A/1")
+  assert.equal(result.ok, true)
+  const hit = getCalls("/predict/m1v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m1v2/STU%20A%2F1")
+})
+
+test("getFacultyStudentM1V2 caches per faculty+student within TTL", async () => {
+  route("/predict/m1v2/STU-A", 200, M1V2_FACULTY_BODY)
+
+  await facultyApi.getFacultyStudentM1V2("STU-A")
+  await facultyApi.getFacultyStudentM1V2("STU-A")
+  assert.equal(getCalls("/predict/m1v2").length, 1)
+})
+
+test("getFacultyStudentM1V2 maps 404 (NO_DATA / out of scope) to not_found", async () => {
+  route("/predict/m1v2/STU-MISSING", 404, { detail: "no record" })
+
+  const result = await facultyApi.getFacultyStudentM1V2("STU-MISSING")
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.error.code, "not_found")
+})
+
+test("getFacultyStudentM1V2 rejects non-faculty / unlinked / anonymous", async () => {
+  activeSession = null
+  const anon = await facultyApi.getFacultyStudentM1V2("STU-A")
+  assert.equal(anon.ok, false)
+  if (!anon.ok) assert.equal(anon.error.status, 401)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Student", student_id: "STU-A" }
+  const wrongRole = await facultyApi.getFacultyStudentM1V2("STU-A")
+  assert.equal(wrongRole.ok, false)
+  if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
+
+  activeSession = { ...DEFAULT_SESSION, faculty_id: null }
+  const unlinked = await facultyApi.getFacultyStudentM1V2("STU-A")
+  assert.equal(unlinked.ok, false)
+  if (!unlinked.ok) {
+    assert.equal(unlinked.error.status, 400)
+    assert.equal(unlinked.error.code, "unlinked")
+  }
+  assert.equal(getCalls("/predict/m1v2").length, 0)
+})
+
+// ---------------------------------------------------------------------------
+// getFacultyStudentM2V2 — M2 V2 Next-Semester Performance Prediction
+// Hits the generic /predict/m2v2/{student_id} route (NOT under /faculty/) with
+// the Faculty bearer token. Server-side authorize_prediction_access enforces
+// faculty scope.
+// ---------------------------------------------------------------------------
+
+const M2V2_FACULTY_BODY = {
+  student_id: "STU-A",
+  model_id: "m2_v2",
+  model_version: "2.0",
+  readiness_status: "READY",
+  observation_semester: 6,
+  prediction_takes_effect_semester: 7,
+  predicted_next_semester_sgpa: 7.88,
+  predicted_next_semester_percentage: 71.5,
+  algorithm: { next_semester_sgpa: "random_forest", next_semester_percentage: "ridge" },
+  reason: null,
+  predicted_at: "2026-09-01T08:00:00Z",
+  inference_ms: 2.0,
+  note: "Predicted next-semester SGPA/percentage are model estimates.",
+}
+
+test("getFacultyStudentM2V2 hits the generic predict route with faculty auth", async () => {
+  route("/predict/m2v2/STU-A", 200, M2V2_FACULTY_BODY)
+
+  const result = await facultyApi.getFacultyStudentM2V2("STU-A")
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.model_id, "m2_v2")
+  assert.equal(result.data.readiness_status, "READY")
+  assert.equal(result.data.prediction_takes_effect_semester, 7)
+
+  const hit = getCalls("/predict/m2v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2v2/STU-A")
+  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const headers = hit[0].init?.headers as Record<string, string>
+  assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
+})
+
+test("getFacultyStudentM2V2 URL-encodes the student id", async () => {
+  route("/predict/m2v2/STU%20A%2F1", 200, M2V2_FACULTY_BODY)
+
+  const result = await facultyApi.getFacultyStudentM2V2("STU A/1")
+  assert.equal(result.ok, true)
+  const hit = getCalls("/predict/m2v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2v2/STU%20A%2F1")
+})
+
+test("getFacultyStudentM2V2 caches per faculty+student within TTL", async () => {
+  route("/predict/m2v2/STU-A", 200, M2V2_FACULTY_BODY)
+
+  await facultyApi.getFacultyStudentM2V2("STU-A")
+  await facultyApi.getFacultyStudentM2V2("STU-A")
+  assert.equal(getCalls("/predict/m2v2").length, 1)
+})
+
+test("getFacultyStudentM2V2 maps 404 (NO_DATA / out of scope) to not_found", async () => {
+  route("/predict/m2v2/STU-MISSING", 404, { detail: "no record" })
+
+  const result = await facultyApi.getFacultyStudentM2V2("STU-MISSING")
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.error.code, "not_found")
+})
+
+test("getFacultyStudentM2V2 rejects non-faculty / unlinked / anonymous", async () => {
+  activeSession = null
+  const anon = await facultyApi.getFacultyStudentM2V2("STU-A")
+  assert.equal(anon.ok, false)
+  if (!anon.ok) assert.equal(anon.error.status, 401)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Student", student_id: "STU-A" }
+  const wrongRole = await facultyApi.getFacultyStudentM2V2("STU-A")
+  assert.equal(wrongRole.ok, false)
+  if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
+
+  activeSession = { ...DEFAULT_SESSION, faculty_id: null }
+  const unlinked = await facultyApi.getFacultyStudentM2V2("STU-A")
+  assert.equal(unlinked.ok, false)
+  if (!unlinked.ok) {
+    assert.equal(unlinked.error.status, 400)
+    assert.equal(unlinked.error.code, "unlinked")
+  }
+  assert.equal(getCalls("/predict/m2v2").length, 0)
+})
+
+// ---------------------------------------------------------------------------
+// getFacultyStudentM3V2 — M3 V2 At-Risk Student Prediction
+// Hits the generic /predict/m3v2/{student_id} route (NOT under /faculty/) with
+// the Faculty bearer token. probability_at_risk is a model ESTIMATE surfaced by
+// the backend for this role.
+// ---------------------------------------------------------------------------
+
+const M3V2_FACULTY_BODY = {
+  student_id: "STU-A",
+  model_id: "m3_v2",
+  model_version: "2.0",
+  readiness_status: "READY",
+  observation_semester: 6,
+  prediction_takes_effect_semester: 7,
+  probability_at_risk: 0.12,
+  threshold: 0.64,
+  is_estimated_at_risk: false,
+  signals: [{ feature: "semester_sgpa", raw_value: 7.5, importance: 0.24 }],
+  algorithm: { is_at_risk_next_sem: "random_forest" },
+  reason: null,
+  predicted_at: "2026-09-01T08:00:00Z",
+  inference_ms: 2.0,
+  note: "Estimated academic-risk probability is a model estimate.",
+}
+
+test("getFacultyStudentM3V2 hits the generic predict route with faculty auth", async () => {
+  route("/predict/m3v2/STU-A", 200, M3V2_FACULTY_BODY)
+
+  const result = await facultyApi.getFacultyStudentM3V2("STU-A")
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.model_id, "m3_v2")
+  assert.equal(result.data.readiness_status, "READY")
+  assert.equal(result.data.prediction_takes_effect_semester, 7)
+  assert.equal(result.data.probability_at_risk, 0.12)
+  assert.equal(result.data.is_estimated_at_risk, false)
+
+  const hit = getCalls("/predict/m3v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m3v2/STU-A")
+  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const headers = hit[0].init?.headers as Record<string, string>
+  assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
+})
+
+test("getFacultyStudentM3V2 URL-encodes the student id and caches within TTL", async () => {
+  route("/predict/m3v2/STU%20A%2F1", 200, M3V2_FACULTY_BODY)
+
+  const result = await facultyApi.getFacultyStudentM3V2("STU A/1")
+  assert.equal(result.ok, true)
+  const hit = getCalls("/predict/m3v2")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m3v2/STU%20A%2F1")
+
+  await facultyApi.getFacultyStudentM3V2("STU A/1")
+  assert.equal(getCalls("/predict/m3v2").length, 1)
+})
+
+test("getFacultyStudentM3V2 maps 404 (NO_DATA / out of scope) to not_found", async () => {
+  route("/predict/m3v2/STU-MISSING", 404, { detail: "no record" })
+
+  const result = await facultyApi.getFacultyStudentM3V2("STU-MISSING")
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.error.code, "not_found")
+})
+
+test("getFacultyStudentM3V2 rejects non-faculty / unlinked / anonymous", async () => {
+  activeSession = null
+  const anon = await facultyApi.getFacultyStudentM3V2("STU-A")
+  assert.equal(anon.ok, false)
+  if (!anon.ok) assert.equal(anon.error.status, 401)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Student", student_id: "STU-A" }
+  const wrongRole = await facultyApi.getFacultyStudentM3V2("STU-A")
+  assert.equal(wrongRole.ok, false)
+  if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
+
+  activeSession = { ...DEFAULT_SESSION, faculty_id: null }
+  const unlinked = await facultyApi.getFacultyStudentM3V2("STU-A")
+  assert.equal(unlinked.ok, false)
+  if (!unlinked.ok) {
+    assert.equal(unlinked.error.status, 400)
+    assert.equal(unlinked.error.code, "unlinked")
+  }
+  assert.equal(getCalls("/predict/m3v2").length, 0)
+})
