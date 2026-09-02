@@ -91,8 +91,8 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(fresh.GENAI_API_KEY, "")
         self.assertEqual(fresh.GENAI_BASE_URL, "https://api.openai.com/v1")
         self.assertEqual(fresh.GENAI_TEMPERATURE, 0.2)
-        self.assertEqual(fresh.GENAI_MAX_TOKENS, 1024)
-        self.assertEqual(fresh.GENAI_TIMEOUT_SECONDS, 30.0)
+        self.assertEqual(fresh.GENAI_MAX_TOKENS, 1536)
+        self.assertEqual(fresh.GENAI_TIMEOUT_SECONDS, 60.0)
 
     def test_missing_configuration_fails_closed(self):
         with mock.patch.object(settings, "GENAI_API_KEY", ""), mock.patch.object(
@@ -225,7 +225,7 @@ class PredictionUncertaintyTests(unittest.TestCase):
         )
         run(GenAIService(provider=provider).generate(request))
         system = provider.calls[0]["system_instruction"]
-        context_json = system.split("Verified context (JSON, the ONLY factual source):")[1]
+        context_json = system.split("VERIFIED CONTEXT (use only this data):")[1]
         self.assertNotIn('"uncertainty"', context_json)
         self.assertNotIn('"probability"', context_json)
 

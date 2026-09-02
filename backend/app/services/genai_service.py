@@ -38,24 +38,19 @@ logger = logging.getLogger(__name__)
 MAX_CONVERSATION_MESSAGES = 20
 
 GROUNDING_SYSTEM_INSTRUCTION = (
-    "You are the KenexAI KDAC-3 grounded guidance assistant. You answer "
-    "from VERIFIED STRUCTURED CONTEXT only. Rules: "
-    "1. Always respond in the SAME LANGUAGE or DIALECT used by the user "
-    "(English, Hindi, or Hinglish). If the user asks in Hindi or Hinglish, "
-    "answer in natural, clear Hindi or Hinglish. "
-    "2. Use only the provided verified context as your factual source for "
-    "any academic, attendance, marks, prediction, or student-specific data. "
-    "3. Never invent student-specific facts. "
-    "4. Never invent academic numbers (marks, percentages, SGPA, attendance). "
-    "5. Never invent prediction results or confidence values. "
-    "6. Never claim information you were not given. "
-    "7. If the verified context is insufficient, explicitly state that the "
-    "required information is unavailable. "
-    "8. Never present a prediction as a guaranteed fact; for predictive "
-    "outputs use wording such as 'The model estimates...', never 'You will...'. "
-    "9. For career guidance, distinguish verified academic evidence from "
-    "inferred skills or preferences. Never guarantee career outcomes. "
-    "10. Format responses with clean, readable Markdown (bullet points, bold highlights)."
+    "You are KenexAI, an academic guidance assistant. Follow these rules strictly:\n"
+    "\n"
+    "RULES:\n"
+    "- Use ONLY the verified context data provided below. Never invent any data.\n"
+    "- Reply in the same language as the user (English, Hindi, or Hinglish).\n"
+    "- Never make up marks, percentages, SGPA, attendance, or prediction numbers.\n"
+    "- Never claim information you were not given.\n"
+    "- If context is missing, say: \"Required information is unavailable.\"\n"
+    "- For predictions, say \"The model estimates...\", never \"You will...\".\n"
+    "- For career advice, distinguish verified facts from suggestions.\n"
+    "- Format with Markdown: bullet points, bold text. Be concise.\n"
+    "\n"
+    "VERIFIED CONTEXT (use only this data):\n"
 )
 
 _PROVIDER_TYPES: dict[str, type] = {"openai_compatible": OpenAICompatibleProvider}
@@ -88,13 +83,11 @@ class GenAIService:
         if not primary_model:
             raise GenAIConfigurationError("GENAI_MODEL or GENAI_PRIMARY_MODEL is not configured")
 
-        fallback_models = []
+        fallback_models = list(settings.GENAI_FALLBACK_MODELS)
         if settings.GENAI_FALLBACK_MODEL_1:
             fallback_models.append(settings.GENAI_FALLBACK_MODEL_1)
         if settings.GENAI_FALLBACK_MODEL_2:
             fallback_models.append(settings.GENAI_FALLBACK_MODEL_2)
-        if settings.GENAI_FALLBACK_MODELS:
-            fallback_models.extend(settings.GENAI_FALLBACK_MODELS)
 
         return provider_cls(
             api_key=settings.GENAI_API_KEY,
@@ -134,23 +127,22 @@ class GenAIService:
         return json.dumps(payload, sort_keys=True)
 
     def _build_system_instruction(self, request: GenAIRequest) -> str:
-        role_header = f"\n\nAuthenticated User Role: {request.role}"
+        role_header = f"\nAuthenticated User Role: {request.role}"
         if not request.verified_context:
             return (
                 GROUNDING_SYSTEM_INSTRUCTION
-                + role_header
-                + "\n\nNo verified context was provided for this request."
-                + "\nNote: This is a general conversation, greeting, or capability inquiry. "
+                + "No verified context was provided for this request.\n"
+                + "Note: This is a general conversation, greeting, or capability inquiry. "
                 + "Be polite, helpful, and concise. Explain your capabilities for the user's role without fabricating student data."
+                + role_header
             )
         context_lines = "\n".join(
             self._serialize_context(context) for context in request.verified_context
         )
         return (
             GROUNDING_SYSTEM_INSTRUCTION
-            + role_header
-            + "\n\nVerified context (JSON, the ONLY factual source):\n"
             + context_lines
+            + role_header
         )
 
     @staticmethod

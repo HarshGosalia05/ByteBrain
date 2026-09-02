@@ -33,7 +33,7 @@ def _rate_limit_retry_seconds(response: httpx.Response, default: float) -> float
     """Best-effort wait before retrying a rate-limited provider call.
 
     Prefers an explicit ``Retry-After`` header, otherwise parses the safe
-    "Please retry in Ns" hint from the provider error body (used by Gemini).
+    "Please retry in Ns" hint from the provider error body.
     Falls back to ``default`` when no hint is available.
     """
     headers = getattr(response, "headers", None)

@@ -458,8 +458,8 @@ class TestRealLLMConversationalHardening(unittest.TestCase):
     def test_26_rate_limit_fail_fast_long_retry(self):
         provider = OpenAICompatibleProvider(
             api_key="test-key",
-            model="gemini-2.5-flash",
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            model="qwen2.5:3b",
+            base_url="http://localhost:11434/v1/",
             temperature=0.7,
             max_tokens=1000,
             timeout_seconds=5.0,
@@ -482,8 +482,8 @@ class TestRealLLMConversationalHardening(unittest.TestCase):
     def test_27_rate_limit_short_retry(self):
         provider = OpenAICompatibleProvider(
             api_key="test-key",
-            model="gemini-2.5-flash",
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            model="qwen2.5:3b",
+            base_url="http://localhost:11434/v1/",
             temperature=0.7,
             max_tokens=1000,
             timeout_seconds=5.0,
