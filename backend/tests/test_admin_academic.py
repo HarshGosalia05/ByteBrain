@@ -156,7 +156,7 @@ def _default_responses(overrides=None):
             {"department_code": 1, "total_faculty": 15},
             {"department_code": 2, "total_faculty": 10},
         ],
-        ("fetch", "COALESCE(SUM(s.total_backlogs), 0) AS total_backlogs"): [
+        ("fetch", "AS total_backlogs"): [
             {"department_code": 1, "total_backlogs": 70},
             {"department_code": 2, "total_backlogs": 50},
         ],
@@ -252,11 +252,11 @@ def _default_responses(overrides=None):
                 "avg_attendance": Decimal("70.0"),
             },
         ],
-        ("fetch", "DISTINCT academic_year FROM student_semester_summary"): [
+        ("fetch", "academic_year FROM student_semester_summary"): [
             {"academic_year": "2024-25"},
             {"academic_year": "2025-26"},
         ],
-        ("fetch", "dept_code AS department_code, department_name, "): [
+        ("fetch", "AS department_code, d.department_name"): [
             {
                 "department_code": 1,
                 "department_name": "Computer Engineering",
@@ -549,7 +549,7 @@ class FilteringAndSafetyTests(unittest.TestCase):
         run(service.get_subject_intelligence())
         self.assertTrue(conn.executed)
         for kind, query, args in conn.executed:
-            self.assertTrue(query.lstrip().upper().startswith("SELECT"), query)
+            self.assertTrue(query.lstrip().upper().startswith(("SELECT", "WITH")), query)
 
     def test_generated_at_is_utc_timestamp(self):
         service, _ = _service()

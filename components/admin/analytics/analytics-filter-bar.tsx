@@ -17,12 +17,50 @@ export function AnalyticsFilterBar({ filters }: AnalyticsFilterBarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
+  const academicYear = searchParams.get("academic_year") || ""
+  const departmentCode = searchParams.get("department_code") || ""
+  const semester = searchParams.get("semester_no") || ""
+  const activeFiltersCount =
+    (academicYear ? 1 : 0) + (departmentCode ? 1 : 0) + (semester ? 1 : 0)
+
+  // Derive valid semesters for the selected department
+  const selectedDept = (filters.departments || []).find(
+    (d) => d.department_code.toString() === departmentCode
+  )
+  const availableSemesters =
+    selectedDept?.semesters && selectedDept.semesters.length > 0
+      ? selectedDept.semesters
+      : selectedDept?.total_semesters
+        ? Array.from({ length: selectedDept.total_semesters }, (_, i) => i + 1)
+        : (filters.semesters || [])
+
   const handleFilterChange = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString())
-    if (value) {
-      params.set(key, value)
+    if (key === "department_code") {
+      if (value) {
+        params.set("department_code", value)
+        const targetDept = (filters.departments || []).find(
+          (d) => d.department_code.toString() === value
+        )
+        const targetSemesters =
+          targetDept?.semesters && targetDept.semesters.length > 0
+            ? targetDept.semesters
+            : targetDept?.total_semesters
+              ? Array.from({ length: targetDept.total_semesters }, (_, i) => i + 1)
+              : (filters.semesters || [])
+        const currentSem = params.get("semester_no")
+        if (currentSem && !targetSemesters.includes(parseInt(currentSem, 10))) {
+          params.delete("semester_no")
+        }
+      } else {
+        params.delete("department_code")
+      }
     } else {
-      params.delete(key)
+      if (value) {
+        params.set(key, value)
+      } else {
+        params.delete(key)
+      }
     }
     router.push(`${pathname}?${params.toString()}`)
   }
@@ -30,21 +68,6 @@ export function AnalyticsFilterBar({ filters }: AnalyticsFilterBarProps) {
   const handleResetFilters = () => {
     router.push(pathname)
   }
-
-  const academicYear = searchParams.get("academic_year") || ""
-  const departmentCode = searchParams.get("department_code") || ""
-  const semester = searchParams.get("semester_no") || ""
-  const activeFiltersCount =
-    (academicYear ? 1 : 0) + (departmentCode ? 1 : 0) + (semester ? 1 : 0)
-
-  // Get the selected department's total_semesters to limit semester options
-  const selectedDept = filters.departments.find(
-    (d) => d.department_code.toString() === departmentCode
-  )
-  const maxSemesters = selectedDept?.total_semesters || 8
-
-  // Generate semester options based on selected department
-  const semesterOptions = Array.from({ length: maxSemesters }, (_, i) => i + 1)
 
   return (
     <div className="flex flex-col gap-4 print:hidden">
@@ -65,19 +88,7 @@ export function AnalyticsFilterBar({ filters }: AnalyticsFilterBarProps) {
         <select
           className={selectClassName}
           value={departmentCode}
-          onChange={(e) => {
-            handleFilterChange("department_code", e.target.value)
-            // Reset semester when department changes if current semester is invalid
-            const newDept = filters.departments.find(
-              (d) => d.department_code.toString() === e.target.value
-            )
-            if (newDept && semester) {
-              const semNum = parseInt(semester, 10)
-              if (semNum > newDept.total_semesters) {
-                handleFilterChange("semester_no", "")
-              }
-            }
-          }}
+          onChange={(e) => handleFilterChange("department_code", e.target.value)}
           aria-label="Department"
         >
           <option value="">All Departments</option>
@@ -94,7 +105,7 @@ export function AnalyticsFilterBar({ filters }: AnalyticsFilterBarProps) {
           aria-label="Semester"
         >
           <option value="">All Semesters</option>
-          {semesterOptions.map((s) => (
+          {availableSemesters.map((s) => (
             <option key={s} value={s.toString()}>
               Semester {s}
             </option>

@@ -409,7 +409,12 @@ class AnalyticsRepository:
             JOIN students s ON s.student_id = sem.student_id
             WHERE ($1::int IS NULL OR s.department_code = $1)
               AND ($2::int IS NULL OR sem.semester_no = $2)
-              AND ($3::text IS NULL OR sem.academic_year = $3)
+              AND (
+                  $3::text IS NULL 
+                  OR sem.academic_year = $3 
+                  OR (sem.academic_year = '2026-2027' AND $3 = '2026-27')
+                  OR (sem.academic_year = '2026-27' AND $3 = '2026-2027')
+              )
             """,
             department_code,
             semester_no,
@@ -445,7 +450,12 @@ class AnalyticsRepository:
                 JOIN students s ON s.student_id = sem.student_id
                 WHERE ($1::int IS NULL OR s.department_code = $1)
                   AND ($2::int IS NULL OR sem.semester_no = $2)
-                  AND ($3::text IS NULL OR sem.academic_year = $3)
+                  AND (
+                      $3::text IS NULL 
+                      OR sem.academic_year = $3 
+                      OR (sem.academic_year = '2026-2027' AND $3 = '2026-27')
+                      OR (sem.academic_year = '2026-27' AND $3 = '2026-2027')
+                  )
             ),
             counts AS (
                 SELECT band, count(*)::int AS cnt
@@ -480,7 +490,12 @@ class AnalyticsRepository:
             JOIN students s ON s.student_id = sem.student_id
             WHERE ($1::int IS NULL OR s.department_code = $1)
               AND ($2::int IS NULL OR sem.semester_no = $2)
-              AND ($3::text IS NULL OR sem.academic_year = $3)
+              AND (
+                  $3::text IS NULL 
+                  OR sem.academic_year = $3 
+                  OR (sem.academic_year = '2026-2027' AND $3 = '2026-27')
+                  OR (sem.academic_year = '2026-27' AND $3 = '2026-2027')
+              )
             """,
             department_code,
             semester_no,
@@ -527,7 +542,12 @@ class AnalyticsRepository:
                       AND sem.semester_no = a.semester_no
                 WHERE ($1::int IS NULL OR s.department_code = $1)
                   AND ($2::int IS NULL OR a.semester_no = $2)
-                  AND ($3::text IS NULL OR sem.academic_year = $3)
+                  AND (
+                      $3::text IS NULL 
+                      OR sem.academic_year = $3 
+                      OR (sem.academic_year = '2026-2027' AND $3 = '2026-27')
+                      OR (sem.academic_year = '2026-27' AND $3 = '2026-2027')
+                  )
             ),
             counts AS (
                 SELECT band, count(*)::int AS cnt
@@ -565,7 +585,12 @@ class AnalyticsRepository:
                   AND sem.semester_no = a.semester_no
             WHERE ($1::int IS NULL OR s.department_code = $1)
               AND ($2::int IS NULL OR a.semester_no = $2)
-              AND ($3::text IS NULL OR sem.academic_year = $3)
+              AND (
+                  $3::text IS NULL 
+                  OR sem.academic_year = $3 
+                  OR (sem.academic_year = '2026-2027' AND $3 = '2026-27')
+                  OR (sem.academic_year = '2026-27' AND $3 = '2026-2027')
+              )
             """,
             department_code,
             semester_no,
@@ -605,7 +630,11 @@ class AnalyticsRepository:
                       AND EXISTS (
                           SELECT 1 FROM student_semester_summary sem
                           WHERE sem.student_id = s.student_id
-                            AND sem.academic_year = $2
+                            AND (
+                                sem.academic_year = $2
+                                OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
+                                OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
+                            )
                       )
                 ),
                 counts AS (
@@ -640,7 +669,11 @@ class AnalyticsRepository:
                   AND EXISTS (
                       SELECT 1 FROM student_semester_summary sem
                       WHERE sem.student_id = s.student_id
-                        AND sem.academic_year = $2
+                        AND (
+                            sem.academic_year = $2
+                            OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
+                            OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
+                        )
                   )
                 """,
                 department_code,

@@ -136,11 +136,11 @@ def _default_responses(overrides=None):
                 "avg_percentage": Decimal("55.3"),
             },
         ],
-        ("fetch", "DISTINCT academic_year FROM student_semester_summary"): [
+        ("fetch", "academic_year FROM student_semester_summary"): [
             {"academic_year": "2024-25"},
             {"academic_year": "2025-26"},
         ],
-        ("fetch", "dept_code AS department_code, department_name, "): [
+        ("fetch", "AS department_code, d.department_name"): [
             {
                 "department_code": 1,
                 "department_name": "Computer Engineering",
@@ -245,7 +245,7 @@ class AdminDashboardServiceTests(unittest.TestCase):
         for kind, query, args in conn.executed:
             if kind == "fetchrow" and "(SELECT COUNT(*)" in query:
                 overall_args = args
-        self.assertEqual(overall_args, (2,))
+        self.assertEqual(overall_args, (2, "2025-26", 3))
 
         semester_avg_args = None
         for kind, query, args in conn.executed:
@@ -277,7 +277,7 @@ class AdminDashboardServiceTests(unittest.TestCase):
         run(service.get_dashboard())
         self.assertTrue(conn.executed)
         for kind, query, args in conn.executed:
-            self.assertTrue(query.lstrip().upper().startswith("SELECT"), query)
+            self.assertTrue(query.lstrip().upper().startswith(("SELECT", "WITH")), query)
 
     def test_generated_at_is_utc_timestamp(self):
         service, _ = _service()

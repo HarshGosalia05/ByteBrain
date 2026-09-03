@@ -17,12 +17,50 @@ export function AdminFilterBar({ filters }: AdminFilterBarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
+  const academicYear = searchParams.get("academic_year") || ""
+  const departmentCode = searchParams.get("department_code") || ""
+  const semester = searchParams.get("semester") || ""
+  const activeFiltersCount =
+    (academicYear ? 1 : 0) + (departmentCode ? 1 : 0) + (semester ? 1 : 0)
+
+  // Derive valid semesters for the selected department
+  const selectedDept = (filters.departments || []).find(
+    (d) => d.department_code.toString() === departmentCode
+  )
+  const availableSemesters =
+    selectedDept?.semesters && selectedDept.semesters.length > 0
+      ? selectedDept.semesters
+      : selectedDept?.total_semesters
+        ? Array.from({ length: selectedDept.total_semesters }, (_, i) => i + 1)
+        : (filters.semesters || [])
+
   const handleFilterChange = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString())
-    if (value) {
-      params.set(key, value)
+    if (key === "department_code") {
+      if (value) {
+        params.set("department_code", value)
+        const targetDept = (filters.departments || []).find(
+          (d) => d.department_code.toString() === value
+        )
+        const targetSemesters =
+          targetDept?.semesters && targetDept.semesters.length > 0
+            ? targetDept.semesters
+            : targetDept?.total_semesters
+              ? Array.from({ length: targetDept.total_semesters }, (_, i) => i + 1)
+              : (filters.semesters || [])
+        const currentSem = params.get("semester")
+        if (currentSem && !targetSemesters.includes(parseInt(currentSem, 10))) {
+          params.delete("semester")
+        }
+      } else {
+        params.delete("department_code")
+      }
     } else {
-      params.delete(key)
+      if (value) {
+        params.set(key, value)
+      } else {
+        params.delete(key)
+      }
     }
     router.push(`${pathname}?${params.toString()}`)
   }
@@ -30,12 +68,6 @@ export function AdminFilterBar({ filters }: AdminFilterBarProps) {
   const handleResetFilters = () => {
     router.push(pathname)
   }
-
-  const academicYear = searchParams.get("academic_year") || ""
-  const departmentCode = searchParams.get("department_code") || ""
-  const semester = searchParams.get("semester") || ""
-  const activeFiltersCount =
-    (academicYear ? 1 : 0) + (departmentCode ? 1 : 0) + (semester ? 1 : 0)
 
   return (
     <div className="flex flex-col gap-4 print:hidden">
@@ -73,7 +105,7 @@ export function AdminFilterBar({ filters }: AdminFilterBarProps) {
           aria-label="Semester"
         >
           <option value="">All Semesters</option>
-          {(filters.semesters || []).map((s) => (
+          {availableSemesters.map((s) => (
             <option key={s} value={s.toString()}>
               Semester {s}
             </option>

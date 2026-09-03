@@ -12,6 +12,8 @@ import { ErrorState } from "@/components/shared/state/error-state"
 import { DepartmentAnalyticsView } from "@/components/admin/analytics/department-analytics-view"
 import { AnalyticsFilterBar } from "@/components/admin/analytics/analytics-filter-bar"
 
+export const dynamic = "force-dynamic"
+
 export default async function DepartmentAnalyticsPage(props: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {

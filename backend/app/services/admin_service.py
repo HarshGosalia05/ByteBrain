@@ -126,11 +126,15 @@ class AdminService:
         kpis = DashboardKpis()
         filter_options = FilterOptions()
 
-        overall = await self.repo.get_overall_counts(department_code)
+        overall = await self.repo.get_overall_counts(
+            department_code, academic_year, semester
+        )
         semester_avgs = await self.repo.get_semester_averages(
             department_code, academic_year, semester
         )
-        risk_rows = await self.repo.get_risk_distribution(department_code)
+        risk_rows = await self.repo.get_risk_distribution(
+            department_code, academic_year, semester
+        )
 
         kpis.total_students = int(overall.get("total_students") or 0)
         kpis.total_faculty = int(overall.get("total_faculty") or 0)
@@ -163,7 +167,9 @@ class AdminService:
                 percentage=_to_float(row.get("avg_percentage")),
                 sgpa=_to_float(row.get("avg_sgpa")),
             )
-            for row in await self.repo.get_department_performance(academic_year, semester)
+            for row in await self.repo.get_department_performance(
+                department_code, academic_year, semester
+            )
         ]
 
         academic_trend = [
@@ -211,6 +217,8 @@ class AdminService:
                 "department_code": r["department_code"],
                 "department_name": r.get("department_name"),
                 "department_short_name": r.get("department_short_name"),
+                "total_semesters": r.get("total_semesters"),
+                "semesters": r.get("semesters") or [],
             }
             for r in filter_data.get("departments") or []
         ]
@@ -238,6 +246,8 @@ class AdminService:
                     "department_code": r["department_code"],
                     "department_name": r.get("department_name"),
                     "department_short_name": r.get("department_short_name"),
+                    "total_semesters": r.get("total_semesters"),
+                    "semesters": r.get("semesters") or [],
                 }
                 for r in filter_data.get("departments") or []
             ],
@@ -258,7 +268,9 @@ class AdminService:
         semester_avgs = await self.repo.get_semester_averages(
             department_code, academic_year, semester
         )
-        overall = await self.repo.get_overall_counts(department_code)
+        overall = await self.repo.get_overall_counts(
+            department_code, academic_year, semester
+        )
         result_counts = await self.repo.get_result_counts(
             department_code, academic_year, semester
         )
@@ -338,7 +350,9 @@ class AdminService:
         }
         backlog_map = {
             int(r["department_code"]): int(r.get("total_backlogs") or 0)
-            for r in await self.repo.get_department_backlogs(department_code)
+            for r in await self.repo.get_department_backlogs(
+                department_code, academic_year, semester
+            )
         }
         pass_map = {
             int(r["department_code"]): (
@@ -350,7 +364,9 @@ class AdminService:
             )
         }
         risk_map: Dict[int, Dict[str, int]] = {}
-        for row in await self.repo.get_risk_by_department(department_code):
+        for row in await self.repo.get_risk_by_department(
+            department_code, academic_year, semester
+        ):
             code = int(row["department_code"])
             level = RISK_BAND_MAP.get(str(row.get("risk_level")).upper())
             if level:
@@ -558,7 +574,9 @@ class AdminService:
                 )
 
         # Highest-risk department (share of High + Critical risk students).
-        risk_rows = await self.repo.get_risk_by_department(department_code)
+        risk_rows = await self.repo.get_risk_by_department(
+            department_code, academic_year, semester
+        )
         dept_risk: Dict[str, int] = {}
         dept_total: Dict[str, int] = {}
         for row in risk_rows:

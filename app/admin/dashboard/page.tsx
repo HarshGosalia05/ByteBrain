@@ -4,6 +4,8 @@ import { getAdminDashboard, type AdminDashboardFilters } from "@/lib/admin-api"
 import { ErrorState } from "@/components/shared/state/error-state"
 import { AdminDashboardView } from "@/components/admin/dashboard/admin-dashboard-view"
 
+export const dynamic = "force-dynamic"
+
 export default async function AdminDashboardPage(props: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {

@@ -1,4 +1,4 @@
-﻿import { getSessionUser, getSessionToken } from "./student-session.ts"
+import { getSessionUser, getSessionToken } from "./student-session.ts"
 import type { M1V2PredictionData } from "./m1v2-prediction"
 import type { M2V2PredictionData } from "./m2v2-prediction"
 import type { M3V2PredictionData } from "./m3v2-prediction"
@@ -24,7 +24,8 @@ export type DepartmentOption = {
   department_code: number
   department_name: string | null
   department_short_name: string | null
-  total_semesters: number
+  total_semesters?: number | null
+  semesters?: number[]
 }
 
 export type DashboardFilterOptions = {

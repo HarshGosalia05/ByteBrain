@@ -150,11 +150,11 @@ def _default_responses(overrides=None):
             },
         ],
         # ---- Shared filter options ----
-        ("fetch", "DISTINCT academic_year FROM student_semester_summary"): [
+        ("fetch", "academic_year FROM student_semester_summary"): [
             {"academic_year": "2025-26"},
             {"academic_year": "2026-27"},
         ],
-        ("fetch", "dept_code AS department_code, department_name, "): [
+        ("fetch", "AS department_code, d.department_name"): [
             {"department_code": 1, "department_name": "CSE", "department_short_name": "CSE"},
             {"department_code": 2, "department_name": "BBA", "department_short_name": "BBA"},
         ],

@@ -34,24 +34,43 @@ class AdminRepository:
             return dict(row) if row else None
 
     async def get_overall_counts(
-        self, department_code: Optional[int]
+        self,
+        department_code: Optional[int],
+        academic_year: Optional[str] = None,
+        semester: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Students / faculty / departments totals (department filter only)."""
+        """Students / faculty / departments totals scoped by active filters."""
         row = await self._fetchrow(
             """
+            WITH filtered_students AS (
+                SELECT DISTINCT s.student_id
+                FROM students s
+                LEFT JOIN student_semester_summary sem ON sem.student_id = s.student_id
+                WHERE ($1::int IS NULL OR s.department_code = $1)
+                  AND (
+                      $2::text IS NULL 
+                      OR sem.academic_year = $2 
+                      OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
+                      OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
+                  )
+                  AND ($3::int IS NULL OR sem.semester_no = $3)
+                  AND (
+                      ($2::text IS NULL AND $3::int IS NULL)
+                      OR sem.semester_no IS NOT NULL
+                  )
+            )
             SELECT
-                (SELECT COUNT(*) FROM students s
-                    WHERE ($1::int IS NULL OR s.department_code = $1)) AS total_students,
+                (SELECT COUNT(*) FROM filtered_students) AS total_students,
                 (SELECT COUNT(*) FROM faculty f
                     WHERE ($1::int IS NULL OR f.department_code = $1)) AS total_faculty,
                 (SELECT COUNT(*) FROM departments d
                     WHERE ($1::int IS NULL OR d.dept_code = $1)) AS total_departments,
                 (SELECT AVG(s.overall_cgpa) FROM students s
-                    WHERE ($1::int IS NULL OR s.department_code = $1)) AS avg_cgpa,
+                    WHERE s.student_id IN (SELECT student_id FROM filtered_students)) AS avg_cgpa,
                 (SELECT COALESCE(SUM(s.total_backlogs), 0) FROM students s
-                    WHERE ($1::int IS NULL OR s.department_code = $1)) AS total_backlogs
+                    WHERE s.student_id IN (SELECT student_id FROM filtered_students)) AS total_backlogs
             """,
-            (department_code,),
+            (department_code, academic_year, semester),
         )
         return row or {}
 
@@ -71,7 +90,12 @@ class AdminRepository:
             FROM student_semester_summary sem
             JOIN students s ON s.student_id = sem.student_id
             WHERE ($1::int IS NULL OR s.department_code = $1)
-              AND ($2::text IS NULL OR sem.academic_year = $2)
+              AND (
+                  $2::text IS NULL 
+                  OR sem.academic_year = $2 
+                  OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
+                  OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
+              )
               AND ($3::int IS NULL OR sem.semester_no = $3)
             """,
             (department_code, academic_year, semester),
@@ -79,24 +103,44 @@ class AdminRepository:
         return row or {}
 
     async def get_risk_distribution(
-        self, department_code: Optional[int]
+        self,
+        department_code: Optional[int],
+        academic_year: Optional[str] = None,
+        semester: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """Stored risk levels from risk_predictions (department filter only)."""
+        """Stored risk levels from risk_predictions scoped to filtered students."""
         return await self._fetch(
             """
-            SELECT r.prediction_status AS risk_level, COUNT(*) AS count
+            WITH filtered_students AS (
+                SELECT DISTINCT s.student_id
+                FROM students s
+                LEFT JOIN student_semester_summary sem ON sem.student_id = s.student_id
+                WHERE ($1::int IS NULL OR s.department_code = $1)
+                  AND (
+                      $2::text IS NULL 
+                      OR sem.academic_year = $2 
+                      OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
+                      OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
+                  )
+                  AND ($3::int IS NULL OR sem.semester_no = $3)
+                  AND (
+                      ($2::text IS NULL AND $3::int IS NULL)
+                      OR sem.semester_no IS NOT NULL
+                  )
+            )
+            SELECT r.prediction_status AS risk_level, COUNT(DISTINCT r.student_id) AS count
             FROM risk_predictions r
-            JOIN students s ON s.student_id = r.student_id
-            WHERE ($1::int IS NULL OR s.department_code = $1)
+            WHERE r.student_id IN (SELECT student_id FROM filtered_students)
             GROUP BY r.prediction_status
             """,
-            (department_code,),
+            (department_code, academic_year, semester),
         )
 
     async def get_department_performance(
         self,
-        academic_year: Optional[str],
-        semester: Optional[int],
+        department_code: Optional[int] = None,
+        academic_year: Optional[str] = None,
+        semester: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Per-department average percentage + SGPA from semester summaries."""
         return await self._fetch(
@@ -109,12 +153,18 @@ class AdminRepository:
             FROM student_semester_summary sem
             JOIN students s ON s.student_id = sem.student_id
             LEFT JOIN departments d ON d.dept_code = s.department_code
-            WHERE ($1::text IS NULL OR sem.academic_year = $1)
-              AND ($2::int IS NULL OR sem.semester_no = $2)
+            WHERE ($1::int IS NULL OR s.department_code = $1)
+              AND (
+                  $2::text IS NULL 
+                  OR sem.academic_year = $2 
+                  OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
+                  OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
+              )
+              AND ($3::int IS NULL OR sem.semester_no = $3)
             GROUP BY s.department_code, d.department_name, s.department_name
             ORDER BY s.department_code
             """,
-            (academic_year, semester),
+            (department_code, academic_year, semester),
         )
 
     async def get_academic_trend(
@@ -133,7 +183,12 @@ class AdminRepository:
             FROM student_semester_summary sem
             JOIN students s ON s.student_id = sem.student_id
             WHERE ($1::int IS NULL OR s.department_code = $1)
-              AND ($2::text IS NULL OR sem.academic_year = $2)
+              AND (
+                  $2::text IS NULL 
+                  OR sem.academic_year = $2 
+                  OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
+                  OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
+              )
             GROUP BY sem.semester_no
             ORDER BY sem.semester_no
             """,
@@ -160,7 +215,12 @@ class AdminRepository:
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = a.enrollment_record_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND (
+                  $2::text IS NULL 
+                  OR e.academic_year = $2 
+                  OR (e.academic_year = '2026-2027' AND $2 = '2026-27')
+                  OR (e.academic_year = '2026-27' AND $2 = '2026-2027')
+              )
               AND ($3::int IS NULL OR e.semester_no = $3)
             GROUP BY COALESCE(a.attendance_status, 'Unknown')
             """,
@@ -181,7 +241,12 @@ class AdminRepository:
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = a.enrollment_record_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND (
+                  $2::text IS NULL 
+                  OR e.academic_year = $2 
+                  OR (e.academic_year = '2026-2027' AND $2 = '2026-27')
+                  OR (e.academic_year = '2026-27' AND $2 = '2026-2027')
+              )
               AND ($3::int IS NULL OR e.semester_no = $3)
               AND COALESCE(a.eligibility_status, 'Not Eligible') = 'Not Eligible'
             """,
@@ -214,7 +279,12 @@ class AdminRepository:
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = p.enrollment_record_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND (
+                  $2::text IS NULL 
+                  OR e.academic_year = $2 
+                  OR (e.academic_year = '2026-2027' AND $2 = '2026-27')
+                  OR (e.academic_year = '2026-27' AND $2 = '2026-2027')
+              )
               AND ($3::int IS NULL OR e.semester_no = $3)
             GROUP BY 1
             """,
@@ -240,7 +310,12 @@ class AdminRepository:
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = p.enrollment_record_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND (
+                  $2::text IS NULL 
+                  OR e.academic_year = $2 
+                  OR (e.academic_year = '2026-2027' AND $2 = '2026-27')
+                  OR (e.academic_year = '2026-27' AND $2 = '2026-2027')
+              )
               AND ($3::int IS NULL OR e.semester_no = $3)
             GROUP BY e.subject_code, e.subject_name
             HAVING COUNT(*) FILTER (WHERE UPPER(p.result_status) = 'FAIL') > 0
@@ -251,37 +326,66 @@ class AdminRepository:
         )
 
     async def get_risk_by_department(
-        self, department_code: Optional[int]
+        self,
+        department_code: Optional[int],
+        academic_year: Optional[str] = None,
+        semester: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Per-department risk distribution for the highest-risk insight."""
         return await self._fetch(
             """
+            WITH filtered_students AS (
+                SELECT DISTINCT s.student_id
+                FROM students s
+                LEFT JOIN student_semester_summary sem ON sem.student_id = s.student_id
+                WHERE ($1::int IS NULL OR s.department_code = $1)
+                  AND (
+                      $2::text IS NULL 
+                      OR sem.academic_year = $2 
+                      OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
+                      OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
+                  )
+                  AND ($3::int IS NULL OR sem.semester_no = $3)
+                  AND (
+                      ($2::text IS NULL AND $3::int IS NULL)
+                      OR sem.semester_no IS NOT NULL
+                  )
+            )
             SELECT
                 s.department_code,
                 COALESCE(d.department_name, s.department_name) AS department_name,
                 r.prediction_status AS risk_level,
-                COUNT(*) AS count
+                COUNT(DISTINCT r.student_id) AS count
             FROM risk_predictions r
             JOIN students s ON s.student_id = r.student_id
             LEFT JOIN departments d ON d.dept_code = s.department_code
-            WHERE ($1::int IS NULL OR s.department_code = $1)
+            WHERE s.student_id IN (SELECT student_id FROM filtered_students)
             GROUP BY
                 s.department_code,
                 COALESCE(d.department_name, s.department_name),
                 r.prediction_status
             """,
-            (department_code,),
+            (department_code, academic_year, semester),
         )
 
     async def get_filter_options(self) -> Dict[str, Any]:
         """Available academic years / departments / semesters / career domains / dream roles for filters."""
         years = await self._fetch(
-            "SELECT DISTINCT academic_year FROM student_semester_summary "
+            "SELECT DISTINCT CASE WHEN academic_year = '2026-2027' THEN '2026-27' ELSE academic_year END AS academic_year "
+            "FROM student_semester_summary "
             "WHERE academic_year IS NOT NULL ORDER BY academic_year"
         )
         departments = await self._fetch(
-            "SELECT dept_code AS department_code, department_name, "
-            "department_short_name, total_semesters FROM departments ORDER BY dept_code"
+            "SELECT d.dept_code AS department_code, d.department_name, "
+            "d.department_short_name, d.total_semesters, "
+            "COALESCE( "
+            "  (SELECT array_agg(DISTINCT sem.semester_no ORDER BY sem.semester_no) "
+            "   FROM student_semester_summary sem "
+            "   JOIN students s ON s.student_id = sem.student_id "
+            "   WHERE s.department_code = d.dept_code), "
+            "  ARRAY[]::int[] "
+            ") AS semesters "
+            "FROM departments d ORDER BY d.dept_code"
         )
         semesters = await self._fetch(
             "SELECT DISTINCT semester_no FROM student_semester_summary "
@@ -441,25 +545,44 @@ class AdminRepository:
         """Per-department students + semester averages in the scope."""
         return await self._fetch(
             """
+            WITH scoped_students AS (
+                SELECT DISTINCT s.student_id, s.department_code
+                FROM students s
+                LEFT JOIN student_semester_summary sem ON sem.student_id = s.student_id
+                WHERE ($1::int IS NULL OR s.department_code = $1)
+                  AND (
+                      $2::text IS NULL 
+                      OR sem.academic_year = $2 
+                      OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
+                      OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
+                  )
+                  AND ($3::int IS NULL OR sem.semester_no = $3)
+                  AND (
+                      ($2::text IS NULL AND $3::int IS NULL)
+                      OR sem.semester_no IS NOT NULL
+                  )
+            )
             SELECT
-                s.department_code,
-                COALESCE(d.department_name, s.department_name) AS department_name,
+                d.dept_code AS department_code,
+                d.department_name,
                 d.department_short_name,
                 COUNT(DISTINCT s.student_id) AS total_students,
                 AVG(sem.semester_sgpa) AS avg_sgpa,
                 AVG(sem.semester_percentage) AS avg_percentage,
                 AVG(sem.semester_attendance_percentage) AS avg_attendance
-            FROM students s
-            LEFT JOIN departments d ON d.dept_code = s.department_code
+            FROM departments d
+            LEFT JOIN scoped_students s ON s.department_code = d.dept_code
             LEFT JOIN student_semester_summary sem ON sem.student_id = s.student_id
-              AND ($2::text IS NULL OR sem.academic_year = $2)
+              AND (
+                  $2::text IS NULL 
+                  OR sem.academic_year = $2 
+                  OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
+                  OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
+              )
               AND ($3::int IS NULL OR sem.semester_no = $3)
-            WHERE ($1::int IS NULL OR s.department_code = $1)
-            GROUP BY
-                s.department_code,
-                COALESCE(d.department_name, s.department_name),
-                d.department_short_name
-            ORDER BY s.department_code
+            WHERE ($1::int IS NULL OR d.dept_code = $1)
+            GROUP BY d.dept_code, d.department_name, d.department_short_name
+            ORDER BY d.dept_code
             """,
             (department_code, academic_year, semester),
         )
@@ -479,17 +602,36 @@ class AdminRepository:
         )
 
     async def get_department_backlogs(
-        self, department_code: Optional[int]
+        self,
+        department_code: Optional[int],
+        academic_year: Optional[str] = None,
+        semester: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """Per-department backlog total (department filter only)."""
+        """Per-department backlog total scoped by filters."""
         return await self._fetch(
             """
-            SELECT s.department_code, COALESCE(SUM(s.total_backlogs), 0) AS total_backlogs
-            FROM students s
-            WHERE ($1::int IS NULL OR s.department_code = $1)
-            GROUP BY s.department_code
+            WITH filtered_students AS (
+                SELECT DISTINCT s.student_id, s.department_code, s.total_backlogs
+                FROM students s
+                LEFT JOIN student_semester_summary sem ON sem.student_id = s.student_id
+                WHERE ($1::int IS NULL OR s.department_code = $1)
+                  AND (
+                      $2::text IS NULL 
+                      OR sem.academic_year = $2 
+                      OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
+                      OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
+                  )
+                  AND ($3::int IS NULL OR sem.semester_no = $3)
+                  AND (
+                      ($2::text IS NULL AND $3::int IS NULL)
+                      OR sem.semester_no IS NOT NULL
+                  )
+            )
+            SELECT department_code, COALESCE(SUM(total_backlogs), 0) AS total_backlogs
+            FROM filtered_students
+            GROUP BY department_code
             """,
-            (department_code,),
+            (department_code, academic_year, semester),
         )
 
     async def get_department_pass_rates(
