@@ -24,7 +24,7 @@ async def health_check(pool: asyncpg.Pool = Depends(get_db_pool)):
 async def root_v1():
     return {
         "version": "v1",
-        "service": "kenexai-backend"
+        "service": "campusx-backend"
     }
 
 api_router.include_router(student.router, prefix="/students", tags=["students"])

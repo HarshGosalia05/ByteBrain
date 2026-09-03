@@ -1856,7 +1856,7 @@
 
 
 
-**🟡 KenexAI Analytics:**
+**🟡 CampusX Analytics:**
 
 
 
@@ -1880,7 +1880,7 @@
 
 
 
-**\*\*Ye difference hi KenexAI ko normal college ERP se genuinely alag karega.\*\***
+**\*\*Ye difference hi CampusX ko normal college ERP se genuinely alag karega.\*\***
 
 
 
@@ -2607,7 +2607,7 @@
 
 **┌───────────────────────────────┐**
 
-**│         KENEXAI               │**
+**│         CAMPUSX               │**
 
 **│                               │**
 
@@ -2999,7 +2999,7 @@
 
 
 
-**This is \*\*very KenexAI\*\*.**
+**This is \*\*very CampusX\*\*.**
 
 
 
@@ -7172,7 +7172,7 @@
 
 
 
-**Existing KenexAI design system stays.**
+**Existing CampusX design system stays.**
 
 
 

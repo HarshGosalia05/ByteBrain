@@ -1,17 +1,17 @@
-# KenexAI Presentation — Master Brief & Generation Prompt
+# CampusX Presentation — Master Brief & Generation Prompt
 
 ## 1. Reference Material
 
 Use these two files as the primary references:
 
 - **Team 06 GrowthAI / GrowthGPT PPT** — use it as the VISUAL and STORYTELLING reference.
-- **KenexAI_Presentation_Content.md** — use it as the CONTENT and TECHNICAL ACCURACY reference.
+- **CampusX_Presentation_Content.md** — use it as the CONTENT and TECHNICAL ACCURACY reference.
 
 The Team 06 PPT is a strong reference for a clean, premium, competition-ready presentation with a predominantly **white/light theme**, strong black typography, blue/teal accent elements, cards, metrics, diagrams, and structured technical storytelling.
 
-Do NOT copy GrowthGPT-specific content, claims, statistics, architecture, technologies, names, or features into KenexAI.
+Do NOT copy GrowthGPT-specific content, claims, statistics, architecture, technologies, names, or features into CampusX.
 
-The KenexAI content file is the source of truth for our project's actual content. It is already verified from the codebase.
+The CampusX content file is the source of truth for our project's actual content. It is already verified from the codebase.
 
 ---
 
@@ -19,7 +19,7 @@ The KenexAI content file is the source of truth for our project's actual content
 
 Create a professional technical presentation for:
 
-**KenexAI — AI-Enabled Faculty Portal**
+**CampusX — AI-Enabled Faculty Portal**
 
 Tagline:
 
@@ -96,7 +96,7 @@ Take inspiration from the reference PPT's:
 - Large whitespace
 - Small footer with project/team information
 
-Do not reproduce the exact reference slide layouts. Adapt the visual language to KenexAI.
+Do not reproduce the exact reference slide layouts. Adapt the visual language to CampusX.
 
 ---
 
@@ -104,7 +104,7 @@ Do not reproduce the exact reference slide layouts. Adapt the visual language to
 
 ## Title
 
-**KenexAI**
+**CampusX**
 
 ### Subtitle
 
@@ -125,7 +125,7 @@ Use a clean hero composition.
 
 Suggested visual:
 
-Large KenexAI title on the left + subtle academic analytics/dashboard visual on the right.
+Large CampusX title on the left + subtle academic analytics/dashboard visual on the right.
 
 Keep it mostly white.
 
@@ -170,7 +170,7 @@ Use 5–6 clean problem cards or a left-problem/right-impact layout.
 
 Explain:
 
-KenexAI is a unified web platform that consolidates student management, performance analytics, attendance tracking, teaching workload, timetable, notifications and ML insights.
+CampusX is a unified web platform that consolidates student management, performance analytics, attendance tracking, teaching workload, timetable, notifications and ML insights.
 
 Core modules:
 
@@ -191,7 +191,7 @@ Historical academic years remain accessible through filters.
 
 Show the transformation:
 
-**Fragmented Data → KenexAI → Actionable Faculty Insights**
+**Fragmented Data → CampusX → Actionable Faculty Insights**
 
 ---
 
@@ -201,7 +201,7 @@ Show the transformation:
 
 **Built With a Modern Full-Stack Architecture**
 
-Use ONLY the verified technologies from KenexAI_Presentation_Content.md.
+Use ONLY the verified technologies from CampusX_Presentation_Content.md.
 
 ### Frontend
 
@@ -251,9 +251,9 @@ Do not invent:
 - SHAP
 - other technologies
 
-unless the current KenexAI codebase/content explicitly confirms them.
+unless the current CampusX codebase/content explicitly confirms them.
 
-The Team 06 PPT's technology stack is ONLY a visual reference, not a technology source for KenexAI.
+The Team 06 PPT's technology stack is ONLY a visual reference, not a technology source for CampusX.
 
 ---
 
@@ -342,7 +342,7 @@ Highlight analytics capabilities:
 - CSV exports
 - Academic-year filtering
 
-If screenshots from the actual KenexAI UI are available, prefer actual screenshots over generic illustrations.
+If screenshots from the actual CampusX UI are available, prefer actual screenshots over generic illustrations.
 
 ---
 
@@ -352,7 +352,7 @@ If screenshots from the actual KenexAI UI are available, prefer actual screensho
 
 **From Faculty Interaction to Academic Intelligence**
 
-Use the actual architecture verified in the KenexAI content.
+Use the actual architecture verified in the CampusX content.
 
 ### USER LAYER
 
@@ -425,7 +425,7 @@ Do not copy GrowthGPT's architecture.
 
 ## Heading
 
-**How KenexAI Turns Data Into Decisions**
+**How CampusX Turns Data Into Decisions**
 
 Show the verified workflow:
 
@@ -460,7 +460,7 @@ Do not present All Years as equivalent to the latest year.
 
 ## Heading
 
-**Why KenexAI Matters**
+**Why CampusX Matters**
 
 Use verified practical benefits:
 
@@ -505,7 +505,7 @@ Only use these metrics if the final codebase/content still confirms them.
 
 Summarize:
 
-KenexAI is a full-stack academic analytics platform that brings student management, performance, attendance, workload, timetable and predictive insights into one unified Faculty Portal.
+CampusX is a full-stack academic analytics platform that brings student management, performance, attendance, workload, timetable and predictive insights into one unified Faculty Portal.
 
 Use a strong final statement:
 
@@ -549,7 +549,7 @@ Reference deck structure includes strong sections such as:
 - innovations
 - conclusion
 
-For KenexAI, do NOT copy its claims. Use the same PRESENTATION QUALITY and visual discipline with KenexAI's verified content.
+For CampusX, do NOT copy its claims. Use the same PRESENTATION QUALITY and visual discipline with CampusX's verified content.
 
 ---
 
@@ -569,7 +569,7 @@ Never invent:
 - Team information
 - Features
 
-If a detail is not supported by the KenexAI content/codebase, leave it out or mark it for verification.
+If a detail is not supported by the CampusX content/codebase, leave it out or mark it for verification.
 
 ---
 
@@ -581,13 +581,13 @@ Before finalizing the presentation, verify:
 - Typography is strong and readable.
 - No slide is overloaded with text.
 - Architecture is technically accurate.
-- Technology stack matches KenexAI.
+- Technology stack matches CampusX.
 - Problem statement is specific.
 - Solution directly maps to the problems.
 - 5–6 problem/solution pairs are included.
 - 2026–27 is clearly presented as the current/default academic year.
 - Historical academic years are described as accessible through filters.
 - "All Years" is not described as "latest year."
-- Actual KenexAI screenshots are preferred where available.
+- Actual CampusX screenshots are preferred where available.
 - No GrowthGPT-specific content has accidentally been copied.
 - The deck looks like a polished hackathon/technical evaluation presentation.

@@ -1,8 +1,8 @@
-# KENEXAI Faculty Portal — PPT Generation Master Prompt
+# CAMPUSX Faculty Portal — PPT Generation Master Prompt
 
 ## Purpose
 
-Create a professional project presentation for **KenexAI**, an AI-enabled Faculty Portal designed to help faculty manage and analyze students, academic performance, attendance, subjects, timetables, teaching workload, and related academic data.
+Create a professional project presentation for **CampusX**, an AI-enabled Faculty Portal designed to help faculty manage and analyze students, academic performance, attendance, subjects, timetables, teaching workload, and related academic data.
 
 The presentation should be suitable for a **college project / SIH-style presentation / technical project evaluation**.
 
@@ -17,11 +17,11 @@ Create a concise presentation of approximately **8–10 slides**.
 ### Slide 1 — Team Name
 
 Title:
-**KenexAI**
+**CampusX**
 
 Include:
 - Team name
-- Project name: KenexAI Faculty Portal
+- Project name: CampusX Faculty Portal
 - Short one-line project tagline
 - Team members only if their names are available from the project/context
 
@@ -54,7 +54,7 @@ The slide should answer:
 
 ### Slide 3 — Our Solution
 
-Present KenexAI as the solution.
+Present CampusX as the solution.
 
 Explain that the platform provides a centralized Faculty Portal that brings together:
 - Student management
@@ -115,7 +115,7 @@ Show 5–6 problem/solution pairs.
 
 Use a clear two-column format:
 
-| Problem | KenexAI Solution |
+| Problem | CampusX Solution |
 |---|---|
 | Student information is difficult to manage | Centralized student management and searchable student records |
 | Performance analysis is manual | Automated performance KPIs, distributions, subject comparisons and charts |
@@ -161,7 +161,7 @@ Preferred conceptual flow:
 
 Faculty/User
     ↓
-KenexAI Faculty Portal
+CampusX Faculty Portal
     ↓
 Frontend / UI
     ↓
@@ -242,7 +242,7 @@ Avoid unsupported claims such as guaranteed percentage improvements.
 
 Include:
 - Short conclusion
-- KenexAI value proposition
+- CampusX value proposition
 - Future scope if supported
 - Thank You
 
@@ -256,7 +256,7 @@ Use a modern professional academic/technology style.
 
 Preferred:
 - Clean white/light background
-- Blue/teal accent palette consistent with the KenexAI interface
+- Blue/teal accent palette consistent with the CampusX interface
 - Minimal text
 - Large headings
 - Consistent cards

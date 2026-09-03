@@ -1,4 +1,4 @@
-TASK: Implement MD-02 — KenexAI Institution Admin Dashboard.
+TASK: Implement MD-02 — CampusX Institution Admin Dashboard.
 
 PRECONDITION
 MD-01 Admin Foundation must already be implemented.

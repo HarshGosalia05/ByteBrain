@@ -1,4 +1,4 @@
-# KenexAI — Final Presentation (10 Slides)
+# CampusX — Final Presentation (10 Slides)
 ## Polished Technical Competition Deck | White Theme
 
 ---
@@ -36,11 +36,11 @@
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Layout:** Left-aligned hero. Large "KenexAI" title in bold black. Subtitle below. Three portal badges (Faculty / Admin / Student) as clean outlined cards. Tech footer in light gray at bottom.
+**Layout:** Left-aligned hero. Large "CampusX" title in bold black. Subtitle below. Three portal badges (Faculty / Admin / Student) as clean outlined cards. Tech footer in light gray at bottom.
 
 **Style notes:**
 - White background, no gradient
-- "KenexAI" in 72pt+ bold black sans-serif
+- "CampusX" in 72pt+ bold black sans-serif
 - Subtitle in 24pt dark gray
 - Tagline in 16pt teal (#0D9488 or similar)
 - Three portal cards: white fill, subtle border, teal icon accents
@@ -113,13 +113,13 @@
 │  02  OUR SOLUTION                                                        │
 │  ━━━━━━━━━━━━━━━━━━                                                      │
 │                                                                          │
-│  KenexAI is a unified web platform that consolidates student            │
+│  CampusX is a unified web platform that consolidates student            │
 │  management, performance analytics, attendance tracking,                │
 │  teaching workload, timetable, and ML insights.                         │
 │                                                                          │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
 │  │                                                                  │   │
-│  │   FRAGMENTED DATA          →      KENEXAI         →    ACTIONABLE│   │
+│  │   FRAGMENTED DATA          →      CAMPUSX         →    ACTIONABLE│   │
 │  │   (Spreadsheets,                (Unified Portal,         INSIGHTS│   │
 │  │    manual registers,             analytics, ML)    (KPIs, charts,│   │
 │  │    disconnected systems)                                decisions)│   │
@@ -422,7 +422,7 @@
 
 # SLIDE 8 — HOW THE SYSTEM WORKS
 
-## How KenexAI Turns Data Into Decisions
+## How CampusX Turns Data Into Decisions
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -477,7 +477,7 @@
 
 # SLIDE 9 — IMPACT / ADVANTantages
 
-## Why KenexAI Matters
+## Why CampusX Matters
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -534,7 +534,7 @@
 │  09  CONCLUSION                                                          │
 │  ━━━━━━━━━━━━━━━━━━                                                      │
 │                                                                          │
-│  KenexAI is a full-stack academic analytics platform that               │
+│  CampusX is a full-stack academic analytics platform that               │
 │  brings student management, performance, attendance, workload,          │
 │  timetable and predictive insights into one unified Faculty Portal.     │
 │                                                                          │
@@ -623,7 +623,7 @@ Footer:            10pt, Regular, Light Gray
 
 ## Verification Checklist
 ```
-✓ All technologies match KenexAI_Presentation_Content.md exactly
+✓ All technologies match CampusX_Presentation_Content.md exactly
 ✓ Versions: Next.js 16.2.6, React 19.2.4, Tailwind v4, shadcn/ui v4
 ✓ Versions: Recharts 3.8.0, TanStack Table 8.21, Zod 4.4
 ✓ Backend: FastAPI ≥0.109, asyncpg ≥0.29

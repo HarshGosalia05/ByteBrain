@@ -1,11 +1,11 @@
-# KenexAI Faculty Portal — Presentation Content
+# CampusX Faculty Portal — Presentation Content
 ## (Verified from Codebase)
 
 ---
 
 ## SLIDE 1 — Title
 
-**KenexAI**
+**CampusX**
 *AI-Enabled Faculty Portal*
 
 **Tagline:** Centralized Academic Intelligence for Data-Driven Faculty Management
@@ -36,7 +36,7 @@ Faculty and academic institutions face **fragmented academic data** spread acros
 
 ## SLIDE 3 — Our Solution
 
-### KenexAI Faculty Portal
+### CampusX Faculty Portal
 
 A **unified web platform** that consolidates student management, performance analytics, attendance tracking, teaching workload, and timetable into a single dashboard — with predictive ML models.
 
@@ -85,7 +85,7 @@ Current academic year: **2026–27** (historical years accessible via filters).
 
 ## SLIDE 5 — Problems We Address & Solutions
 
-| Problem | KenexAI Solution |
+| Problem | CampusX Solution |
 |---|---|
 | Student records scattered across files | Centralized student management with searchable, paginated tables |
 | Performance analysis done manually | Automated KPIs, grade distributions, subject comparisons, learning gap tables |
@@ -310,9 +310,9 @@ Current academic year: **2026–27** (historical years accessible via filters).
 
 ## SLIDE 10 — Conclusion / Thank You
 
-### KenexAI — Summary
+### CampusX — Summary
 
-KenexAI is a **full-stack academic analytics platform** built with modern web technologies:
+CampusX is a **full-stack academic analytics platform** built with modern web technologies:
 
 - **Next.js 16 + React 19** frontend with shadcn/ui and Recharts
 - **FastAPI** backend with raw SQL and async PostgreSQL
@@ -328,4 +328,4 @@ KenexAI is a **full-stack academic analytics platform** built with modern web te
 
 **Thank You**
 
-*KenexAI Faculty Portal — Built for data-driven academic management.*
+*CampusX Faculty Portal — Built for data-driven academic management.*

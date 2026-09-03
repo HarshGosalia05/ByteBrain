@@ -1,4 +1,4 @@
-You are implementing the KenexAI Admin Module V1 inside the existing ByteBrain/KenexAI repository.
+You are implementing the CampusX Admin Module V1 inside the existing ByteBrain/CampusX repository.
 
 PROJECT CONTEXT
 - Frontend: Next.js + React + TypeScript + Tailwind

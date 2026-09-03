@@ -1,5 +1,5 @@
 -- ============================================================================
--- KenexAI — CSE 6A 1,200-Student cohort: PROPOSED migration DDL (NOT executed)
+-- CampusX — CSE 6A 1,200-Student cohort: PROPOSED migration DDL (NOT executed)
 -- ============================================================================
 -- STATUS: PROPOSED ONLY. For review. This file was created during a READ-ONLY
 -- audit (2026-08-30). It MUST NOT be run against production until reviewed and

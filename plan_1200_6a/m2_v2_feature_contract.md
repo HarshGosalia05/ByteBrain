@@ -90,7 +90,7 @@ All features are aggregates anchored to observation semester **T** only.
 | `stress_ordinal` | `student_lifestyle_survey.mental_stress_level` | ordinal Low=0/Medium=1/High=2 |
 | `study_hours_per_week` | `student_lifestyle_survey.study_hours_per_week` | numeric |
 
-**Source notes:** behavioral features are KenexAI-native adaptations inspired by public
+**Source notes:** behavioral features are CampusX-native adaptations inspired by public
 OULAD-style engagement concepts; no external OULAD student IDs/labels were used or copied.
 
 ---

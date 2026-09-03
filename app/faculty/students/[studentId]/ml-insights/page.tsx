@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react"
 import { requireRole } from "@/lib/session"
 import {
   getFacultyStudentM1V2,
+  getFacultyStudentM1V3,
   getFacultyStudentM2V2,
   getFacultyStudentM3V2,
   getFacultyStudentMlInsights,
@@ -21,11 +22,12 @@ export default async function FacultyStudentMlInsightsPage(props: {
 
   const { studentId } = await props.params
 
-  const [profileResult, insightsResult, m1v2Result, m2v2Result, m3v2Result] =
+  const [profileResult, insightsResult, m1v2Result, m1v3Result, m2v2Result, m3v2Result] =
     await Promise.allSettled([
       getFacultyStudentProfile(studentId),
       getFacultyStudentMlInsights(studentId),
       getFacultyStudentM1V2(studentId),
+      getFacultyStudentM1V3(studentId),
       getFacultyStudentM2V2(studentId),
       getFacultyStudentM3V2(studentId),
     ])
@@ -58,6 +60,16 @@ export default async function FacultyStudentMlInsightsPage(props: {
   const isNoData = (r: PromiseSettledResult<BffResult<unknown>>) =>
     r.status === "fulfilled" && !r.value.ok && r.value.error.status === 404
 
+  // M1 V3 returns 200 with NO_DATA, same as M1 V2
+  const m1v3Data =
+    m1v3Result.status === "fulfilled" && m1v3Result.value.ok
+      ? m1v3Result.value.data
+      : null
+  const m1v3NoData =
+    m1v3Data !== null &&
+    (m1v3Data as any).readiness_status === "NO_DATA" &&
+    (m1v3Data as any).subjects?.length === 0
+
   return (
     <div className="flex flex-col gap-6">
       <Link
@@ -76,6 +88,8 @@ export default async function FacultyStudentMlInsightsPage(props: {
         data={insights.data}
         m1v2={m1v2Result.status === "fulfilled" && m1v2Result.value.ok ? m1v2Result.value.data : null}
         m1v2NoData={isNoData(m1v2Result)}
+        m1v3={m1v3NoData ? null : m1v3Data}
+        m1v3NoData={m1v3NoData}
         m2v2={m2v2Result.status === "fulfilled" && m2v2Result.value.ok ? m2v2Result.value.data : null}
         m2v2NoData={isNoData(m2v2Result)}
         m3v2={m3v2Result.status === "fulfilled" && m3v2Result.value.ok ? m3v2Result.value.data : null}

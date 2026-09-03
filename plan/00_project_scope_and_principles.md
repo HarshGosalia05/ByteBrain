@@ -2,7 +2,7 @@
 
 ## 1. Project Overview and Mission
 
-KenexAI KDAC-3 is a student academic success, subject performance, and career readiness analytics platform. Its purpose is to unify fragmented institutional data, analyze it in context, and turn that analysis into timely, explainable, and actionable guidance for students, faculty, mentors, and administrators.
+CampusX KDAC-3 is a student academic success, subject performance, and career readiness analytics platform. Its purpose is to unify fragmented institutional data, analyze it in context, and turn that analysis into timely, explainable, and actionable guidance for students, faculty, mentors, and administrators.
 
 The platform is designed around a production-first architecture, not a prototype dashboard. The system must support a real institutional workflow where academic results, attendance, lifestyle signals, career preferences, predictive models, and narrative insights are connected through a stable data pipeline and a clear service boundary. The intended outcome is a platform that helps institutions identify learning gaps earlier, detect at-risk students sooner, and provide more grounded career guidance using actual student data rather than generic advice.
 

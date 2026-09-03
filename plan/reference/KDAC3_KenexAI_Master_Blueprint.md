@@ -1,5 +1,5 @@
 KDAC-3
-KenexAI — Student Academic Success, Subject Performance
+CampusX — Student Academic Success, Subject Performance
 & Career Readiness Analytics Platform
 Software Architecture & Development Blueprint
 Official Architecture Guide — Production-Readiness Track
@@ -11,7 +11,7 @@ Table of Contents
 
  
 1. Vision
-KenexAI (KDAC-3) exists to close a gap most institutions never fix: academic, behavioral, and career-readiness data about a student sit in separate systems, so no one — not the student, not the faculty advisor, not the institution — ever sees the whole picture in time to act on it.
+CampusX (KDAC-3) exists to close a gap most institutions never fix: academic, behavioral, and career-readiness data about a student sit in separate systems, so no one — not the student, not the faculty advisor, not the institution — ever sees the whole picture in time to act on it.
 The long-term vision is not a hackathon dashboard. It is a production-grade Student Success Intelligence Platform: a system that unifies fragmented student data, learns from it responsibly, and turns that learning into timely, explainable, human-actionable guidance for students, faculty, and administrators — architected from day one to grow from a single-institution deployment into a multi-tenant SaaS product.
 Every architectural decision in this document is made against that longer horizon. Where a shortcut would work for a demo but create rework at scale, this blueprint takes the production path.
 2. Goals

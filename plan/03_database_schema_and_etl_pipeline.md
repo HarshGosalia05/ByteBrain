@@ -2,7 +2,7 @@
 
 ## 1. Database Platform and Data Ownership
 
-KenexAI KDAC-3 uses Supabase PostgreSQL as the persistent data layer and accesses it directly through the `pg` library. The project deliberately avoids Supabase REST and uses the database like a standard PostgreSQL system so the backend can remain portable and the access model can stay explicit.
+CampusX KDAC-3 uses Supabase PostgreSQL as the persistent data layer and accesses it directly through the `pg` library. The project deliberately avoids Supabase REST and uses the database like a standard PostgreSQL system so the backend can remain portable and the access model can stay explicit.
 
 This document defines how data should be organized, stitched, validated, and loaded so the rest of the platform can rely on a stable student-grain warehouse. It is the owning document for schema structure, identity resolution, and ETL behavior. It is not the place for UI, deployment, or predictive-model detail.
 

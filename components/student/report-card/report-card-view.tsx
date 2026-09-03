@@ -244,7 +244,7 @@ export function ReportCardView({ data }: { data: ReportCardResponse }) {
               <div>
                 <p className="flex items-center gap-1.5 text-xs font-medium tracking-widest text-muted-foreground uppercase">
                   <FileText className="size-3.5" />
-                  KenexAI · Academic Report
+                  CampusX · Academic Report
                 </p>
                 <h2 className="mt-2 text-2xl font-semibold tracking-tight">
                   {fullName}

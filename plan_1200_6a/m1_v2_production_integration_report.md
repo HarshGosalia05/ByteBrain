@@ -1,6 +1,6 @@
 # M1 V2 Production Integration Report
 
-**Project:** KenexAI ByteBrain — 1200-student CSE 6A cohort (plan_1200_6a)
+**Project:** CampusX ByteBrain — 1200-student CSE 6A cohort (plan_1200_6a)
 **Model:** M1 V2 Subject End-Sem Marks Prediction (`ridge`, 39 features)
 **Date:** 2026-09-01
 **Status:** See acceptance gate at the end.

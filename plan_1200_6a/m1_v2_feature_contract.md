@@ -40,7 +40,7 @@ These features are available during semester T before the end-semester exam.
 | `avg_assessment_completion_rate` | `student_learning_activity` | AVG(assessment_completion_rate) across 8 weeks | After week 8 |
 | `avg_late_submission_rate` | `student_learning_activity` | AVG(late_submission_rate) across 8 weeks | After week 8 |
 
-**Source note:** These are OULAD-inspired behavioral features adapted to KenexAI data. No OULAD student IDs or labels were used or copied.
+**Source note:** These are OULAD-inspired behavioral features adapted to CampusX data. No OULAD student IDs or labels were used or copied.
 
 ### Tier 1D: Subject and Student Metadata (stable)
 

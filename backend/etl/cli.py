@@ -41,7 +41,7 @@ from etl.stages.validate import ValidateStage
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m etl",
-        description="KenexAI KDAC-3 reusable ETL pipeline (implemented: extract, validate, stage, stitch, transform, load, derive).",
+        description="CampusX KDAC-3 reusable ETL pipeline (implemented: extract, validate, stage, stitch, transform, load, derive).",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

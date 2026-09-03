@@ -1,4 +1,4 @@
-TASK: Implement MD-01 — KenexAI Admin Foundation.
+TASK: Implement MD-01 — CampusX Admin Foundation.
 
 OBJECTIVE
 Create the production-ready Admin shell and Admin authorization foundation without implementing the actual analytics features yet.
@@ -80,7 +80,7 @@ Create a clean empty dashboard foundation that is ready for MD-02.
 Do not add fake KPI cards.
 
 UI REQUIREMENTS
-- Existing KenexAI visual language
+- Existing CampusX visual language
 - Responsive
 - Accessible
 - Proper loading/error/empty states

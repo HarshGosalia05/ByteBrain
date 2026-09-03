@@ -2,7 +2,7 @@
 
 ## 1. Warehouse Overview
 
-The KenexAI KDAC-3 data warehouse is a student-grain analytical platform built on Supabase PostgreSQL. The warehouse stores master data, transactional/academic facts, context data, and intelligence outputs in 16 live tables organized into 4 functional groups.
+The CampusX KDAC-3 data warehouse is a student-grain analytical platform built on Supabase PostgreSQL. The warehouse stores master data, transactional/academic facts, context data, and intelligence outputs in 16 live tables organized into 4 functional groups.
 
 **Current Status:** Schema live with seeded data; ETL pipeline partially implemented (Extract + Validate stages only); Load/Derive stages pending.
 

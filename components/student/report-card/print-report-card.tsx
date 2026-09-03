@@ -22,7 +22,7 @@ export function PrintReportCard({ data }: { data: ReportCardResponse }) {
       <article className="prc-document">
         <header className="prc-header">
           <div className="prc-title-row">
-            <span className="prc-brand">KENEXAI</span>
+            <span className="prc-brand">CAMPUSX</span>
             <span className="prc-document-title">Academic Report Card</span>
           </div>
           <dl className="prc-student-grid">

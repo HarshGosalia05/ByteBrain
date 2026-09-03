@@ -16,7 +16,7 @@ function Brand() {
       <span className="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
         K
       </span>
-      <span className="text-sm font-semibold">KenexAI</span>
+      <span className="text-sm font-semibold">CampusX</span>
     </Link>
   )
 }

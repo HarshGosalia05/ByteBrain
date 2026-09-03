@@ -36,7 +36,7 @@ export function ChatHeader({
         </div>
         <div>
           <div className="flex items-center gap-1.5">
-            <h3 className="text-xs font-semibold tracking-tight text-foreground">{t("KenexAI Assistant")}</h3>
+            <h3 className="text-xs font-semibold tracking-tight text-foreground">{t("CampusX Assistant")}</h3>
             <span className="rounded-sm bg-primary/10 px-1 py-0.2 text-[9px] font-medium text-primary">
               {t("Grounded AI")}
             </span>

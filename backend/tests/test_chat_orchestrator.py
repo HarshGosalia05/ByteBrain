@@ -308,7 +308,7 @@ class TestChatOrchestrator(unittest.TestCase):
 
         resp = run(orchestrator.process_chat(user=user, request=req))
         self.assertEqual(resp.status, "success")
-        self.assertIn("KenexAI Assistant", resp.message)
+        self.assertIn("CampusX Assistant", resp.message)
         self.assertEqual(len(timeout_provider.recorded_requests), 1)
 
     def test_exactly_one_genai_call_per_user_message(self):

@@ -1,4 +1,4 @@
-# KenexAI Architecture and Workflow Diagrams
+# CampusX Architecture and Workflow Diagrams
 
 Short explanations accompany each diagram. Labels describe current implementation unless marked **PLANNED / FUTURE**.
 
@@ -313,7 +313,7 @@ flowchart TD
   G0 --> ANSWER[Grounded administrative guidance]
 ```
 
-## 20. Complete End-to-End KenexAI Workflow
+## 20. Complete End-to-End CampusX Workflow
 
 ```mermaid
 flowchart TD

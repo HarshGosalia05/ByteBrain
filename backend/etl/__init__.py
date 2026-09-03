@@ -1,4 +1,4 @@
-"""KenexAI KDAC-3 reusable ETL pipeline.
+"""CampusX KDAC-3 reusable ETL pipeline.
 
 Infrastructure (Phase 1): config, run context, structured results, the stage
 contract, the runner, CLI, logging, exceptions, and the idempotency / lineage /

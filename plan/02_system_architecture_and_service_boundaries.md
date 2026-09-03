@@ -2,7 +2,7 @@
 
 ## 1. System Architecture Overview
 
-KenexAI KDAC-3 is designed as a two-service hybrid architecture with a strict separation between the user-facing interface and the intelligence/data layer. The architecture is intentionally small in service count but strong in responsibility boundaries:
+CampusX KDAC-3 is designed as a two-service hybrid architecture with a strict separation between the user-facing interface and the intelligence/data layer. The architecture is intentionally small in service count but strong in responsibility boundaries:
 
 - Next.js owns the Interface & Access Layer.
 - FastAPI owns the Intelligence & Data Layer.

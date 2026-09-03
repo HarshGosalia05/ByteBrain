@@ -44,7 +44,7 @@ export function ChatMessageList({
             <Bot className="size-6" />
           </div>
           <div className="space-y-1 max-w-xs">
-            <h4 className="text-sm font-semibold text-foreground">{t("KenexAI Assistant")}</h4>
+            <h4 className="text-sm font-semibold text-foreground">{t("CampusX Assistant")}</h4>
             <p className="text-xs text-muted-foreground leading-relaxed">
               {t("Ask me about your academic performance, attendance, subjects, predictions, or career readiness.")}
             </p>

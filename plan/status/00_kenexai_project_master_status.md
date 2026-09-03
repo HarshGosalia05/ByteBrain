@@ -1,14 +1,14 @@
-# KenexAI Master Project Documentation
+# CampusX Master Project Documentation
 
-**Official project-wide status, architecture, and reference document for KenexAI (KDAC-3).**
+**Official project-wide status, architecture, and reference document for CampusX (KDAC-3).**
 
 | Field | Value |
 |---|---|
-| Project | KenexAI — Student Academic Success, Subject Performance & Career Readiness Analytics Platform (KDAC-3) |
+| Project | CampusX — Student Academic Success, Subject Performance & Career Readiness Analytics Platform (KDAC-3) |
 | Document role | Single source of truth for the current state of the entire project |
 | Scope | Everything a reader needs to understand the project without opening any other file |
 | Last updated | August 2026 |
-| Repo root | `D:\KenexAI\ByteBrain` |
+| Repo root | `D:\CampusX\ByteBrain` |
 | Ownership | Lead Solution Architect / Technical Documentation Lead |
 
 > This document is additive to the plan folder. It summarizes and cross-references the locked planning documents (`plan/00`–`plan/06`, `plan/faculty/07`–`15`, `plan/student/07`) and the implemented codebase. It introduces no new architecture. Where this document conflicts with a locked plan file, the locked plan file wins. Plans 14 (Marks Entry) and 15 (Attendance Entry) are **Planned, not implemented**.
@@ -46,7 +46,7 @@
 
 ### 1.1 Project Name
 
-**KenexAI (KDAC-3)** — a Student Academic Success, Subject Performance & Career Readiness Analytics Platform.
+**CampusX (KDAC-3)** — a Student Academic Success, Subject Performance & Career Readiness Analytics Platform.
 
 ### 1.2 Official Problem Statement
 
@@ -158,7 +158,7 @@ Every completed module passes the `plan/06` §4 DoD: backend behavior exists →
 
 ### 3.1 Architecture Overview
 
-KenexAI is a **two-service hybrid architecture** with strict responsibility boundaries:
+CampusX is a **two-service hybrid architecture** with strict responsibility boundaries:
 
 - **Next.js** = Interface & Access Layer (identity, session, UI, BFF).
 - **FastAPI** = Intelligence & Data Layer (analytics, future ETL/ML/GenAI, domain authorization).
@@ -416,9 +416,9 @@ plan/
 ├── student/
 │   └── 07_student_module_planning.md
 ├── reference/
-│   ├── KDAC3_KenexAI_Master_Blueprint.md       # authoritative architecture blueprint
-│   ├── KDAC3_KenexAI_Master_Blueprint.docx
-│   └── KenexAI_KDAC3_Current_Status_Handover.md
+│   ├── KDAC3_CampusX_Master_Blueprint.md       # authoritative architecture blueprint
+│   ├── KDAC3_CampusX_Master_Blueprint.docx
+│   └── CampusX_KDAC3_Current_Status_Handover.md
 └── status/
     └── 00_kenexai_project_master_status.md     # ← THIS document
 ```
@@ -676,7 +676,7 @@ Each analytics module has a dedicated `filter-bar.tsx` sharing one URL-driven pa
 
 ### 10.1 FastAPI
 
-- **App:** `backend/app/main.py` — "KenexAI KDAC-3 Backend" v1.0.0; lifespan creates/closes the asyncpg pool; CORS from `settings.CORS_ORIGINS`; router mounted at `/api/v1`.
+- **App:** `backend/app/main.py` — "CampusX KDAC-3 Backend" v1.0.0; lifespan creates/closes the asyncpg pool; CORS from `settings.CORS_ORIGINS`; router mounted at `/api/v1`.
 - **Endpoints:** 46 total — 41 faculty, 3 student, 2 system (`/health`, `/`).
 - **Contract:** FastAPI's OpenAPI schema (`/api/v1/openapi.json`) is the authoritative API contract per `plan/02` §6.2.
 
@@ -1102,7 +1102,7 @@ Only real remaining work, no invented concerns:
 
 ## 22. Definition of Current Project State
 
-**KenexAI today is a production-shaped, two-service analytics platform with a live Student Module and a near-complete Faculty Module, running real data end-to-end.**
+**CampusX today is a production-shaped, two-service analytics platform with a live Student Module and a near-complete Faculty Module, running real data end-to-end.**
 
 Concretely:
 
@@ -1113,8 +1113,8 @@ Concretely:
 - **Completed vertical slices**: Student Module V1 (7 pages), Faculty Module V1 (7 of 8 sections), and three descriptive analytics modules (Performance, Attendance, Teaching Workload) that share one analytics foundation.
 - **Documented future**: 20 planning documents lock the path to Marks Entry, Attendance Entry, Settings, Admin, ETL, ML, GenAI, HOD, TPO, and Student360 without requiring an architectural rewrite. Marks Entry (`plan/14`) and Attendance Entry (`plan/15`) are **Planned — approved but not implemented**; `daily_attendance_07` / `weekly_timetable_07` are planned as the canonical lecture-attendance write source with transactional reconciliation into the existing aggregate `attendance` table and semester/overall attendance summaries, while all existing analytics read paths stay unchanged.
 
-What KenexAI is **not** yet: it is not an ETL-driven warehouse, not a predictive platform, and not a GenAI system. Those layers are specified, planned, and architecturally accommodated — but they remain the next chapters, not the current state. The project's discipline, however, is already production-grade: backend-first delivery, verified milestones, deterministic analytics, role-scoped access, and a documentation set that lets any engineer or AI assistant reconstruct the entire system from one folder.
+What CampusX is **not** yet: it is not an ETL-driven warehouse, not a predictive platform, and not a GenAI system. Those layers are specified, planned, and architecturally accommodated — but they remain the next chapters, not the current state. The project's discipline, however, is already production-grade: backend-first delivery, verified milestones, deterministic analytics, role-scoped access, and a documentation set that lets any engineer or AI assistant reconstruct the entire system from one folder.
 
 ---
 
-*This is the official master status document for KenexAI (KDAC-3). Planning documents remain the build specifications; this document is the state-of-the-world reference. Per `plan/00` §7.5, when implementation changes, update the owning plan file first, then revise this document's corresponding section.*
+*This is the official master status document for CampusX (KDAC-3). Planning documents remain the build specifications; this document is the state-of-the-world reference. Per `plan/00` §7.5, when implementation changes, update the owning plan file first, then revise this document's corresponding section.*

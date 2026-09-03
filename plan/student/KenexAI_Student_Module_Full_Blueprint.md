@@ -1,4 +1,4 @@
-# KenexAI — Student Module Full Blueprint (KDAC-3)
+# CampusX — Student Module Full Blueprint (KDAC-3)
 
 **Student Academic Success, Subject Performance & Career Readiness Analytics Platform**
 
@@ -31,7 +31,7 @@ UNDERSTAND (dashboards/trends) → IMPROVE (analytics/risk/gaps) → ACT (eligib
 3. FastAPI = business logic + authorization.
 4. Next.js / BFF = access + screen shaping (no direct browser → DB).
 5. No frontend business calculations for authoritative values (attendance %, grades, eligibility, SGPA — always backend-computed).
-6. No global CSS changes — existing KenexAI dark design system stays as-is.
+6. No global CSS changes — existing CampusX dark design system stays as-is.
 7. No duplicate tables if an existing table can serve the purpose.
 8. Deterministic logic before ML. ML before GenAI. GenAI never becomes the source of truth.
 9. Every prediction must be explainable/auditable (model_version, probability, feature_snapshot).

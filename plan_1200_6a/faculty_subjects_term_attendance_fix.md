@@ -90,7 +90,7 @@ if not all_terms and semester_no is None and academic_year is None and current_t
   - Reset clears `all_terms`.
 - `app/faculty/subjects/page.tsx`: reads `all_terms` from search params and forwards it.
 - `lib/faculty-api.ts`: `getFacultySubjects` accepts and forwards `all_terms`.
-- No UI redesign; existing KenexAI design preserved. Default open = current live term only.
+- No UI redesign; existing CampusX design preserved. Default open = current live term only.
 
 ## 8. Test results
 

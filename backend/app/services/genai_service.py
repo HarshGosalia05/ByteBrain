@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 MAX_CONVERSATION_MESSAGES = 20
 
 GROUNDING_SYSTEM_INSTRUCTION = (
-    "You are KenexAI, an academic guidance assistant. Follow these rules strictly:\n"
+    "You are CampusX, an academic guidance assistant. Follow these rules strictly:\n"
     "\n"
     "RULES:\n"
     "- Use ONLY the verified context data provided below. Never invent any data.\n"

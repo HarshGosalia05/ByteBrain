@@ -1,4 +1,4 @@
-# KenexAI — CSE 6A 1,200-Student Dataset: Integration Audit & Migration Plan
+# CampusX — CSE 6A 1,200-Student Dataset: Integration Audit & Migration Plan
 
 Audit type: READ-ONLY. Nothing in this report was executed. All DB reads were `SELECT` only.
 Date: 2026-08-30 | Scope: integrate `backend/datasets/New_1200_data_scale/` (KenexAI_1200_final_v3) into the existing connected Supabase.

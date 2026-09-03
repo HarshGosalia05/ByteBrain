@@ -1,6 +1,6 @@
-# KenexAI - SIH / Academic Project Presentation Content Master
+# CampusX - SIH / Academic Project Presentation Content Master
 
-**Presentation title:** KenexAI  
+**Presentation title:** CampusX  
 **Subtitle:** Student Academic Success, Subject Performance & Career Readiness Analytics Platform  
 **Purpose:** Source content for Gamma, Claude, Google AI Studio, or another presentation generator. This is content and speaker guidance, not the visual PPT.
 
@@ -16,17 +16,17 @@
 - Use `docs/diagrams.md` as the source for diagrams. Do not recreate final visual diagrams from this Markdown.
 - Slides should be visually concise; the detailed sections are presenter notes and conversion guidance.
 
-# Slide 1 - KenexAI
+# Slide 1 - CampusX
 
 ## Slide Objective
 Establish the project identity and academic/SIH context.
 
 ## Main Message
-KenexAI unifies academic success analytics, subject performance intelligence, career readiness, predictive ML, faculty feedback, and grounded GenAI for three institutional roles.
+CampusX unifies academic success analytics, subject performance intelligence, career readiness, predictive ML, faculty feedback, and grounded GenAI for three institutional roles.
 
 ## On-Slide Content
 
-**KenexAI**  
+**CampusX**  
 **Student Academic Success, Subject Performance & Career Readiness Analytics Platform**
 
 - Team: `[TEAM NAME]`
@@ -36,7 +36,7 @@ KenexAI unifies academic success analytics, subject performance intelligence, ca
 - Event: `[SIH / UNIVERSITY EVENT / YEAR]`
 
 ## Detailed Technical Explanation
-KenexAI is a two-service academic intelligence platform. Next.js provides the interface, session handling, role routing, and BFF routes. FastAPI owns domain APIs, role authorization, analytics, prediction serving, persistence, feedback, and GenAI orchestration. PostgreSQL-compatible storage is accessed through `pg`/`asyncpg`. The project serves Students, Faculty, and Admin users.
+CampusX is a two-service academic intelligence platform. Next.js provides the interface, session handling, role routing, and BFF routes. FastAPI owns domain APIs, role authorization, analytics, prediction serving, persistence, feedback, and GenAI orchestration. PostgreSQL-compatible storage is accessed through `pg`/`asyncpg`. The project serves Students, Faculty, and Admin users.
 
 ## Features / Components Covered
 - Student academic and career-readiness experience.
@@ -62,10 +62,10 @@ A restrained academic intelligence title composition: student record, dashboard,
 No diagram required.
 
 ## Presenter Notes
-"KenexAI is our Student Academic Success, Subject Performance and Career Readiness Analytics Platform. It is designed around a practical institutional problem: important student signals exist, but they are difficult to see together and act on early. Our implementation connects analytics, predictive models, explainability, faculty judgment, and grounded GenAI within role-specific access boundaries."
+"CampusX is our Student Academic Success, Subject Performance and Career Readiness Analytics Platform. It is designed around a practical institutional problem: important student signals exist, but they are difficult to see together and act on early. Our implementation connects analytics, predictive models, explainability, faculty judgment, and grounded GenAI within role-specific access boundaries."
 
 ## Likely Evaluator Question
-Who are the users of KenexAI?
+Who are the users of CampusX?
 
 ## Suggested Answer
 The implemented roles are Student, Faculty, and Admin. No separate HOD or TPO role is implemented in the current role map.
@@ -76,7 +76,7 @@ The implemented roles are Student, Faculty, and Admin. No separate HOD or TPO ro
 Communicate the complete project in one memorable statement.
 
 ## Main Message
-KenexAI turns fragmented academic data into role-aware, explainable, human-actionable intelligence.
+CampusX turns fragmented academic data into role-aware, explainable, human-actionable intelligence.
 
 ## On-Slide Content
 
@@ -108,10 +108,10 @@ No numerical impact claim is verified for this vision statement.
 A single horizontal transformation line: fragmented records -> analytics -> prediction -> explanation -> intervention.
 
 ## Diagram Placeholder
-[DIAGRAM TO BE INSERTED: use diagram 20, Complete End-to-End KenexAI Workflow, from `docs/diagrams.md`]
+[DIAGRAM TO BE INSERTED: use diagram 20, Complete End-to-End CampusX Workflow, from `docs/diagrams.md`]
 
 ## Presenter Notes
-"The important word is not simply AI. The important design is the chain from data to action. KenexAI keeps analytics, ML, explainability, feedback, and GenAI separate enough to audit, but connected enough to support a real academic workflow."
+"The important word is not simply AI. The important design is the chain from data to action. CampusX keeps analytics, ML, explainability, feedback, and GenAI separate enough to audit, but connected enough to support a real academic workflow."
 
 ## Likely Evaluator Question
 What makes this more than a dashboard?
@@ -143,7 +143,7 @@ The core institutional problem is not a lack of data; it is fragmented data that
 - Access must follow student ownership and faculty scope.
 
 ## Detailed Technical Explanation
-The official project problem statement describes exam results, subject marks, attendance, lifestyle habits, and career preferences being collected in separate systems or spreadsheets. KenexAI addresses the gap between collection and intervention by connecting these domains through a database-backed service architecture. The project does not claim an externally measured reduction in failure, workload, or intervention time; those impact measurements are `[NOT VERIFIED]`.
+The official project problem statement describes exam results, subject marks, attendance, lifestyle habits, and career preferences being collected in separate systems or spreadsheets. CampusX addresses the gap between collection and intervention by connecting these domains through a database-backed service architecture. The project does not claim an externally measured reduction in failure, workload, or intervention time; those impact measurements are `[NOT VERIFIED]`.
 
 ## Features / Components Covered
 - Student performance and attendance analytics.
@@ -173,7 +173,7 @@ No architecture diagram required; reserve space for a simple problem-to-solution
 "Institutions already collect many signals. The difficulty is that a student’s marks, attendance, semester trend, career preferences, and lifestyle inputs are not naturally viewed together. The technical challenge is therefore integration, scope control, reproducible analytics, responsible prediction, and grounded communication."
 
 ## Likely Evaluator Question
-What exact problem does KenexAI solve first?
+What exact problem does CampusX solve first?
 
 ## Suggested Answer
 It creates a unified, role-scoped view of academic success signals and provides analytics and early intelligence that can support student self-correction, faculty intervention, and administrative oversight.
@@ -209,7 +209,7 @@ These are project-supported design challenges, not universal measured claims. Th
 - VerifiedContext GenAI boundary.
 
 ## Implementation Evidence
-- `plan/reference/KDAC3_KenexAI_Master_Blueprint.md`
+- `plan/reference/KDAC3_CampusX_Master_Blueprint.md`
 - `plan/01_current_state_and_locked_constraints.md`
 - `backend/app/core/security.py`
 - `backend/app/services/intent_router.py`
@@ -224,7 +224,7 @@ A risk-and-friction map with data fragmentation, manual effort, delayed visibili
 No formal diagram required.
 
 ## Presenter Notes
-"The system is designed around the failure modes documented in the project itself. A dashboard alone would show records; KenexAI also defines ownership, prediction semantics, explanation boundaries, and a way for faculty judgment to become future training data."
+"The system is designed around the failure modes documented in the project itself. A dashboard alone would show records; CampusX also defines ownership, prediction semantics, explanation boundaries, and a way for faculty judgment to become future training data."
 
 ## Likely Evaluator Question
 Are these challenges measured in a deployed institution?
@@ -238,7 +238,7 @@ No. They are the documented problem and architecture drivers. The repository doe
 Show the integrated solution and how each layer contributes.
 
 ## Main Message
-KenexAI connects academic facts to decision support through deterministic, predictive, explainable, and human-reviewed stages.
+CampusX connects academic facts to decision support through deterministic, predictive, explainable, and human-reviewed stages.
 
 ## On-Slide Content
 
@@ -1528,7 +1528,7 @@ RLS policy state is not verified in the current migrations/source audit. The cur
 Give a complete, current technology map without importing libraries from plans.
 
 ## Main Message
-KenexAI uses a pragmatic TypeScript/Python/PostgreSQL stack with scikit-learn artifacts and a provider-agnostic GenAI boundary.
+CampusX uses a pragmatic TypeScript/Python/PostgreSQL stack with scikit-learn artifacts and a provider-agnostic GenAI boundary.
 
 ## On-Slide Content
 
@@ -1723,7 +1723,7 @@ It should support human review, not replace it. M3 is a forecast with limited fe
 Close with a strong, honest summary of completed engineering and clearly separated future work.
 
 ## Main Message
-KenexAI already implements a governed academic intelligence workflow; future work should improve automation, scale, and evidence without weakening its boundaries.
+CampusX already implements a governed academic intelligence workflow; future work should improve automation, scale, and evidence without weakening its boundaries.
 
 ## On-Slide Content
 
@@ -1746,7 +1746,7 @@ KenexAI already implements a governed academic intelligence workflow; future wor
 - JWT/session hardening.
 - Production deployment, monitoring, and scaling.
 
-**Conclusion:** KenexAI connects academic facts to explainable, role-aware, human-actionable support.
+**Conclusion:** CampusX connects academic facts to explainable, role-aware, human-actionable support.
 
 ## Detailed Technical Explanation
 The current repository is more than a conceptual architecture: role pages, FastAPI APIs, deterministic analytics, local M1-M3 artifacts, M4 rule scoring, prediction persistence, feedback, explanation services, and GenAI tool orchestration are implemented. The plans describe a broader production trajectory, including reusable ETL, model registry operations, orchestration, RAG, and deployment topology. Those are future scope unless source evidence demonstrates completion. The conclusion should emphasize the engineering pattern: factual data first, explicit prediction semantics, human review, and constrained language generation.
@@ -1770,13 +1770,13 @@ Do not introduce a new number on the conclusion slide. Refer evaluators to verif
 A final current-vs-future road map ending in a single sentence about explainable student success support. Keep future items dashed or muted.
 
 ## Diagram Placeholder
-[DIAGRAM TO BE INSERTED: use diagram 20, Complete End-to-End KenexAI Workflow]
+[DIAGRAM TO BE INSERTED: use diagram 20, Complete End-to-End CampusX Workflow]
 
 ## Presenter Notes
-"KenexAI’s current contribution is a governed path from academic data to action. It does not rely on one opaque AI claim. It combines deterministic analytics, carefully defined predictions, transparent M4 scoring, faculty feedback, and grounded GenAI. The next phase is operational maturity: automation, model governance, security hardening, and measured institutional validation."
+"CampusX’s current contribution is a governed path from academic data to action. It does not rely on one opaque AI claim. It combines deterministic analytics, carefully defined predictions, transparent M4 scoring, faculty feedback, and grounded GenAI. The next phase is operational maturity: automation, model governance, security hardening, and measured institutional validation."
 
 ## Likely Evaluator Question
-What is the single most important contribution of KenexAI?
+What is the single most important contribution of CampusX?
 
 ## Suggested Answer
 It connects academic analytics, future-risk prediction, transparent readiness scoring, human faculty feedback, and grounded role-aware guidance while keeping data access, prediction, explanation, and language generation as explicit auditable boundaries.
@@ -1934,7 +1934,7 @@ The following is a demonstration sequence, not a claim that every environment ha
 
 # Expected Viva / Evaluator Questions
 
-## 1. Why KenexAI?
+## 1. Why CampusX?
 
 **Answer:** It addresses fragmented student-success data by connecting academic analytics, future-risk prediction, career-readiness scoring, faculty review, and grounded guidance in one role-aware platform.
 
@@ -2187,7 +2187,7 @@ The following is a demonstration sequence, not a claim that every environment ha
 
 ## Important Terminology Rules
 
-- **KenexAI:** Student Academic Success, Subject Performance & Career Readiness Analytics Platform.
+- **CampusX:** Student Academic Success, Subject Performance & Career Readiness Analytics Platform.
 - **M1:** Subject End-Sem Marks Predictor.
 - **M2:** Next-Semester Performance Predictor.
 - **M3:** Next-Semester At-Risk Predictor.

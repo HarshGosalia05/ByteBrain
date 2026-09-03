@@ -14,7 +14,7 @@ export const DICTIONARIES: Record<SupportedLanguage, TranslationDictionary> = {
     "Notifications": "Notifications",
     "Settings": "Settings",
     "Student Portal": "Student Portal",
-    "KenexAI": "KenexAI",
+    "CampusX": "CampusX",
     "Navigation menu": "Navigation menu",
     "Close navigation menu": "Close navigation menu",
     "Open navigation menu": "Open navigation menu",
@@ -165,7 +165,7 @@ export const DICTIONARIES: Record<SupportedLanguage, TranslationDictionary> = {
     "Subject Performance": "Subject Performance",
 
     // Chatbot UI
-    "KenexAI Assistant": "KenexAI Assistant",
+    "CampusX Assistant": "CampusX Assistant",
     "Academic & Career Assistant": "Academic & Career Assistant",
     "Faculty Analytics Assistant": "Faculty Analytics Assistant",
     "Institutional Intelligence Assistant": "Institutional Intelligence Assistant",
@@ -197,7 +197,7 @@ export const DICTIONARIES: Record<SupportedLanguage, TranslationDictionary> = {
     "Notifications": "सूचनाएं",
     "Settings": "सेटिंग्स",
     "Student Portal": "विद्यार्थी पोर्टल",
-    "KenexAI": "KenexAI",
+    "CampusX": "CampusX",
     "Navigation menu": "नेविगेशन मेनू",
     "Close navigation menu": "नेविगेशन मेनू बंद करें",
     "Open navigation menu": "नेविगेशन मेनू खोलें",
@@ -348,7 +348,7 @@ export const DICTIONARIES: Record<SupportedLanguage, TranslationDictionary> = {
     "Subject Performance": "विषय प्रदर्शन",
 
     // Chatbot UI
-    "KenexAI Assistant": "KenexAI सहायक",
+    "CampusX Assistant": "CampusX सहायक",
     "Academic & Career Assistant": "शैक्षणिक और करियर सहायक",
     "Faculty Analytics Assistant": "फैकल्टी एनालिटिक्स सहायक",
     "Institutional Intelligence Assistant": "संस्थागत इंटेलिजेंस सहायक",
@@ -380,7 +380,7 @@ export const DICTIONARIES: Record<SupportedLanguage, TranslationDictionary> = {
     "Notifications": "સૂચનાઓ",
     "Settings": "સેટિંગ્સ",
     "Student Portal": "વિદ્યાર્થી પોર્ટલ",
-    "KenexAI": "KenexAI",
+    "CampusX": "CampusX",
     "Navigation menu": "નેવિગેશન મેનુ",
     "Close navigation menu": "નેવિગેશન મેનુ બંધ કરો",
     "Open navigation menu": "નેવિગેશન મેનુ ખોલો",
@@ -531,7 +531,7 @@ export const DICTIONARIES: Record<SupportedLanguage, TranslationDictionary> = {
     "Subject Performance": "વિષય પ્રદર્શન",
 
     // Chatbot UI
-    "KenexAI Assistant": "KenexAI સહાયક",
+    "CampusX Assistant": "CampusX સહાયક",
     "Academic & Career Assistant": "શૈક્ષણિક અને કારકિર્દી સહાયક",
     "Faculty Analytics Assistant": "ફેકલ્ટી એનાલિટિક્સ સહાયક",
     "Institutional Intelligence Assistant": "સંસ્થાકીય ઇન્ટેલિજન્સ સહાયક",

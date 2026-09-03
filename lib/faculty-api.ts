@@ -1029,6 +1029,91 @@ export function getFacultyStudentM1V2(
   return callFacultyPredictM1V2<M1V2PredictionData>(studentId, BFF_TTL_MS)
 }
 
+// M1 V3 — Subject Marks Prediction (synthetic-trained model, real production data).
+
+async function callFacultyPredictM1V3<T>(
+  studentId: string,
+  ttlMs: number,
+): Promise<BffResult<T>> {
+  const user = await getSessionUser()
+  if (!user) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to view this.",
+      },
+    }
+  }
+  if (user.role !== "Faculty") {
+    return {
+      ok: false,
+      error: {
+        status: 403,
+        code: "unauthorized",
+        message: "This account is not allowed to view faculty data.",
+      },
+    }
+  }
+  if (!user.faculty_id) {
+    return {
+      ok: false,
+      error: {
+        status: 400,
+        code: "unlinked",
+        message: "This account is not linked to a faculty record yet.",
+      },
+    }
+  }
+
+  const path = `predict/m1v3/${encodeURIComponent(studentId)}`
+  const key = `${user.faculty_id}:${path}`
+  return cached(
+    key,
+    ttlMs,
+    async () => {
+      try {
+        const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+        const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        })
+        if (!res.ok) {
+          let customDetail: string | undefined
+          try {
+            const errBody = await res.json()
+            if (typeof errBody?.detail === "string" && errBody.detail.trim()) {
+              customDetail = errBody.detail
+            } else if (typeof errBody?.message === "string" && errBody.message.trim()) {
+              customDetail = errBody.message
+            }
+          } catch {}
+          return { ok: false, error: toBffError(res.status, customDetail) }
+        }
+        const data = (await res.json()) as T
+        return { ok: true, data, fetchedAt: new Date().toISOString() }
+      } catch {
+        return {
+          ok: false,
+          error: {
+            status: 503,
+            code: "unavailable",
+            message:
+              "The academic service is temporarily unavailable. Please try again later.",
+          },
+        }
+      }
+    },
+  )
+}
+
+export function getFacultyStudentM1V3(
+  studentId: string
+): Promise<BffResult<import("./m1v3-prediction").M1V3PredictionData>> {
+  return callFacultyPredictM1V3<import("./m1v3-prediction").M1V3PredictionData>(studentId, BFF_TTL_MS)
+}
+
 // M2 V2 — Next-Semester Performance Prediction (validated production model).
 // Also a per-student route at /predict/m2v2/{student_id} (not under /faculty/).
 // Reuses the same Faculty role guards + BFF caching as getFacultyStudentM1V2.

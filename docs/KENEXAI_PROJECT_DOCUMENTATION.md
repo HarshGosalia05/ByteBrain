@@ -1,10 +1,10 @@
-# KenexAI - Complete Project Documentation
+# CampusX - Complete Project Documentation
 
 > **Audit basis:** This document describes the current repository as audited on 2026-08-22. Source code, migrations, tests, ML source/artifacts, reports, configuration, and plans were cross-referenced. Actual implementation takes precedence over plans. Status labels are used as follows: **IMPLEMENTED / VERIFIED**, **PARTIALLY IMPLEMENTED**, **PLANNED / NOT CURRENTLY IMPLEMENTED**, and **NOT VERIFIED**.
 
 ## 1. Executive Summary
 
-KenexAI is an academic intelligence platform for higher-education data. Its implemented application combines a Next.js/React frontend, a Python FastAPI backend, PostgreSQL-compatible persistence accessed with `asyncpg`, deterministic academic analytics, three supervised ML prediction paths (M1-M3), a deterministic career-readiness engine (M4), grounded GenAI chat, and role-scoped interfaces for Students, Faculty, and Admin users.
+CampusX is an academic intelligence platform for higher-education data. Its implemented application combines a Next.js/React frontend, a Python FastAPI backend, PostgreSQL-compatible persistence accessed with `asyncpg`, deterministic academic analytics, three supervised ML prediction paths (M1-M3), a deterministic career-readiness engine (M4), grounded GenAI chat, and role-scoped interfaces for Students, Faculty, and Admin users.
 
 The platform centralizes student, subject, enrollment, performance, attendance, semester-summary, career-preference, lifestyle, faculty-scope, risk, prediction, feedback, notification, and goal data. Students see their own records and guidance. Faculty see authorized students/classes, teaching and workload analytics, and can review M3 predictions. Admin sees institution-level analytics and ML intelligence. The current implementation is substantial and tested, but it is not equivalent to every capability described in the planning documents: model reports for M1-M4 are absent from the current checkout, RLS is not evidenced in the migrations inspected, M4 is rule-based rather than trained ML, and GenAI provider operation depends on environment configuration.
 
@@ -879,7 +879,7 @@ on provider failure return controlled error/fallback, never fabricated facts
 
 ## 37. Viva / Demo Quick Reference
 
-- **What is KenexAI?** A role-based academic intelligence platform with analytics, prediction, career readiness, grounded GenAI and feedback-informed M3 retraining.
+- **What is CampusX?** A role-based academic intelligence platform with analytics, prediction, career readiness, grounded GenAI and feedback-informed M3 retraining.
 - **What problem does it solve?** Fragmented academic visibility and delayed intervention across performance, attendance, risk and career-readiness data.
 - **Who uses it?** Students, Faculty and Admin users. No distinct HOD/TPO role is implemented.
 - **What are the modules?** Student, Faculty, Admin, Analytics/Data, AI/ML, GenAI, Authentication/RBAC and career-readiness surfaces.

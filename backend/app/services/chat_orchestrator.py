@@ -622,15 +622,15 @@ class ChatOrchestrator:
 
         if role == "Student":
             return (
-                "Hello! I am your KenexAI Assistant. You can ask me about your academic "
+                "Hello! I am your CampusX Assistant. You can ask me about your academic "
                 "performance, attendance, subjects, predictions, or career readiness."
             )
         if role == "Faculty":
             return (
-                "Hello! I am your KenexAI Assistant. You can ask me about student analytics, "
+                "Hello! I am your CampusX Assistant. You can ask me about student analytics, "
                 "attendance records, subject performance, flagged students, or department insights."
             )
         return (
-            "Hello! I am your KenexAI Assistant. You can ask me about institution-wide analytics, "
+            "Hello! I am your CampusX Assistant. You can ask me about institution-wide analytics, "
             "department performance, academic trends, attendance trends, or ML insights."
         )

@@ -1,4 +1,4 @@
-KenexAI (KDAC-3) - Current Project Status & Architecture Handover
+CampusX (KDAC-3) - Current Project Status & Architecture Handover
 Current Progress
 • Project rebuilt using Next.js App Router.
 • Custom authentication completed.

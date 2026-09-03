@@ -59,7 +59,7 @@ test("English -> Hindi -> Gujarati -> English language transition consistency", 
   const keys = [
     "Attendance simulator",
     "Current attendance",
-    "KenexAI Assistant",
+    "CampusX Assistant",
     "Ask a question...",
     "Confirm",
     "Dismiss",
