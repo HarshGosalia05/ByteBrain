@@ -10,12 +10,13 @@ import {
 import { ModelCard } from "./model-card"
 
 function SubjectRow({ item }: { item: M1V2SubjectPrediction }) {
+  const displayName = item.subject_name || item.subject_id
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold">{item.subject_id}</p>
-          <p className="text-xs text-muted-foreground">Semester {item.semester_no}</p>
+          <p className="text-sm font-semibold">{displayName}</p>
+          <p className="text-xs text-muted-foreground">{item.subject_id} · Semester {item.semester_no}</p>
         </div>
         <Badge variant={m1V2GradeTone(item.grade_band)}>{item.grade_band}</Badge>
       </div>

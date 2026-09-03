@@ -36,6 +36,7 @@ class M1V3SubjectPrediction(BaseModel):
     """One predicted subject end-sem mark (model output, not an actual result)."""
 
     subject_id: str
+    subject_name: str | None = None
     semester_no: int
     predicted_end_sem_marks: float = Field(ge=0.0, le=70.0)
     target_max: float = 70.0
