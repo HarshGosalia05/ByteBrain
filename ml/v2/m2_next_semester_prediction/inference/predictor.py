@@ -99,9 +99,18 @@ ORDER BY semester_no
 """
 
 _INFER_STUDENT_SQL = """
-SELECT student_id, gender, current_semester
-FROM students
-WHERE student_id = $1
+SELECT 
+    s.student_id, 
+    s.gender, 
+    s.current_semester,
+    s.department_code,
+    s.department_name,
+    COALESCE(d.total_semesters, 8) AS total_semesters
+FROM students s
+LEFT JOIN departments d ON s.department_code = d.dept_code 
+    OR s.department_name = d.department_short_name 
+    OR s.department_name = d.department_name
+WHERE s.student_id = $1
 LIMIT 1
 """
 
@@ -227,6 +236,8 @@ class M2V2Predictor:
         if stu_row is None:
             return {**base, "readiness_status": "NO_DATA",
                     "reason": f"Student {student_id} not found in database"}
+        total_semesters = int(stu_row.get("total_semesters") or 8)
+        dept_name = str(stu_row.get("department_name") or "Unknown")
         gender = str(stu_row.get("gender") or "Unknown")
         is_male = 1 if gender.strip() == "Male" else 0
         declared_current = stu_row.get("current_semester")
@@ -236,15 +247,9 @@ class M2V2Predictor:
             return {**base, "readiness_status": "NO_DATA", "reason": "No semester summary found"}
         ss = pd.DataFrame([dict(r) for r in ss_rows])
 
-        # Determine observation semester T: most recent completed semester that
-        # has a NORMAL upcoming academic semester T+1 (i.e. T+1 <= 7).
-        semester_no = pd.to_numeric(ss["semester_no"], errors="coerce")
-        max_T = int(semester_no.max())
+        semester_no = pd.to_numeric(ss["semester_no"], errors="coerce").dropna().astype(int)
+        max_T = int(semester_no.max()) if len(semester_no) > 0 else 1
 
-        # Deployment boundary: if the student is already in / past the final
-        # normal academic semester (current_semester > MAX_ACADEMIC_SEMESTER,
-        # e.g. semester 8 final/internship), there is NO upcoming normal
-        # academic semester to predict -> NO_DATA (read the situation honestly).
         effective_current = None
         if declared_current is not None:
             try:
@@ -253,28 +258,41 @@ class M2V2Predictor:
                 effective_current = None
         if effective_current is None:
             effective_current = max_T
-        if effective_current > config.MAX_ACADEMIC_SEMESTER:
-            return {**base, "readiness_status": "NO_DATA",
-                    "reason": f"Student {student_id} has no upcoming normal academic semester (currently in semester {effective_current}). M2 v2 predicts a NEXT normal academic semester only."}
 
-        observation_T = None
-        for t in sorted(semester_no.unique(), reverse=True):
-            nxt = int(t) + 1
-            if nxt <= config.MAX_ACADEMIC_SEMESTER and int(t) in config.VALID_OBSERVATION_SEMESTERS:
-                if (semester_no == t).any():
-                    observation_T = int(t)
-                    break
-        if observation_T is None:
-            return {**base, "readiness_status": "NO_DATA",
-                    "reason": f"Student {student_id} has no upcoming normal academic semester (already in final/internship semester {max_T}). M2 v2 predicts a NEXT normal semester."}
+        # Program duration / final-semester check:
+        # If the student is already in / past the program's final academic semester
+        # (e.g. semester 8 of 8 in CSE, semester 6 of 6 in BBA), there is NO
+        # upcoming normal academic semester to predict -> NO_DATA.
+        if effective_current >= total_semesters:
+            return {
+                **base,
+                "readiness_status": "NO_DATA",
+                "reason": (
+                    f"Student {student_id} has no upcoming normal academic semester "
+                    f"(currently in final semester {effective_current} of {total_semesters} in {dept_name}). "
+                    f"M2 v2 predicts a NEXT normal academic semester only."
+                ),
+            }
 
-        T = observation_T
+        target_semester = effective_current + 1
+
+        # Determine observation semester T: use effective_current if present in summary records,
+        # or the most recent available semester <= effective_current.
+        available_sems = [s for s in semester_no.unique() if s <= effective_current]
+        if not available_sems:
+            return {
+                **base,
+                "readiness_status": "NO_DATA",
+                "reason": f"Student {student_id} has insufficient historical academic data for prediction.",
+            }
+        T = effective_current if effective_current in available_sems else max(available_sems)
+
         row = ss[ss["semester_no"] == T].iloc[0]
 
         # Build raw feature row mirroring training
         raw = dict(row)
         for c in config.TIER1_SEM_SUMMARY + config.TIER1_PRIOR_HISTORY:
-            if c not in raw:
+            if c not in raw or pd.isna(raw[c]):
                 raw[c] = float("nan")
             else:
                 try:
@@ -282,30 +300,59 @@ class M2V2Predictor:
                 except (TypeError, ValueError):
                     raw[c] = float("nan")
 
+        # If observation semester has unfinalized marks (0.0), carry forward prior completed baseline
+        completed_past = ss[
+            (pd.to_numeric(ss["semester_no"], errors="coerce") < T) &
+            (pd.to_numeric(ss["semester_sgpa"], errors="coerce") > 0)
+        ].sort_values("semester_no")
+        if len(completed_past) > 0:
+            last_comp = completed_past.iloc[-1]
+            if raw.get("semester_sgpa") == 0.0 or pd.isna(raw.get("semester_sgpa")):
+                raw["semester_sgpa"] = float(last_comp["semester_sgpa"])
+            if raw.get("semester_percentage") == 0.0 or pd.isna(raw.get("semester_percentage")):
+                raw["semester_percentage"] = float(last_comp["semester_percentage"])
+            if raw.get("previous_sem_sgpa") == 0.0 or pd.isna(raw.get("previous_sem_sgpa")):
+                raw["previous_sem_sgpa"] = float(last_comp["semester_sgpa"])
+            if pd.isna(raw.get("sgpa_rolling_mean_3")):
+                raw["sgpa_rolling_mean_3"] = float(completed_past["semester_sgpa"].tail(3).astype(float).mean())
+
         subj_rows = await conn.fetch(_INFER_SUBJECT_SQL, student_id)
         subj_df = pd.DataFrame([dict(r) for r in subj_rows]) if subj_rows else pd.DataFrame()
-        raw.update(_aggregate_subjects(subj_df, T) if len(subj_df) else
+        raw.update(_aggregate_subjects(subj_df, T) if len(subj_df) and "semester_no" in subj_df.columns else
                    {c: float("nan") for c in config.TIER1_SUBJECT_AGG})
 
         att_rows = await conn.fetch(_INFER_ATTENDANCE_SQL, student_id)
         att_df = pd.DataFrame([dict(r) for r in att_rows]) if att_rows else pd.DataFrame()
-        raw.update(_aggregate_attendance(att_df, T) if len(att_df) else
+        raw.update(_aggregate_attendance(att_df, T) if len(att_df) and "semester_no" in att_df.columns else
                    {c: float("nan") for c in config.TIER1_ATTENDANCE_AGG})
 
         learn_rows = await conn.fetch(_INFER_LEARNING_SQL, student_id)
         learn_df = pd.DataFrame([dict(r) for r in learn_rows]) if learn_rows else pd.DataFrame()
-        raw.update(_aggregate_learning(learn_df, T) if len(learn_df) else
+        raw.update(_aggregate_learning(learn_df, T) if len(learn_df) and "semester_no" in learn_df.columns else
                    {c: float("nan") for c in config.TIER1_LEARNING_AGG})
 
         life_rows = await conn.fetch(_INFER_LIFESTYLE_SQL, student_id)
-        life_df = pd.DataFrame([dict(r) for r in life_rows]) if life_rows else pd.DataFrame()
-        life_T = life_df[life_df["semester_no"] == T]
-        if len(life_T) > 0:
-            raw["study_hours_per_week"] = float(pd.to_numeric(life_T.iloc[0]["study_hours_per_week"], errors="coerce") or np.nan)
-            raw["mental_stress_level"] = str(life_T.iloc[0]["mental_stress_level"] or "Medium")
+        if life_rows:
+            life_df = pd.DataFrame([dict(r) for r in life_rows])
+            life_T = life_df[life_df["semester_no"] == T] if "semester_no" in life_df.columns else pd.DataFrame()
+            if len(life_T) > 0:
+                raw["study_hours_per_week"] = float(pd.to_numeric(life_T.iloc[0].get("study_hours_per_week"), errors="coerce") or np.nan)
+                raw["mental_stress_level"] = str(life_T.iloc[0].get("mental_stress_level") or "Medium")
+            else:
+                raw["study_hours_per_week"] = float("nan")
+                raw["mental_stress_level"] = "Medium"
         else:
-            raw["study_hours_per_week"] = float("nan")
-            raw["mental_stress_level"] = "Medium"
+            legacy_life = await conn.fetchrow(
+                "SELECT daily_study_hours, stress_level FROM lifestyle_survey WHERE student_id = $1 LIMIT 1;",
+                student_id
+            )
+            if legacy_life:
+                d_hours = legacy_life.get("daily_study_hours")
+                raw["study_hours_per_week"] = float(d_hours) * 7.0 if d_hours is not None else float("nan")
+                raw["mental_stress_level"] = str(legacy_life.get("stress_level") or "Medium")
+            else:
+                raw["study_hours_per_week"] = float("nan")
+                raw["mental_stress_level"] = "Medium"
 
         raw["gender"] = gender
         raw["semester_no"] = T
@@ -313,7 +360,6 @@ class M2V2Predictor:
         feature_df = pd.DataFrame([raw])
         X = select_features(feature_df)
         preds = self.predict_from_features(X)
-        target_semester = T + 1
 
         return {
             **base,

@@ -41,19 +41,46 @@ class CareerReadinessEngine:
     def aggregate_academic(self, sem_df: pd.DataFrame) -> pd.DataFrame:
         records = []
         for student_id, g in sem_df.sort_values("semester_no").groupby("student_id"):
-            avg_pct = g["semester_percentage"].mean()
-            avg_att = g["semester_attendance_percentage"].mean()
-            total_backlogs_computed = g["backlog_count"].sum()
-            num_sem = g["semester_no"].nunique()
-            pass_ratio = (g["semester_result"] == "PASS").mean()
+            pct_series = pd.to_numeric(g["semester_percentage"], errors="coerce")
+            att_series = pd.to_numeric(g["semester_attendance_percentage"], errors="coerce")
+            sem_nums = pd.to_numeric(g["semester_no"], errors="coerce")
 
-            if num_sem >= 2:
-                slope = np.polyfit(g["semester_no"], g["semester_percentage"], 1)[0]
+            # Completed semesters are those where examination percentage is recorded (> 0).
+            # Ongoing semesters before final examinations have 0.0 or NaN in student_semester_summary.
+            # Treating 0.0% as a completed semester creates artificial "Declining trend (to 0.0%)" errors.
+            completed_mask = pct_series.notna() & (pct_series > 0)
+            completed_g = g[completed_mask]
+            comp_pct = pct_series[completed_mask]
+            comp_sems = sem_nums[completed_mask]
+
+            if len(completed_g) > 0:
+                avg_pct = float(comp_pct.mean())
+                num_sem = int(comp_sems.nunique())
+                first_pct = float(comp_pct.iloc[0])
+                last_pct = float(comp_pct.iloc[-1])
+                if num_sem >= 2:
+                    slope = float(np.polyfit(comp_sems, comp_pct, 1)[0])
+                else:
+                    slope = None
+                pass_ratio = float((completed_g["semester_result"] == "PASS").mean()) if "semester_result" in completed_g.columns else 1.0
             else:
+                avg_pct = float(pct_series.mean()) if pct_series.notna().any() else 0.0
+                num_sem = int(sem_nums.nunique())
+                first_pct = float(pct_series.iloc[0]) if len(pct_series) > 0 and pd.notna(pct_series.iloc[0]) else 0.0
+                last_pct = float(pct_series.iloc[-1]) if len(pct_series) > 0 and pd.notna(pct_series.iloc[-1]) else 0.0
                 slope = None
+                pass_ratio = 1.0
 
-            first_pct = g["semester_percentage"].iloc[0]
-            last_pct = g["semester_percentage"].iloc[-1]
+            valid_att = att_series[att_series.notna() & (att_series > 0)]
+            if len(valid_att) > 0:
+                avg_att = float(valid_att.mean())
+            elif att_series.notna().any():
+                avg_att = float(att_series.mean())
+            else:
+                avg_att = 0.0
+
+            backlogs_series = pd.to_numeric(g["backlog_count"], errors="coerce").fillna(0) if "backlog_count" in g.columns else pd.Series([0])
+            total_backlogs_computed = int(backlogs_series.sum())
 
             records.append({
                 "student_id": student_id,

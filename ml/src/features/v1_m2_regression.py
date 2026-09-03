@@ -52,8 +52,10 @@ from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import GroupKFold
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from xgboost import XGBRegressor
+try:
+    from xgboost import XGBRegressor
+except ImportError:
+    XGBRegressor = None
 
 from .v1_dataset import V1Dataset
 from .v1_split_config import V1SplitConfig
@@ -205,6 +207,8 @@ def _hist_gbm_pipeline(seed: int) -> Pipeline:
 
 def _xgboost_pipeline(seed: int) -> Pipeline:
     # Project contract: xgboost uses NO scaler (m2/evaluate.py preprocessors=[]).
+    if XGBRegressor is None:
+        raise ImportError("xgboost is not installed. Install xgboost to use this model pipeline.")
     return Pipeline(
         [
             ("imputer", SimpleImputer(strategy="median")),

@@ -8,8 +8,11 @@ sys.path.insert(0, r"C:\Users\HET SHAH\ByteBrain\ml")
 
 import os
 from dotenv import load_dotenv
+import pytest
+
 load_dotenv(r"C:\Users\HET SHAH\ByteBrain\.env.local")
 
+@pytest.mark.anyio
 async def test_endpoint():
     import asyncpg
     import asyncio as _asyncio

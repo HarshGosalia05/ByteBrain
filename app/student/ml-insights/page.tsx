@@ -8,6 +8,8 @@ import { ErrorState } from "@/components/shared/state/error-state"
 import { MlInsightsGrid } from "@/components/student/ml-insights/ml-insights-grid"
 import { SemesterTrendChart } from "@/components/student/ml-insights/semester-trend-chart"
 
+export const dynamic = "force-dynamic"
+
 export default async function MlInsightsPage() {
   await requireRole("Student")
 
