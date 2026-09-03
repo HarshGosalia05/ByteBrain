@@ -18,9 +18,14 @@ import assert from "node:assert/strict"
 
 let activeSession: unknown = null
 
+// Signed JWT token that getSessionToken() returns in tests, mirroring the
+// server-side signed session cookie (replaces the old base64 JSON token).
+const MOCK_TOKEN = "mock.signed.jwt.token"
+
 mock.module("./student-session.ts", {
   namedExports: {
     getSessionUser: async () => activeSession,
+    getSessionToken: async () => (activeSession ? MOCK_TOKEN : null),
   },
 })
 

@@ -1,34 +1,122 @@
+"""JWT-based authentication for the CampusX backend.
+
+Verifies a signed JWT Bearer token produced by the Next.js BFF.
+Fails closed: missing, expired, tampered, or incomplete tokens are rejected.
+The token payload is the sole source of the authenticated user identity;
+client-supplied request body fields are NEVER trusted for authorization.
+"""
+from __future__ import annotations
+
+import time
+from typing import Any
+
+import jwt
 from fastapi import HTTPException, status, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import json
-import base64
+
+from app.core.config import settings
 
 security_scheme = HTTPBearer()
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security_scheme)) -> dict:
+
+def create_access_token(payload: dict[str, Any]) -> str:
+    """Create a signed JWT from the given payload.
+
+    The ``exp`` claim is set automatically from ``JWT_EXPIRY_SECONDS``.
+    The caller supplies role, user_id, username, and optional identity
+    claims (student_id, faculty_id, admin_id, department, institution_id).
     """
-    Extracts the user identity from the token provided by Next.js.
-    Since Next.js currently uses a plaintext JSON cookie for session (which is a known 
-    temporary measure per analysis_results.md), the Next.js BFF will pass that JSON string 
-    (possibly base64 encoded) as the Bearer token for integration testing until JWT is implemented.
-    """
-    token = credentials.credentials
-    try:
-        # Check if the token is base64 encoded JSON
-        try:
-            decoded_bytes = base64.b64decode(token)
-            token = decoded_bytes.decode('utf-8')
-        except Exception:
-            pass # Use as-is if not base64
-        
-        user_data = json.loads(token)
-        if not user_data or "role" not in user_data:
-            raise ValueError("Invalid user payload")
-            
-        return user_data
-    except Exception:
+    if not settings.JWT_SECRET:
+        raise RuntimeError(
+            "JWT_SECRET is not configured. Cannot sign tokens."
+        )
+    to_encode = dict(payload)
+    to_encode.setdefault("iat", int(time.time()))
+    to_encode["exp"] = int(time.time()) + settings.JWT_EXPIRY_SECONDS
+    return jwt.encode(
+        to_encode,
+        settings.JWT_SECRET,
+        algorithm=settings.JWT_ALGORITHM,
+    )
+
+
+def decode_access_token(token: str) -> dict[str, Any]:
+    """Decode and verify a signed JWT. Raises on any failure."""
+    if not settings.JWT_SECRET:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing authentication token",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service is not configured",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    try:
+        payload: dict[str, Any] = jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token has expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.InvalidSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token signature",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.DecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return payload
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Security(security_scheme),
+) -> dict:
+    """Extract and verify the authenticated user from a signed JWT Bearer token.
+
+    Verifies:
+      - Token signature (tamper detection)
+      - Token expiration
+      - Valid role claim
+
+    The returned dict is the authoritative user identity; all downstream
+    RBAC checks use this value exclusively — never client body fields.
+    """
+    token = credentials.credentials
+    payload = decode_access_token(token)
+
+    if not payload or not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    role = payload.get("role")
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token is missing the role claim",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if role not in ("Student", "Faculty", "Admin"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid role in authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return payload

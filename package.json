@@ -10,7 +10,7 @@
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
-    "test:frontend": "node --experimental-test-module-mocks --test lib/student/attendance-simulation.test.ts lib/student/marks-simulation.test.ts lib/student/student-api.test.ts lib/student/career-guidance-api.test.ts lib/student/print-report-card.test.ts lib/admin-api.test.ts lib/faculty-api.test.ts lib/chat-api.test.ts lib/i18n/i18n.test.ts lib/v2-prediction-contract.test.ts"
+    "test:frontend": "node --experimental-test-module-mocks --test lib/auth-jwt.test.ts lib/student/attendance-simulation.test.ts lib/student/marks-simulation.test.ts lib/student/student-api.test.ts lib/student/career-guidance-api.test.ts lib/student/print-report-card.test.ts lib/admin-api.test.ts lib/faculty-api.test.ts lib/chat-api.test.ts lib/i18n/i18n.test.ts lib/v2-prediction-contract.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

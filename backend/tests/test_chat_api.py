@@ -4,16 +4,17 @@ Verifies:
   * Unauthenticated requests rejected (401).
   * Valid Student / Faculty / Admin requests handled.
   * Identity / role tampering prevented (auth token is sole authority).
+  * Unsigned / tampered / expired tokens rejected (JWT verification).
   * Scope checks (target_student_id required for Faculty student tools).
   * Out-of-scope student rejected (404).
   * Unknown and ambiguous intents return controlled clarification responses.
   * Unauthorized intent returns controlled status.
   * Provider failure returns controlled 503 without leaking secrets or traces.
   * Empty message and extra forbidden fields rejected (422).
+  * Per-user/IP rate limiting returns 429 when the limit is exceeded.
 """
 from __future__ import annotations
 
-import base64
 import json
 import unittest
 
@@ -22,6 +23,8 @@ from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_db_pool
 from app.api.v1.chat import get_chat_orchestrator
+from app.core.ratelimit import chat_limiter
+from app.core.security import create_access_token
 from app.main import app
 from app.schemas.genai import VerifiedContext
 from app.services.chat_orchestrator import (
@@ -39,8 +42,12 @@ from app.services.genai_service import GenAIService
 
 
 def make_token(payload: dict) -> str:
-    """Helper to generate a base64 encoded JSON token for TestClient."""
-    return base64.b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8")
+    """Helper to mint a signed JWT for TestClient.
+
+    Any payload explictly given is used; the signing secret comes from
+    settings (reads the shared repo-root .env.local JWT_SECRET).
+    """
+    return create_access_token(payload)
 
 
 class FakeProvider(GenAIProvider):
@@ -116,9 +123,11 @@ class TestChatApi(unittest.TestCase):
         app.dependency_overrides[get_db_pool] = lambda: None
         app.dependency_overrides[get_chat_orchestrator] = lambda: self.orchestrator
         self.client = TestClient(app)
+        chat_limiter.reset()
 
     def tearDown(self):
         app.dependency_overrides.clear()
+        chat_limiter.reset()
 
     # -----------------------------------------------------------------------
     # Authentication Tests
@@ -140,13 +149,37 @@ class TestChatApi(unittest.TestCase):
         self.assertEqual(resp.status_code, 401)
 
     def test_token_with_unsupported_role_rejected(self):
-        token = make_token({"role": "Guest", "user_id": "G01"})
+        token = make_token({"role": "Guest", "user_id": "G01", "username": "guest"})
         resp = self.client.post(
             "/api/v1/chat",
             headers={"Authorization": f"Bearer {token}"},
             json={"message": "Hello"},
         )
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 401)
+
+    def test_tampered_token_signature_rejected(self):
+        # Tamper with a genuinely-signed token's payload without re-signing.
+        token = make_token({"role": "Admin", "user_id": "ADM901", "username": "admin"})
+        header, _, _ = token.split(".")
+        forged_payload = (
+            "eyJyb2xlIjoiQWRtaW4iLCJ1c2VyX2lkIjoiSEFDS0VSIiwidXNlcm5hbWUiOiJoYWNrZXIifQ"
+        )
+        tampered = f"{header}.{forged_payload}.x"
+        resp = self.client.post(
+            "/api/v1/chat",
+            headers={"Authorization": f"Bearer {tampered}"},
+            json={"message": "What is my SGPA?"},
+        )
+        self.assertEqual(resp.status_code, 401)
+
+    def test_missing_role_claim_rejected(self):
+        token = make_token({"user_id": "STU101", "username": "alice"})
+        resp = self.client.post(
+            "/api/v1/chat",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"message": "Hello"},
+        )
+        self.assertEqual(resp.status_code, 401)
 
     # -----------------------------------------------------------------------
     # Student Happy Path & Scope
@@ -352,6 +385,55 @@ class TestChatApi(unittest.TestCase):
             },
         )
         self.assertEqual(resp.status_code, 422)
+
+    # -----------------------------------------------------------------------
+    # Rate Limiting
+    # -----------------------------------------------------------------------
+
+    def test_rate_limited_returns_429_without_retry_loop(self):
+        import app.api.v1.chat as chat_module
+        import app.core.ratelimit as ratelimit_mod
+
+        token = make_token({"role": "Student", "student_id": "STU101", "user_id": "STU101"})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Use a low, deterministic limit so we can exhaust it quickly.
+        low_limiter = ratelimit_mod.RateLimiter(limit=3, window_seconds=60, burst_limit=3)
+        original_mod_limiter = ratelimit_mod.chat_limiter
+        original_chat_limiter = chat_module.chat_limiter
+        ratelimit_mod.chat_limiter = low_limiter
+        chat_module.chat_limiter = low_limiter
+
+        try:
+            for _ in range(3):
+                resp = self.client.post(
+                    "/api/v1/chat",
+                    headers=headers,
+                    json={"message": "What is my SGPA?"},
+                )
+                self.assertEqual(resp.status_code, 200)
+
+            resp = self.client.post(
+                "/api/v1/chat",
+                headers=headers,
+                json={"message": "What is my SGPA?"},
+            )
+            self.assertEqual(resp.status_code, 429)
+            self.assertIn("Too many requests", resp.json()["detail"])
+            self.assertIn("Retry-After", resp.headers)
+        finally:
+            ratelimit_mod.chat_limiter = original_mod_limiter
+            chat_module.chat_limiter = original_chat_limiter
+
+    def test_rate_limit_still_enforced_when_no_user(self):
+        # Even without an authenticated user the endpoint still returns 401
+        # first (auth runs before rate limiting), so a bare 429 is not produced
+        # for anonymous requests — the 401 is the correct security behavior.
+        resp = self.client.post(
+            "/api/v1/chat",
+            json={"message": "Hello"},
+        )
+        self.assertEqual(resp.status_code, 401)
 
 
 if __name__ == "__main__":

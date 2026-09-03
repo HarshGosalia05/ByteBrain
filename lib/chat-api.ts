@@ -1,4 +1,4 @@
-import { getSessionUser } from "./student-session.ts"
+import { getSessionUser, getSessionToken } from "./student-session.ts"
 
 const FASTAPI_URL = (process.env.FASTAPI_URL ?? "http://localhost:8000").replace(/\/+$/, "")
 
@@ -88,6 +88,11 @@ export async function sendChatMessage(req: ChatApiRequest): Promise<ChatBffResul
     return { success: false, error: toChatBffError(401) }
   }
 
+  const token = await getSessionToken()
+  if (!token) {
+    return { success: false, error: toChatBffError(401) }
+  }
+
   const message = req.message?.trim()
   if (!message) {
     return {
@@ -103,8 +108,6 @@ export async function sendChatMessage(req: ChatApiRequest): Promise<ChatBffResul
       role: item.role === "assistant" ? "assistant" : "user",
       content: String(item.content ?? "").trim(),
     }))
-
-  const token = Buffer.from(JSON.stringify(session)).toString("base64")
 
   const payload: Record<string, unknown> = {
     message,

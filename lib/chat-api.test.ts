@@ -17,6 +17,7 @@ let mockSession: MockSession | null = {
 mock.module("./student-session.ts", {
   namedExports: {
     getSessionUser: async () => mockSession,
+    getSessionToken: async () => "mock.jwt.token",
   },
 })
 

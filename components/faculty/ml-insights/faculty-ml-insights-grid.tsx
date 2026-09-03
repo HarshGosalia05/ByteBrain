@@ -67,6 +67,20 @@ export function FacultyMlInsightsGrid({
 
   return (
     <div className="flex flex-col gap-6">
+      {m3v2 && <FacultyM3V2Card data={m3v2} />}
+      {m3v2NoData && !m3v2 && (
+        <V2NoDataNote
+          title="Academic risk estimate not available"
+          message="An academic risk estimate is not available because a future academic semester is not currently available in the dataset."
+        />
+      )}
+      {m2v2 && <FacultyM2V2Card data={m2v2} />}
+      {m2v2NoData && !m2v2 && (
+        <V2NoDataNote
+          title="Next-semester prediction not available"
+          message="A next-semester prediction is not available because a future academic semester is not currently available in the dataset."
+        />
+      )}
       {m1v3 && <FacultyM1V3Card data={m1v3} />}
       {m1v3NoData && !m1v3 && (
         <V2NoDataNote
@@ -79,20 +93,6 @@ export function FacultyMlInsightsGrid({
         <V2NoDataNote
           title="Subject predictions not available yet"
           message="Subject-level predictions are not available because the required academic data for the current semester is not yet present in the dataset."
-        />
-      )}
-      {m2v2 && <FacultyM2V2Card data={m2v2} />}
-      {m2v2NoData && !m2v2 && (
-        <V2NoDataNote
-          title="Next-semester prediction not available"
-          message="A next-semester prediction is not available because a future academic semester is not currently available in the dataset."
-        />
-      )}
-      {m3v2 && <FacultyM3V2Card data={m3v2} />}
-      {m3v2NoData && !m3v2 && (
-        <V2NoDataNote
-          title="Academic risk estimate not available"
-          message="An academic risk estimate is not available because a future academic semester is not currently available in the dataset."
         />
       )}
       <M4InsightsCard model={data.models.m4} />

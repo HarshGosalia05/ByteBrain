@@ -3,6 +3,7 @@
 import { query } from "@/lib/db"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
+import { signSession, type SessionUser } from "@/lib/auth-jwt"
 
 export async function login(
   prevState: { error?: string } | undefined,
@@ -30,10 +31,22 @@ export async function login(
     const userRow = result.rows[0]
     user = userRow
 
+    // Sign a verifiable JWT before storing so the backend can trust the
+    // token instead of the previous forgeable base64-JSON session.
+    const session = signSession({
+      user_id: userRow.user_id,
+      username: userRow.username,
+      role: userRow.role,
+      department: userRow.department,
+      student_id: userRow.student_id,
+      faculty_id: userRow.faculty_id,
+    } as unknown as SessionUser)
+
     const cookieStore = await cookies()
-    cookieStore.set("session", JSON.stringify(user), {
+    cookieStore.set("session", session, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
       maxAge: 60 * 60 * 24,
       path: "/",
     })

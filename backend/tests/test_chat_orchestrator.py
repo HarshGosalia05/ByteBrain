@@ -311,6 +311,24 @@ class TestChatOrchestrator(unittest.TestCase):
         self.assertIn("CampusX Assistant", resp.message)
         self.assertEqual(len(timeout_provider.recorded_requests), 1)
 
+    def test_provider_rate_limited_on_general_conversation_returns_friendly_fallback(self):
+        # Regression guard: rate limiting on general conversation must return a
+        # controlled response and NOT raise (Phase 1 stability fix).
+        rate_limited = FakeProvider(rate_limit=True)
+        service = GenAIService(provider=rate_limited)
+        orchestrator = ChatOrchestrator(
+            pool=None,
+            genai_service=service,
+            tools=self.tools,
+        )
+        user = {"role": "Student", "student_id": "STU001"}
+        req = ChatRequest(message="Hello there!")
+
+        resp = run(orchestrator.process_chat(user=user, request=req))
+        self.assertEqual(resp.status, "rate_limited")
+        self.assertIn("rate-limited", resp.message)
+        self.assertEqual(len(rate_limited.recorded_requests), 1)
+
     def test_exactly_one_genai_call_per_user_message(self):
         user = {"role": "Student", "student_id": "STU001"}
         req = ChatRequest(message="What is my SGPA?")

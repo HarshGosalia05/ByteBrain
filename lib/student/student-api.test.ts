@@ -1,4 +1,4 @@
-// Frontend tests for the MD-05 student BFF layer (lib/student-api.ts).
+﻿// Frontend tests for the MD-05 student BFF layer (lib/student-api.ts).
 //
 // Runs with Node's built-in test runner + TypeScript type stripping:
 //   node --experimental-test-module-mocks --test lib/student/student-api.test.ts
@@ -22,9 +22,14 @@ import assert from "node:assert/strict"
 
 let activeSession: unknown = null
 
+// Signed JWT token that getSessionToken() returns in tests, mirroring the
+// server-side signed session cookie (replaces the old base64 JSON token).
+const MOCK_TOKEN = "mock.signed.jwt.token"
+
 mock.module("../student-session.ts", {
   namedExports: {
     getSessionUser: async () => activeSession,
+    getSessionToken: async () => (activeSession ? MOCK_TOKEN : null),
   },
 })
 
@@ -133,7 +138,7 @@ test("getHealthScore fetches FastAPI with bearer token and returns data", async 
   const hit = getCalls("health-score")
   assert.equal(hit.length, 1)
   assert.equal(hit[0].url, `${baseUrl}/health-score`)
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
@@ -274,7 +279,7 @@ test("clearNotification DELETEs own notification with bearer token", async () =>
   assert.ok(hit)
   assert.equal(hit.url, `${baseUrl}/notifications/m1`)
   const headers = hit.init?.headers as Record<string, string>
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
 
@@ -419,7 +424,7 @@ test("getReportCard fetches report-card with bearer token and returns data", asy
   const hit = getCalls("report-card")
   assert.equal(hit.length, 1)
   assert.equal(hit[0].url, `${baseUrl}/report-card`)
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
@@ -614,7 +619,7 @@ test("getStudentMlInsights fetches /predict/insights with own student id", async
   const hit = getCalls("/predict/insights")
   assert.equal(hit.length, 1)
   assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/insights/STU-A")
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
@@ -758,7 +763,7 @@ test("signOutAllStudentDevices POSTs to backend", async () => {
 })
 
 // ---------------------------------------------------------------------------
-// M1 V2 — Subject Marks Prediction (validated production model).
+// M1 V2 â€” Subject Marks Prediction (validated production model).
 // The per-student route /predict/m1v2/{student_id} is consumed by the student
 // BFF. NO_DATA is returned as 200 with readiness_status="NO_DATA" and a reason.
 // ---------------------------------------------------------------------------
@@ -874,7 +879,7 @@ test("getStudentM1V2 maps 503 network/backend failure", async () => {
 })
 
 // ---------------------------------------------------------------------------
-// M2 V2 — Next-Semester Performance Prediction (validated production model).
+// M2 V2 â€” Next-Semester Performance Prediction (validated production model).
 // The per-student route /predict/m2v2/{student_id} is consumed by the student
 // BFF. NO_DATA (incl. the deployment boundary: current cohort in the final /
 // internship semester has no upcoming regular semester) surfaces as a 404.
@@ -964,7 +969,7 @@ test("getStudentM2V2 maps 503 network/backend failure", async () => {
 })
 
 // ---------------------------------------------------------------------------
-// M3 V2 — At-Risk Student Prediction (validated production model).
+// M3 V2 â€” At-Risk Student Prediction (validated production model).
 // The per-student route /predict/m3v2/{student_id} is consumed by the student
 // BFF. probability_at_risk is a model ESTIMATE (never a guarantee). NO_DATA
 // (incl. the deployment boundary: the current cohort is in the final /
