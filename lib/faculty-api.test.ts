@@ -1,4 +1,4 @@
-import { test, mock, beforeEach } from "node:test"
+﻿import { test, mock, beforeEach } from "node:test"
 import assert from "node:assert/strict"
 
 import type { FacultyStudentMlInsights } from "./faculty-api.ts"
@@ -11,9 +11,14 @@ import type { FacultyStudentMlInsights } from "./faculty-api.ts"
 
 let activeSession: unknown = null
 
+// Signed JWT token that getSessionToken() returns in tests, mirroring the
+// server-side signed session cookie (replaces the old base64 JSON token).
+const MOCK_TOKEN = "mock.signed.jwt.token"
+
 mock.module("./student-session.ts", {
   namedExports: {
     getSessionUser: async () => activeSession,
+    getSessionToken: async () => (activeSession ? MOCK_TOKEN : null),
   },
 })
 
@@ -242,7 +247,7 @@ test("getFacultyStudentMlInsights fetches the faculty insights endpoint with aut
   const hit = getCalls("/students/STU-A/ml-insights")
   assert.equal(hit.length, 1)
   assert.equal(hit[0].url, "http://localhost:8000/api/v1/faculty/students/STU-A/ml-insights")
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
@@ -372,7 +377,7 @@ test("facultyMlReadinessTone maps readiness levels to tones", () => {
 })
 
 // ---------------------------------------------------------------------------
-// ML-12 Faculty Feedback Loop — BFF layer
+// ML-12 Faculty Feedback Loop â€” BFF layer
 // ---------------------------------------------------------------------------
 
 const FEEDBACK_CONTEXT_BODY = {
@@ -449,7 +454,7 @@ test("submitPredictionFeedback POSTs the review body with auth", async () => {
   assert.equal(hit[0].init?.method, "POST")
   const body = JSON.parse(String(hit[0].init?.body))
   assert.deepEqual(body, { action: "confirmed", note: "solid prediction" })
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
@@ -510,7 +515,7 @@ test("submitPredictionFeedback requires a session", async () => {
 })
 
 // ---------------------------------------------------------------------------
-// getFacultyStudentM1V2 — M1 V2 Subject Marks Prediction
+// getFacultyStudentM1V2 â€” M1 V2 Subject Marks Prediction
 // Hits the generic /predict/m1v2/{student_id} route (NOT under /faculty/) with
 // the Faculty bearer token. Server-side authorize_prediction_access enforces
 // faculty scope (incl. mentees under the mentorship relationship).
@@ -559,9 +564,9 @@ test("getFacultyStudentM1V2 hits the generic predict route with faculty auth", a
 
   const hit = getCalls("/predict/m1v2")
   assert.equal(hit.length, 1)
-  // M1 V2 lives outside /faculty/ — verify the exact generic route.
+  // M1 V2 lives outside /faculty/ â€” verify the exact generic route.
   assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m1v2/STU-A")
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
@@ -624,7 +629,7 @@ test("getFacultyStudentM1V2 rejects non-faculty / unlinked / anonymous", async (
 })
 
 // ---------------------------------------------------------------------------
-// getFacultyStudentM2V2 — M2 V2 Next-Semester Performance Prediction
+// getFacultyStudentM2V2 â€” M2 V2 Next-Semester Performance Prediction
 // Hits the generic /predict/m2v2/{student_id} route (NOT under /faculty/) with
 // the Faculty bearer token. Server-side authorize_prediction_access enforces
 // faculty scope.
@@ -659,7 +664,7 @@ test("getFacultyStudentM2V2 hits the generic predict route with faculty auth", a
   const hit = getCalls("/predict/m2v2")
   assert.equal(hit.length, 1)
   assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2v2/STU-A")
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
@@ -713,7 +718,7 @@ test("getFacultyStudentM2V2 rejects non-faculty / unlinked / anonymous", async (
 })
 
 // ---------------------------------------------------------------------------
-// getFacultyStudentM3V2 — M3 V2 At-Risk Student Prediction
+// getFacultyStudentM3V2 â€” M3 V2 At-Risk Student Prediction
 // Hits the generic /predict/m3v2/{student_id} route (NOT under /faculty/) with
 // the Faculty bearer token. probability_at_risk is a model ESTIMATE surfaced by
 // the backend for this role.
@@ -752,7 +757,7 @@ test("getFacultyStudentM3V2 hits the generic predict route with faculty auth", a
   const hit = getCalls("/predict/m3v2")
   assert.equal(hit.length, 1)
   assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m3v2/STU-A")
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })

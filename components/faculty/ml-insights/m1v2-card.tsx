@@ -9,15 +9,16 @@ import {
 
 import { ModelCard } from "@/components/student/ml-insights/model-card"
 
-function SubjectRow({ item }: { item: M1V2SubjectPrediction }) {
+function SubjectTile({ item }: { item: M1V2SubjectPrediction }) {
   const band = item.grade_band.trim().toUpperCase()
   const attention = band === "F" || band === "C"
+  const displayName = item.subject_name || item.subject_id
   return (
-    <div className="rounded-lg border border-border p-3">
+    <div className="flex flex-col gap-3 rounded-lg border border-foreground/10 bg-background/40 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold">{item.subject_id}</p>
-          <p className="text-xs text-muted-foreground">Semester {item.semester_no}</p>
+          <p className="text-sm font-semibold">{displayName}</p>
+          <p className="text-[0.6875rem] text-muted-foreground">Semester {item.semester_no}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {attention && <Badge variant="warning">Needs attention</Badge>}
@@ -25,24 +26,18 @@ function SubjectRow({ item }: { item: M1V2SubjectPrediction }) {
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-end gap-6">
-        <div>
-          <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
-            Predicted end-sem marks
-          </p>
-          <p className="text-2xl font-semibold tabular-nums">
-            {item.predicted_end_sem_marks.toFixed(1)}
-            <span className="text-sm font-normal text-muted-foreground">
-              {" "}/ {item.target_max}
-            </span>
-          </p>
-        </div>
+      <p className="text-2xl font-bold tabular-nums">
+        {item.predicted_end_sem_marks.toFixed(1)}
+        <span className="text-sm font-normal text-muted-foreground"> / {item.target_max}</span>
+      </p>
+
+      <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-foreground/10 pt-2.5">
         {item.input_features.att_total_pct !== null && (
           <div>
             <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
               Attendance
             </p>
-            <p className="text-2xl font-semibold tabular-nums">
+            <p className="text-base font-semibold tabular-nums">
               {item.input_features.att_total_pct.toFixed(1)}%
             </p>
           </div>
@@ -50,9 +45,9 @@ function SubjectRow({ item }: { item: M1V2SubjectPrediction }) {
         {item.input_features.pre_endsem_assessment_pct !== null && (
           <div>
             <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
-              Pre-end-sem assessment
+              Pre-end-sem
             </p>
-            <p className="text-2xl font-semibold tabular-nums">
+            <p className="text-base font-semibold tabular-nums">
               {item.input_features.pre_endsem_assessment_pct.toFixed(1)}%
             </p>
           </div>
@@ -85,11 +80,13 @@ export function FacultyM1V2Card({ data }: { data: M1V2PredictionData }) {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {data.subjects.map((item) => (
-            <SubjectRow key={item.subject_id} item={item} />
-          ))}
-          <p className="text-xs text-muted-foreground">
+        <div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data.subjects.map((item) => (
+              <SubjectTile key={item.subject_id} item={item} />
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
             {data.note ??
               "Predicted end-sem marks are model estimates, not actual results. Uncertainty is unavailable for this model."}{" "}
             Model version {data.model_version}.

@@ -51,23 +51,25 @@ export function FacultyM2V2Card({ data }: { data: M2V2PredictionData }) {
             </Badge>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border border-foreground/10 bg-background/40 px-3 py-3">
-              <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
-                Predicted SGPA · Semester {prediction_takes_effect_semester}
-              </p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">
-                {predicted_next_semester_sgpa.toFixed(2)}
-                <span className="text-sm font-normal text-muted-foreground"> / 10</span>
-              </p>
-            </div>
-            <div className="rounded-lg border border-foreground/10 bg-background/40 px-3 py-3">
-              <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
-                Predicted Percentage · Semester {prediction_takes_effect_semester}
-              </p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">
-                {predicted_next_semester_percentage.toFixed(1)}%
-              </p>
+          <div className="rounded-lg border border-foreground/10 bg-background/40 px-4 py-5">
+            <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
+              Predicted next-semester SGPA
+            </p>
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+              <div className="flex items-baseline gap-2">
+                <p className="text-5xl font-bold tabular-nums">
+                  {predicted_next_semester_sgpa.toFixed(2)}
+                </p>
+                <Badge variant={m2V2SgpaTone(predicted_next_semester_sgpa)}>out of 10</Badge>
+              </div>
+              <div>
+                <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
+                  Predicted percentage
+                </p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {predicted_next_semester_percentage.toFixed(1)}%
+                </p>
+              </div>
             </div>
           </div>
 
@@ -76,11 +78,11 @@ export function FacultyM2V2Card({ data }: { data: M2V2PredictionData }) {
               How to read this
             </p>
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-              This is the model's estimate for the next regular semester
+              This is the model&apos;s estimate for the next regular semester
               {prediction_takes_effect_semester !== null
                 ? ` (Semester ${prediction_takes_effect_semester})`
                 : ""}
-              , based on the student's completed
+              , based on the student&apos;s completed
               {observation_semester !== null ? ` Semester ${observation_semester}` : " academic history"}
               . It is not their current semester result and not a guarantee.
             </p>

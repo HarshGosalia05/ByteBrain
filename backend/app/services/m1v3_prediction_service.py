@@ -18,6 +18,10 @@ Design rules:
   * Read-only: only SELECT queries. No writes to Supabase.
   * Uses the already-trained M1 V3 artifact. NO retraining.
   * Mechanical leakage guard: feature vector re-checked before inference.
+  * Subject name enrichment: after predictor inference, the service resolves
+    each subject_id to its human-readable subject_name via a single batch
+    query against the ``subjects`` table. The subject_id is preserved for all
+    internal logic; only the display-facing payload is enriched.
 """
 
 from __future__ import annotations
@@ -39,6 +43,14 @@ def _ensure_v3_importable() -> None:
 _ensure_v3_importable()
 
 
+# SQL to batch-fetch subject names for the predicted subject IDs.
+_SUBJECT_NAMES_SQL = """
+SELECT subject_id, subject_name
+FROM subjects
+WHERE subject_id = ANY($1::text[])
+"""
+
+
 class M1V3PredictionService:
     """Serve M1 V3 subject end-sem predictions for a student (read-only)."""
 
@@ -58,6 +70,39 @@ class M1V3PredictionService:
             cls._predictor = predictor
         return cls._predictor
 
+    # -- subject name resolution ---------------------------------------------
+
+    async def _resolve_subject_names(
+        self, subject_ids: list[str], conn: Any
+    ) -> dict[str, str]:
+        """Batch-resolve subject_id → subject_name via the subjects table.
+
+        Returns a dict mapping subject_id to subject_name for all found
+        records. Missing subjects are omitted (caller applies fallback).
+        """
+        if not subject_ids:
+            return {}
+        try:
+            rows = await conn.fetch(_SUBJECT_NAMES_SQL, subject_ids)
+            return {str(r["subject_id"]): str(r["subject_name"]) for r in rows}
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _enrich_subject_names(
+        result: dict[str, Any], name_map: dict[str, str]
+    ) -> dict[str, Any]:
+        """Add subject_name to each subject prediction in the result dict.
+
+        Falls back to "Subject name unavailable" when a name cannot be
+        resolved. The subject_id is never modified.
+        """
+        FALLBACK = "Subject name unavailable"
+        for subj in result.get("subjects", []):
+            sid = subj.get("subject_id", "")
+            subj["subject_name"] = name_map.get(sid, FALLBACK)
+        return result
+
     async def predict(self, student_id: str) -> dict[str, Any]:
         """Return the M1 V3 prediction for a student.
 
@@ -76,6 +121,11 @@ class M1V3PredictionService:
 
         try:
             result = await predictor.predict_for_student(student_id, conn)
+
+            # Enrich subjects with human-readable names from the subjects table.
+            subject_ids = [s["subject_id"] for s in result.get("subjects", [])]
+            name_map = await self._resolve_subject_names(subject_ids, conn)
+            self._enrich_subject_names(result, name_map)
         finally:
             try:
                 await self.pool.release(conn)

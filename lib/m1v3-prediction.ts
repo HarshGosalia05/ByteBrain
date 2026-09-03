@@ -18,6 +18,7 @@ export type M1V3SubjectInputFeatures = {
 
 export type M1V3SubjectPrediction = {
   subject_id: string
+  subject_name: string | null
   semester_no: number
   predicted_end_sem_marks: number
   target_max: number

@@ -1,6 +1,5 @@
-import { cookies } from "next/headers"
-
 import { requireRole } from "@/lib/session"
+import { getSessionUser } from "@/lib/auth-jwt"
 import { AdminShell } from "@/components/admin/shell"
 
 export default async function AdminLayout({
@@ -10,17 +9,8 @@ export default async function AdminLayout({
 }>) {
   await requireRole("Admin")
 
-  const cookieStore = await cookies()
-  const raw = cookieStore.get("session")?.value
-  let username: string | null = null
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as { username?: string }
-      username = typeof parsed.username === "string" ? parsed.username : null
-    } catch {
-      username = null
-    }
-  }
+  const user = await getSessionUser()
+  const username = user ? user.username ?? null : null
 
   return <AdminShell username={username}>{children}</AdminShell>
 }

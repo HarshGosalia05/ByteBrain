@@ -1,4 +1,4 @@
-import { getSessionUser } from "./student-session.ts"
+﻿import { getSessionUser, getSessionToken } from "./student-session.ts"
 import type { M1V2PredictionData } from "./m1v2-prediction"
 import type { M2V2PredictionData } from "./m2v2-prediction"
 import type { M3V2PredictionData } from "./m3v2-prediction"
@@ -191,7 +191,7 @@ async function callFastapi<T>(
   }
 
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const method = options?.method ?? "GET"
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
@@ -676,7 +676,7 @@ export function getAdminFaculty(): Promise<BffResult<AdminFacultyData>> {
 }
 
 // ---------------------------------------------------------------------------
-// MD-07 — Admin Notifications, Announcements & Executive Insights
+// MD-07 â€” Admin Notifications, Announcements & Executive Insights
 // ---------------------------------------------------------------------------
 
 export type CreateAnnouncementInput = {
@@ -765,7 +765,7 @@ export function getExecutiveSummary(): Promise<BffResult<ExecutiveSummaryData>> 
 }
 
 // ---------------------------------------------------------------------------
-// ML-11 — Admin ML Intelligence
+// ML-11 â€” Admin ML Intelligence
 // ---------------------------------------------------------------------------
 
 export type MlOverviewKpis = {
@@ -917,7 +917,7 @@ export function getAdminMLIntelligence(
   })
 }
 
-// M1 V2 — Subject Marks Prediction (validated production model).
+// M1 V2 â€” Subject Marks Prediction (validated production model).
 //
 // The per-student endpoint lives at the generic /predict/m1v2/{student_id}
 // route (not under /admin/), so we build the URL directly while reusing the
@@ -966,7 +966,7 @@ async function callAdminPredictM1V2<T>(
   }
 
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
@@ -1001,7 +1001,7 @@ export function getAdminStudentM1V2(
   return callAdminPredictM1V2<M1V2PredictionData>(studentId, BFF_TTL_MS)
 }
 
-// M2 V2 — Next-Semester Performance Prediction (validated production model).
+// M2 V2 â€” Next-Semester Performance Prediction (validated production model).
 // Also a per-student route at /predict/m2v2/{student_id} (not under /admin/).
 // Reuses the Admin role guard + BFF cache. Server-side authorize_prediction_access
 // allows Admin to read any student's M2 V2 prediction.
@@ -1040,7 +1040,7 @@ async function callAdminPredictM2V2<T>(
   }
 
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
@@ -1075,7 +1075,7 @@ export function getAdminStudentM2V2(
   return callAdminPredictM2V2<M2V2PredictionData>(studentId, BFF_TTL_MS)
 }
 
-// M3 V2 — At-Risk Student Prediction (validated production model).
+// M3 V2 â€” At-Risk Student Prediction (validated production model).
 // Also a per-student route at /predict/m3v2/{student_id} (not under /admin/).
 // Reuses the Admin role guard + BFF cache. Server-side authorize_prediction_access
 // allows Admin to read any student's M3 V2 at-risk estimate.
@@ -1121,7 +1121,7 @@ async function callAdminPredictM3V2<T>(
   }
 
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
@@ -1151,7 +1151,7 @@ async function callAdminPredictM3V2<T>(
 }
 
 // =============================================================================
-// ML-12 §12.5 Admin health indicator — Faculty Feedback Loop
+// ML-12 Â§12.5 Admin health indicator â€” Faculty Feedback Loop
 // =============================================================================
 
 export type AdminFeedbackActionItem = {

@@ -1,4 +1,4 @@
-import { getSessionUser, type SessionUser } from "./student-session.ts"
+import { getSessionUser, getSessionToken, type SessionUser } from "./student-session.ts"
 import type { M1V2PredictionData } from "./m1v2-prediction"
 import type { M2V2PredictionData } from "./m2v2-prediction"
 import type { M3V2PredictionData } from "./m3v2-prediction"
@@ -369,7 +369,7 @@ async function fetchStudentApi<T>(
   }
 
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
@@ -1175,7 +1175,7 @@ async function mutateStudent<T>(
     }
   }
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(`${FASTAPI_URL}/api/v1/students/me/${path}`, {
       method,
       headers: {

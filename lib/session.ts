@@ -1,5 +1,5 @@
-import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
+import { getSessionUser } from "./auth-jwt"
 
 export const ROLE_DASHBOARDS = {
   Student: "/student/dashboard",
@@ -10,38 +10,18 @@ export const ROLE_DASHBOARDS = {
 export type Role = keyof typeof ROLE_DASHBOARDS
 
 export async function requireRole(role: Role): Promise<void> {
-  const cookieStore = await cookies()
-  const session = cookieStore.get("session")
+  const user = await getSessionUser()
 
-  if (!session) {
-    redirect("/login")
-  }
-
-  try {
-    const user = JSON.parse(session.value) as { role?: string } | null
-    if (!user || typeof user.role !== "string" || user.role !== role) {
-      redirect("/login")
-    }
-  } catch {
+  if (!user || typeof user.role !== "string" || user.role !== role) {
     redirect("/login")
   }
 }
 
 export async function redirectBySession(): Promise<void> {
-  const cookieStore = await cookies()
-  const session = cookieStore.get("session")
+  const user = await getSessionUser()
 
-  if (!session) {
+  if (!user || typeof user.role !== "string") {
     redirect("/login")
   }
-
-  try {
-    const user = JSON.parse(session.value) as { role?: string } | null
-    if (!user || typeof user.role !== "string") {
-      redirect("/login")
-    }
-    redirect(ROLE_DASHBOARDS[user.role as Role] ?? "/login")
-  } catch {
-    redirect("/login")
-  }
+  redirect(ROLE_DASHBOARDS[user.role as Role] ?? "/login")
 }

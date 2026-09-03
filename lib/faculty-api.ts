@@ -1,4 +1,4 @@
-import { getSessionUser } from "./student-session.ts"
+﻿import { getSessionUser, getSessionToken } from "./student-session.ts"
 import type { M1V2PredictionData } from "./m1v2-prediction"
 import type { M2V2PredictionData } from "./m2v2-prediction"
 import type { M3V2PredictionData } from "./m3v2-prediction"
@@ -589,7 +589,7 @@ async function callFastapi<T>(
     ttlMs,
     async () => {
       try {
-        const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+        const token = (await getSessionToken()) ?? ""
         const res = await fetch(`${FASTAPI_URL}/api/v1/faculty/${path}`, {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
@@ -853,7 +853,7 @@ export type FacultyStudentMlInsights = {
 }
 
 // =============================================================================
-// ML-12 Faculty Feedback Loop — BFF layer
+// ML-12 Faculty Feedback Loop â€” BFF layer
 // =============================================================================
 
 export type FacultyFeedbackAction = "confirmed" | "dismissed"
@@ -938,12 +938,12 @@ export function getFacultyStudentMlInsights(
   )
 }
 
-// M1 V2 — Subject Marks Prediction (validated production model).
+// M1 V2 â€” Subject Marks Prediction (validated production model).
 //
 // The per-student endpoint lives at the generic /predict/m1v2/{student_id}
 // route (not under /faculty/), so we build the URL directly while reusing the
 // Faculty role guards + BFF caching. Server-side authorize_prediction_access
-// enforces faculty scope (faculty may only read students within their scope —
+// enforces faculty scope (faculty may only read students within their scope â€”
 // including mentees under the mentorship relationship).
 
 async function callFacultyPredictM1V2<T>(
@@ -989,7 +989,7 @@ async function callFacultyPredictM1V2<T>(
     ttlMs,
     async () => {
       try {
-        const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+        const token = (await getSessionToken()) ?? ""
         const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
@@ -1029,7 +1029,7 @@ export function getFacultyStudentM1V2(
   return callFacultyPredictM1V2<M1V2PredictionData>(studentId, BFF_TTL_MS)
 }
 
-// M1 V3 — Subject Marks Prediction (synthetic-trained model, real production data).
+// M1 V3 â€” Subject Marks Prediction (synthetic-trained model, real production data).
 
 async function callFacultyPredictM1V3<T>(
   studentId: string,
@@ -1074,7 +1074,7 @@ async function callFacultyPredictM1V3<T>(
     ttlMs,
     async () => {
       try {
-        const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+        const token = (await getSessionToken()) ?? ""
         const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
@@ -1114,7 +1114,7 @@ export function getFacultyStudentM1V3(
   return callFacultyPredictM1V3<import("./m1v3-prediction").M1V3PredictionData>(studentId, BFF_TTL_MS)
 }
 
-// M2 V2 — Next-Semester Performance Prediction (validated production model).
+// M2 V2 â€” Next-Semester Performance Prediction (validated production model).
 // Also a per-student route at /predict/m2v2/{student_id} (not under /faculty/).
 // Reuses the same Faculty role guards + BFF caching as getFacultyStudentM1V2.
 
@@ -1161,7 +1161,7 @@ async function callFacultyPredictM2V2<T>(
     ttlMs,
     async () => {
       try {
-        const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+        const token = (await getSessionToken()) ?? ""
         const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
@@ -1201,7 +1201,7 @@ export function getFacultyStudentM2V2(
   return callFacultyPredictM2V2<M2V2PredictionData>(studentId, BFF_TTL_MS)
 }
 
-// M3 V2 — At-Risk Student Prediction (validated production model).
+// M3 V2 â€” At-Risk Student Prediction (validated production model).
 // Also a per-student route at /predict/m3v2/{student_id} (not under /faculty/).
 // Reuses the same Faculty role guards + BFF caching as getFacultyStudentM2V2.
 // probability_at_risk is a model ESTIMATE, never a guarantee.
@@ -1263,7 +1263,7 @@ async function callFacultyV2PerStudent<T>(
     ttlMs,
     async () => {
       try {
-        const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+        const token = (await getSessionToken()) ?? ""
         const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
@@ -1892,7 +1892,7 @@ export async function getFacultyPerformanceExport(
     : "/api/v1/faculty/performance/export"
 
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(`${FASTAPI_URL}${path}`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
@@ -2126,7 +2126,7 @@ export async function getFacultyAttendanceExport(
     : "/api/v1/faculty/attendance/export"
 
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(`${FASTAPI_URL}${path}`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
@@ -2781,7 +2781,7 @@ export async function getFacultyWorkloadExport(
     : "/api/v1/faculty/workload/export"
 
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(`${FASTAPI_URL}${path}`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
@@ -2824,7 +2824,7 @@ export async function updateFacultyContact(
   }
 
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(`${FASTAPI_URL}/api/v1/faculty/profile`, {
       method: "PATCH",
       headers: {
@@ -2915,7 +2915,7 @@ export async function updateFacultySettings(
   }
 
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(`${FASTAPI_URL}/api/v1/faculty/settings/${namespace}`, {
       method: "PATCH",
       headers: {
@@ -2988,7 +2988,7 @@ async function postFacultySettingsAction<T>(
   }
 
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(`${FASTAPI_URL}/api/v1/faculty/${path}`, {
       method: "POST",
       headers: {
@@ -3057,7 +3057,7 @@ export function restoreFacultySettings(): Promise<BffResult<FacultySettingsUpdat
 }
 
 // =============================================================================
-// Marks Entry (plan 14) + Attendance Entry (plan 15) — BFF layer
+// Marks Entry (plan 14) + Attendance Entry (plan 15) â€” BFF layer
 // =============================================================================
 
 function invalidateBffKeys(facultyId: string, prefixes: string[]) {
@@ -3087,7 +3087,7 @@ async function mutateFastapi<T>(
     }
   }
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(`${FASTAPI_URL}/api/v1/faculty/${path}`, {
       method,
       headers: {

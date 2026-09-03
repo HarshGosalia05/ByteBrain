@@ -1,6 +1,5 @@
-import { cookies } from "next/headers"
-
 import { requireRole } from "@/lib/session"
+import { getSessionUser } from "@/lib/auth-jwt"
 import { getStudentSettings } from "@/lib/student-api"
 
 import { PageHeader } from "@/components/shared/layout/page-header"
@@ -14,25 +13,13 @@ type SessionInfo = {
 }
 
 async function readSessionInfo(): Promise<SessionInfo | null> {
-  const cookieStore = await cookies()
-  const raw = cookieStore.get("session")?.value
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as {
-      username?: string
-      role?: string
-      student_id?: string | null
-      department?: string | null
-    } | null
-    if (!parsed || typeof parsed !== "object") return null
-    return {
-      username: typeof parsed.username === "string" ? parsed.username : null,
-      role: typeof parsed.role === "string" ? parsed.role : null,
-      studentId: typeof parsed.student_id === "string" ? parsed.student_id : null,
-      department: typeof parsed.department === "string" ? parsed.department : null,
-    }
-  } catch {
-    return null
+  const user = await getSessionUser()
+  if (!user) return null
+  return {
+    username: typeof user.username === "string" ? user.username : null,
+    role: typeof user.role === "string" ? user.role : null,
+    studentId: typeof user.student_id === "string" ? user.student_id : null,
+    department: typeof user.department === "string" ? user.department : null,
   }
 }
 

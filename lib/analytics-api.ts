@@ -1,4 +1,4 @@
-import { getSessionUser } from "./student-session.ts"
+import { getSessionUser, getSessionToken } from "./student-session.ts"
 
 export type { SessionUser } from "./student-session.ts"
 
@@ -58,7 +58,7 @@ async function callAnalytics<T>(
   if (hit && hit.expiresAt > Date.now()) return hit.value as BffResult<T>
 
   try {
-    const token = Buffer.from(JSON.stringify(user), "utf-8").toString("base64")
+    const token = (await getSessionToken()) ?? ""
     const res = await fetch(`${FASTAPI_URL}${fullPath}`, {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },

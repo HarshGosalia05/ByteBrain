@@ -1,4 +1,4 @@
-// Frontend tests for the MD-05 admin BFF layer (lib/admin-api.ts).
+﻿// Frontend tests for the MD-05 admin BFF layer (lib/admin-api.ts).
 //
 // Runs with Node's built-in test runner + TypeScript type stripping:
 //   node --experimental-test-module-mocks --test lib/admin-api.test.ts
@@ -21,9 +21,14 @@ import assert from "node:assert/strict"
 
 let activeSession: unknown = null
 
+// Signed JWT token that getSessionToken() returns in tests, mirroring the
+// server-side signed session cookie (replaces the old base64 JSON token).
+const MOCK_TOKEN = "mock.signed.jwt.token"
+
 mock.module("./student-session.ts", {
   namedExports: {
     getSessionUser: async () => activeSession,
+    getSessionToken: async () => (activeSession ? MOCK_TOKEN : null),
   },
 })
 
@@ -143,7 +148,7 @@ test("getAdminStudents forwards filters, risk, search, sort and pagination", asy
   assert.ok(query.includes("limit=50"))
   assert.ok(query.includes("offset=50"))
 
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
@@ -381,7 +386,7 @@ test("getAdminMLIntelligence fetches ML intelligence bundle", async () => {
 })
 
 // ---------------------------------------------------------------------------
-// ML-12 §12.5 getAdminMlFeedbackHealth
+// ML-12 Â§12.5 getAdminMlFeedbackHealth
 // ---------------------------------------------------------------------------
 
 const ML_FEEDBACK_HEALTH_BODY = {
@@ -432,7 +437,7 @@ test("getAdminMlFeedbackHealth requires an admin session", async () => {
 })
 
 // ---------------------------------------------------------------------------
-// getAdminStudentM1V2 — M1 V2 Subject Marks Prediction (typed client only).
+// getAdminStudentM1V2 â€” M1 V2 Subject Marks Prediction (typed client only).
 // The backend exposes M1 V2 per-student only (no cohort aggregate, not wired
 // into persisted ml_predictions). The Admin UI documents this as a limitation
 // and never fabricates cohort statistics; the typed client keeps the API
@@ -483,7 +488,7 @@ test("getAdminStudentM1V2 hits the generic predict route with admin auth", async
   assert.equal(hit.length, 1)
   // Generic predict route (NOT under /admin/).
   assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m1v2/STU-X")
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
@@ -537,7 +542,7 @@ test("getAdminStudentM1V2 maps 503 and gates non-admin", async () => {
 })
 
 // ---------------------------------------------------------------------------
-// getAdminStudentM2V2 — M2 V2 Next-Semester Performance Prediction (typed
+// getAdminStudentM2V2 â€” M2 V2 Next-Semester Performance Prediction (typed
 // client only). Backend exposes M2 V2 per-student only; the Admin UI documents
 // this as a limitation and never fabricates cohort statistics.
 // ---------------------------------------------------------------------------
@@ -571,7 +576,7 @@ test("getAdminStudentM2V2 hits the generic predict route with admin auth", async
   const hit = getCalls("/predict/m2v2")
   assert.equal(hit.length, 1)
   assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2v2/STU-X")
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
@@ -612,7 +617,7 @@ test("getAdminStudentM2V2 maps 404 / 503 and gates non-admin", async () => {
 })
 
 // ---------------------------------------------------------------------------
-// getAdminStudentM3V2 — M3 V2 At-Risk Student Prediction (typed client only).
+// getAdminStudentM3V2 â€” M3 V2 At-Risk Student Prediction (typed client only).
 // Backend exposes M3 V2 per-student only; the Admin UI honestly documents this
 // as a limitation and never fabricates cohort at-risk statistics.
 // ---------------------------------------------------------------------------
@@ -649,7 +654,7 @@ test("getAdminStudentM3V2 hits the generic predict route with admin auth", async
   const hit = getCalls("/predict/m3v2")
   assert.equal(hit.length, 1)
   assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m3v2/STU-X")
-  const expectedToken = Buffer.from(JSON.stringify(DEFAULT_SESSION), "utf-8").toString("base64")
+  const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })

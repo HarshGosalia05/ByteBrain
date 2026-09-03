@@ -1,18 +1,18 @@
-"""Unified authenticated Chat Orchestrator (G0-G2 integration).
+﻿"""Unified authenticated Chat Orchestrator (G0-G2 integration).
 
 Connects:
   Authenticated Role + Identity
-      ↓
+      â†“
   G1 IntentRouter (deterministic role-scoped routing)
-      ↓
+      â†“
   G1 ToolRegistry (allowlisted tool resolution)
-      ↓
+      â†“
   G2 Authorized Tool (Student / Faculty / Admin data access)
-      ↓
+      â†“
   VerifiedContext (strict structured data boundary)
-      ↓
+      â†“
   G0 GenAIService (grounded LLM response generation)
-      ↓
+      â†“
   ChatResponse
 
 Rules & Invariants:
@@ -526,11 +526,11 @@ class ChatOrchestrator:
                 exc,
             )
             if decision.intent == "general_conversation":
-                fallback_msg = self._build_general_conversation_fallback(request.message, user_role)
+                fallback_msg = self._build_general_conversation_fallback(request.message, role)
             else:
                 data_summary = _format_verified_data_summary(verified_ctx.data)
                 fallback_msg = (
-                    f"AI explanation unavailable (rate-limited) — showing verified data:\n\n{data_summary}"
+                    f"AI explanation unavailable (rate-limited) â€” showing verified data:\n\n{data_summary}"
                     if verified_ctx and verified_ctx.data
                     else "The AI assistant is temporarily rate-limited. Your academic data is available, but the AI explanation cannot be generated right now. Please try again shortly."
                 )
@@ -551,11 +551,11 @@ class ChatOrchestrator:
                 exc,
             )
             if decision.intent == "general_conversation":
-                fallback_msg = self._build_general_conversation_fallback(request.message, user_role)
+                fallback_msg = self._build_general_conversation_fallback(request.message, role)
             else:
                 data_summary = _format_verified_data_summary(verified_ctx.data)
                 fallback_msg = (
-                    f"AI explanation unavailable (response timed out) — showing verified data:\n\n{data_summary}"
+                    f"AI explanation unavailable (response timed out) â€” showing verified data:\n\n{data_summary}"
                     if verified_ctx and verified_ctx.data
                     else "The chat assistant took longer than usual to generate an explanation. Please try asking again shortly."
                 )
@@ -576,11 +576,11 @@ class ChatOrchestrator:
                 exc,
             )
             if decision.intent == "general_conversation":
-                fallback_msg = self._build_general_conversation_fallback(request.message, user_role)
+                fallback_msg = self._build_general_conversation_fallback(request.message, role)
             else:
                 data_summary = _format_verified_data_summary(verified_ctx.data)
                 fallback_msg = (
-                    f"AI explanation unavailable (service unavailable) — showing verified data:\n\n{data_summary}"
+                    f"AI explanation unavailable (service unavailable) â€” showing verified data:\n\n{data_summary}"
                     if verified_ctx and verified_ctx.data
                     else "The AI chat service is temporarily unavailable. Please try again later."
                 )

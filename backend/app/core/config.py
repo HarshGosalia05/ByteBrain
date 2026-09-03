@@ -42,6 +42,17 @@ class Settings(BaseSettings):
     GENAI_MAX_RETRIES: int = 1
     GENAI_RETRY_BACKOFF_SECONDS: float = 1.0
     
+    # JWT authentication (Phase 1 security fix).
+    # JWT_SECRET is intentionally empty by default so the service fails
+    # closed if not configured. Never hardcode secrets here.
+    JWT_SECRET: str = ""
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRY_SECONDS: int = 86400  # 24 hours
+
+    # Rate limiting for chat endpoint (Phase 1 stability fix).
+    CHAT_RATE_LIMIT_PER_MINUTE: int = 30
+    CHAT_RATE_LIMIT_BURST: int = 10
+
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
     

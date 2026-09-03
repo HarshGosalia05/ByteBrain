@@ -50,32 +50,34 @@ export function FacultyM3V2Card({ data }: { data: M3V2PredictionData }) {
             <Badge variant="secondary">Semester {prediction_takes_effect_semester}</Badge>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border border-foreground/10 bg-background/40 px-3 py-3">
-              <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
-                Estimated risk
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <p className="text-2xl font-semibold tabular-nums">
-                  {formatRiskPercent(probability_at_risk)}
+          <div className="rounded-lg border border-foreground/10 bg-background/40 px-4 py-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
+                  Estimated risk
                 </p>
-                <Badge variant={tone}>{riskLevelLabel(probability_at_risk)}</Badge>
-                <span className="text-sm font-normal text-muted-foreground">
+                <div className="mt-1 flex items-baseline gap-2">
+                  <p className="text-5xl font-bold tabular-nums">
+                    {formatRiskPercent(probability_at_risk)}
+                  </p>
+                  <Badge variant={tone}>{riskLevelLabel(probability_at_risk)}</Badge>
+                </div>
+                <p className="mt-1 text-sm font-normal text-muted-foreground">
                   · threshold {formatRiskPercent(threshold)}
-                </span>
-              </div>
-            </div>
-            <div className="rounded-lg border border-foreground/10 bg-background/40 px-3 py-3">
-              <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
-                Interpretation
-              </p>
-              <div className="mt-1 flex items-start gap-2">
-                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-foreground/60" aria-hidden="true" />
-                <p className="text-sm">
-                  {atRisk
-                    ? "Model signal points to an elevated risk of an academic setback next semester."
-                    : "Model signal currently points to a low estimated risk."}
                 </p>
+              </div>
+              <div className="max-w-xs">
+                <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
+                  Interpretation
+                </p>
+                <div className="mt-1 flex items-start gap-2">
+                  <ShieldCheck className="mt-0.5 size-4 shrink-0 text-foreground/60" aria-hidden="true" />
+                  <p className="text-sm">
+                    {atRisk
+                      ? "Model signal points to an elevated risk of an academic setback next semester."
+                      : "Model signal currently points to a low estimated risk."}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
