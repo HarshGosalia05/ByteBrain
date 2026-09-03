@@ -354,15 +354,26 @@ export function getPerformanceDistribution(filters: AnalyticsFilters = {}): Prom
 }
 
 export function getAttendanceDistribution(filters: AnalyticsFilters = {}): Promise<BffResult<AttendanceDistribution>> {
-  return callAnalytics<AttendanceDistribution>("departments/attendance-distribution", BFF_TTL_MS, filters)
+  return callAnalytics<AttendanceDistribution>("departments/attendance-distribution", BFF_TTL_MS, {
+    department_code: filters.department_code,
+    semester_no: filters.semester_no,
+    academic_year: filters.academic_year,
+  })
 }
 
 export function getBacklogDistribution(filters: AnalyticsFilters = {}): Promise<BffResult<BacklogDistribution>> {
-  return callAnalytics<BacklogDistribution>("departments/backlog-distribution", BFF_TTL_MS, filters)
+  return callAnalytics<BacklogDistribution>("departments/backlog-distribution", BFF_TTL_MS, {
+    department_code: filters.department_code,
+    academic_year: filters.academic_year,
+  })
 }
 
 export function getAtRiskStudents(filters: AnalyticsFilters = {}): Promise<BffResult<AtRiskStudentsResult>> {
-  return callAnalytics<AtRiskStudentsResult>("at-risk/students", BFF_TTL_MS, filters)
+  return callAnalytics<AtRiskStudentsResult>("at-risk/students", BFF_TTL_MS, {
+    department_code: filters.department_code,
+    semester_no: filters.semester_no,
+    academic_year: filters.academic_year,
+  })
 }
 
 export function getBelowAttendanceThreshold(filters: AnalyticsFilters & { threshold?: number } = {}): Promise<BffResult<BelowThresholdResult>> {
@@ -371,5 +382,9 @@ export function getBelowAttendanceThreshold(filters: AnalyticsFilters & { thresh
 }
 
 export function getSubjectsNeedingAttention(filters: AnalyticsFilters = {}): Promise<BffResult<SubjectsNeedingAttentionResult>> {
-  return callAnalytics<SubjectsNeedingAttentionResult>("at-risk/subjects-needing-attention", BFF_TTL_MS, filters)
+  return callAnalytics<SubjectsNeedingAttentionResult>("at-risk/subjects-needing-attention", BFF_TTL_MS, {
+    department_code: filters.department_code,
+    semester_no: filters.semester_no,
+    academic_year: filters.academic_year,
+  })
 }

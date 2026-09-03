@@ -499,6 +499,7 @@ class AnalyticsRepository:
         *,
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Distribution of students across attendance bands.
 
@@ -508,8 +509,10 @@ class AnalyticsRepository:
         rows = await self._fetch(
             """
             WITH bands AS (
-                SELECT
+                SELECT DISTINCT
                     a.student_id,
+                    a.subject_id,
+                    a.attendance_percentage,
                     CASE
                         WHEN a.attendance_percentage >= 90 THEN 'Excellent'
                         WHEN a.attendance_percentage >= 80 THEN 'Good'
@@ -519,8 +522,12 @@ class AnalyticsRepository:
                     END AS band
                 FROM attendance a
                 JOIN students s ON s.student_id = a.student_id
+                LEFT JOIN student_semester_summary sem
+                       ON sem.student_id = a.student_id
+                      AND sem.semester_no = a.semester_no
                 WHERE ($1::int IS NULL OR s.department_code = $1)
                   AND ($2::int IS NULL OR a.semester_no = $2)
+                  AND ($3::text IS NULL OR sem.academic_year = $3)
             ),
             counts AS (
                 SELECT band, count(*)::int AS cnt
@@ -546,17 +553,23 @@ class AnalyticsRepository:
             """,
             department_code,
             semester_no,
+            academic_year,
         )
         total_students = await self._fetchval(
             """
             SELECT count(DISTINCT a.student_id)::int
             FROM attendance a
             JOIN students s ON s.student_id = a.student_id
+            LEFT JOIN student_semester_summary sem
+                   ON sem.student_id = a.student_id
+                  AND sem.semester_no = a.semester_no
             WHERE ($1::int IS NULL OR s.department_code = $1)
               AND ($2::int IS NULL OR a.semester_no = $2)
+              AND ($3::text IS NULL OR sem.academic_year = $3)
             """,
             department_code,
             semester_no,
+            academic_year,
         )
         return {
             "department_code": department_code,
@@ -566,66 +579,142 @@ class AnalyticsRepository:
         }
 
     async def get_backlog_distribution(
-        self, *, department_code: Optional[int] = None
+        self, *, department_code: Optional[int] = None, academic_year: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Distribution of backlogs across the student population.
 
         Ranges: 0, 1-2, 3-5, 6-10, 11+.
         """
-        rows = await self._fetch(
-            """
-            WITH banded AS (
-                SELECT
-                    s.student_id,
-                    CASE
-                        WHEN s.total_backlogs = 0 THEN '0'
-                        WHEN s.total_backlogs BETWEEN 1 AND 2 THEN '1-2'
-                        WHEN s.total_backlogs BETWEEN 3 AND 5 THEN '3-5'
-                        WHEN s.total_backlogs BETWEEN 6 AND 10 THEN '6-10'
-                        ELSE '11+'
-                    END AS backlog_range
-                FROM students s
-                WHERE ($1::int IS NULL OR s.department_code = $1)
-            ),
-            counts AS (
-                SELECT backlog_range, count(*)::int AS cnt
-                FROM banded
-                GROUP BY backlog_range
-            ),
-            total AS (
-                SELECT sum(cnt)::int AS total FROM counts
+        # For backlog distribution, we need to filter by students who have semester records
+        # in the specified academic year. If no academic_year is specified, use all students.
+        if academic_year:
+            rows = await self._fetch(
+                """
+                WITH banded AS (
+                    SELECT
+                        s.student_id,
+                        CASE
+                            WHEN s.total_backlogs = 0 THEN '0'
+                            WHEN s.total_backlogs BETWEEN 1 AND 2 THEN '1-2'
+                            WHEN s.total_backlogs BETWEEN 3 AND 5 THEN '3-5'
+                            WHEN s.total_backlogs BETWEEN 6 AND 10 THEN '6-10'
+                            ELSE '11+'
+                        END AS backlog_range
+                    FROM students s
+                    WHERE ($1::int IS NULL OR s.department_code = $1)
+                      AND EXISTS (
+                          SELECT 1 FROM student_semester_summary sem
+                          WHERE sem.student_id = s.student_id
+                            AND sem.academic_year = $2
+                      )
+                ),
+                counts AS (
+                    SELECT backlog_range, count(*)::int AS cnt
+                    FROM banded
+                    GROUP BY backlog_range
+                ),
+                total AS (
+                    SELECT sum(cnt)::int AS total FROM counts
+                )
+                SELECT c.backlog_range, c.cnt AS count,
+                       CASE WHEN t.total > 0
+                            THEN round(c.cnt * 100.0 / t.total, 1)
+                            ELSE 0 END AS percentage_of_total
+                FROM counts c, total t
+                ORDER BY
+                    CASE c.backlog_range
+                        WHEN '0' THEN 1
+                        WHEN '1-2' THEN 2
+                        WHEN '3-5' THEN 3
+                        WHEN '6-10' THEN 4
+                        WHEN '11+' THEN 5
+                    END
+                """,
+                department_code,
+                academic_year,
             )
-            SELECT c.backlog_range, c.cnt AS count,
-                   CASE WHEN t.total > 0
-                        THEN round(c.cnt * 100.0 / t.total, 1)
-                        ELSE 0 END AS percentage_of_total
-            FROM counts c, total t
-            ORDER BY
-                CASE c.backlog_range
-                    WHEN '0' THEN 1
-                    WHEN '1-2' THEN 2
-                    WHEN '3-5' THEN 3
-                    WHEN '6-10' THEN 4
-                    WHEN '11+' THEN 5
-                END
-            """,
-            department_code,
-        )
-        total = await self._fetchval(
-            """
-            SELECT count(*)::int FROM students
-            WHERE ($1::int IS NULL OR department_code = $1)
-            """,
-            department_code,
-        )
-        with_backlogs = await self._fetchval(
-            """
-            SELECT count(*)::int FROM students
-            WHERE ($1::int IS NULL OR department_code = $1)
-              AND total_backlogs > 0
-            """,
-            department_code,
-        )
+            total = await self._fetchval(
+                """
+                SELECT count(*)::int FROM students s
+                WHERE ($1::int IS NULL OR s.department_code = $1)
+                  AND EXISTS (
+                      SELECT 1 FROM student_semester_summary sem
+                      WHERE sem.student_id = s.student_id
+                        AND sem.academic_year = $2
+                  )
+                """,
+                department_code,
+                academic_year,
+            )
+            with_backlogs = await self._fetchval(
+                """
+                SELECT count(*)::int FROM students s
+                WHERE ($1::int IS NULL OR s.department_code = $1)
+                  AND s.total_backlogs > 0
+                  AND EXISTS (
+                      SELECT 1 FROM student_semester_summary sem
+                      WHERE sem.student_id = s.student_id
+                        AND sem.academic_year = $2
+                  )
+                """,
+                department_code,
+                academic_year,
+            )
+        else:
+            rows = await self._fetch(
+                """
+                WITH banded AS (
+                    SELECT
+                        s.student_id,
+                        CASE
+                            WHEN s.total_backlogs = 0 THEN '0'
+                            WHEN s.total_backlogs BETWEEN 1 AND 2 THEN '1-2'
+                            WHEN s.total_backlogs BETWEEN 3 AND 5 THEN '3-5'
+                            WHEN s.total_backlogs BETWEEN 6 AND 10 THEN '6-10'
+                            ELSE '11+'
+                        END AS backlog_range
+                    FROM students s
+                    WHERE ($1::int IS NULL OR s.department_code = $1)
+                ),
+                counts AS (
+                    SELECT backlog_range, count(*)::int AS cnt
+                    FROM banded
+                    GROUP BY backlog_range
+                ),
+                total AS (
+                    SELECT sum(cnt)::int AS total FROM counts
+                )
+                SELECT c.backlog_range, c.cnt AS count,
+                       CASE WHEN t.total > 0
+                            THEN round(c.cnt * 100.0 / t.total, 1)
+                            ELSE 0 END AS percentage_of_total
+                FROM counts c, total t
+                ORDER BY
+                    CASE c.backlog_range
+                        WHEN '0' THEN 1
+                        WHEN '1-2' THEN 2
+                        WHEN '3-5' THEN 3
+                        WHEN '6-10' THEN 4
+                        WHEN '11+' THEN 5
+                    END
+                """,
+                department_code,
+            )
+            total = await self._fetchval(
+                """
+                SELECT count(*)::int FROM students
+                WHERE ($1::int IS NULL OR department_code = $1)
+                """,
+                department_code,
+            )
+            with_backlogs = await self._fetchval(
+                """
+                SELECT count(*)::int FROM students
+                WHERE ($1::int IS NULL OR department_code = $1)
+                  AND total_backlogs > 0
+                """,
+                department_code,
+            )
         return {
             "department_code": department_code,
             "total_students": total or 0,
@@ -642,6 +731,7 @@ class AnalyticsRepository:
         *,
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Identify students meeting at-risk conditions (rule-based).
 
@@ -661,23 +751,49 @@ class AnalyticsRepository:
         backlog_thresh = settings.FACULTY_MENTEE_BACKLOG_THRESHOLD
         sgpa_thresh = settings.FACULTY_MENTEE_SGPA_THRESHOLD
 
-        students = await self._fetch(
-            """
-            SELECT
-                s.student_id,
-                s.full_name,
-                s.department_code,
-                s.current_semester,
-                s.overall_cgpa,
-                s.latest_sgpa,
-                s.total_backlogs,
-                s.overall_attendance_percentage
-            FROM students s
-            WHERE ($1::int IS NULL OR s.department_code = $1)
-            ORDER BY s.student_id
-            """,
-            department_code,
-        )
+        # If academic_year is specified, filter students who have semester records in that year
+        if academic_year:
+            students = await self._fetch(
+                """
+                SELECT
+                    s.student_id,
+                    s.full_name,
+                    s.department_code,
+                    s.current_semester,
+                    s.overall_cgpa,
+                    s.latest_sgpa,
+                    s.total_backlogs,
+                    s.overall_attendance_percentage
+                FROM students s
+                WHERE ($1::int IS NULL OR s.department_code = $1)
+                  AND EXISTS (
+                      SELECT 1 FROM student_semester_summary sem
+                      WHERE sem.student_id = s.student_id
+                        AND sem.academic_year = $2
+                  )
+                ORDER BY s.student_id
+                """,
+                department_code,
+                academic_year,
+            )
+        else:
+            students = await self._fetch(
+                """
+                SELECT
+                    s.student_id,
+                    s.full_name,
+                    s.department_code,
+                    s.current_semester,
+                    s.overall_cgpa,
+                    s.latest_sgpa,
+                    s.total_backlogs,
+                    s.overall_attendance_percentage
+                FROM students s
+                WHERE ($1::int IS NULL OR s.department_code = $1)
+                ORDER BY s.student_id
+                """,
+                department_code,
+            )
 
         flagged: List[Dict[str, Any]] = []
         for stu in students:
@@ -764,6 +880,7 @@ class AnalyticsRepository:
         *,
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
         threshold: float = 75.0,
     ) -> Dict[str, Any]:
         """Students below an attendance threshold in individual subjects.
@@ -783,14 +900,19 @@ class AnalyticsRepository:
             FROM attendance a
             JOIN students s ON s.student_id = a.student_id
             LEFT JOIN subjects sub ON sub.subject_id = a.subject_id
+            LEFT JOIN student_semester_summary sem
+                   ON sem.student_id = a.student_id
+                  AND sem.semester_no = a.semester_no
             WHERE a.attendance_percentage < $1
               AND ($2::int IS NULL OR s.department_code = $2)
               AND ($3::int IS NULL OR a.semester_no = $3)
+              AND ($4::text IS NULL OR sem.academic_year = $4)
             ORDER BY a.attendance_percentage
             """,
             threshold,
             department_code,
             semester_no,
+            academic_year,
         )
         return {
             "threshold": threshold,
@@ -804,6 +926,7 @@ class AnalyticsRepository:
         *,
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Subjects flagged for concerning metrics.
 
@@ -812,35 +935,72 @@ class AnalyticsRepository:
           - Fail rate above 20%
           - Average attendance below 75%
         """
-        rows = await self._fetch(
-            """
-            SELECT
-                p.subject_id,
-                sub.subject_code,
-                sub.subject_name,
-                p.semester_no,
-                count(*)::int AS total_students,
-                round(avg(p.percentage)::numeric, 2) AS average_percentage,
-                round(
-                    sum(CASE WHEN p.grade = 'F' THEN 1 ELSE 0 END)::numeric
-                    / count(*)::numeric * 100, 2
-                ) AS fail_rate,
-                (SELECT round(avg(a.attendance_percentage)::numeric, 2)
-                 FROM attendance a
-                 WHERE a.subject_id = p.subject_id
-                   AND a.semester_no = p.semester_no
-                ) AS average_attendance
-            FROM student_subject_performance p
-            JOIN students s ON s.student_id = p.student_id
-            LEFT JOIN subjects sub ON sub.subject_id = p.subject_id
-            WHERE ($1::int IS NULL OR s.department_code = $1)
-              AND ($2::int IS NULL OR p.semester_no = $2)
-            GROUP BY p.subject_id, sub.subject_code, sub.subject_name,
-                     p.semester_no
-            """,
-            department_code,
-            semester_no,
-        )
+        # If academic_year is specified, filter by subjects that have records in that year
+        # We need to join with student_semester_summary to filter by academic_year
+        if academic_year:
+            rows = await self._fetch(
+                """
+                SELECT
+                    p.subject_id,
+                    sub.subject_code,
+                    sub.subject_name,
+                    p.semester_no,
+                    count(*)::int AS total_students,
+                    round(avg(p.percentage)::numeric, 2) AS average_percentage,
+                    round(
+                        sum(CASE WHEN p.grade = 'F' THEN 1 ELSE 0 END)::numeric
+                        / count(*)::numeric * 100, 2
+                    ) AS fail_rate,
+                    (SELECT round(avg(a.attendance_percentage)::numeric, 2)
+                     FROM attendance a
+                     WHERE a.subject_id = p.subject_id
+                       AND a.semester_no = p.semester_no
+                    ) AS average_attendance
+                FROM student_subject_performance p
+                JOIN students s ON s.student_id = p.student_id
+                LEFT JOIN subjects sub ON sub.subject_id = p.subject_id
+                JOIN student_semester_summary sem ON sem.student_id = p.student_id
+                    AND sem.semester_no = p.semester_no
+                WHERE ($1::int IS NULL OR s.department_code = $1)
+                  AND ($2::int IS NULL OR p.semester_no = $2)
+                  AND sem.academic_year = $3
+                GROUP BY p.subject_id, sub.subject_code, sub.subject_name,
+                         p.semester_no
+                """,
+                department_code,
+                semester_no,
+                academic_year,
+            )
+        else:
+            rows = await self._fetch(
+                """
+                SELECT
+                    p.subject_id,
+                    sub.subject_code,
+                    sub.subject_name,
+                    p.semester_no,
+                    count(*)::int AS total_students,
+                    round(avg(p.percentage)::numeric, 2) AS average_percentage,
+                    round(
+                        sum(CASE WHEN p.grade = 'F' THEN 1 ELSE 0 END)::numeric
+                        / count(*)::numeric * 100, 2
+                    ) AS fail_rate,
+                    (SELECT round(avg(a.attendance_percentage)::numeric, 2)
+                     FROM attendance a
+                     WHERE a.subject_id = p.subject_id
+                       AND a.semester_no = p.semester_no
+                    ) AS average_attendance
+                FROM student_subject_performance p
+                JOIN students s ON s.student_id = p.student_id
+                LEFT JOIN subjects sub ON sub.subject_id = p.subject_id
+                WHERE ($1::int IS NULL OR s.department_code = $1)
+                  AND ($2::int IS NULL OR p.semester_no = $2)
+                GROUP BY p.subject_id, sub.subject_code, sub.subject_name,
+                         p.semester_no
+                """,
+                department_code,
+                semester_no,
+            )
 
         flagged: List[Dict[str, Any]] = []
         for r in rows:

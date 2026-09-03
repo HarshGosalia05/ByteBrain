@@ -8,10 +8,11 @@ import {
   getSubjectsNeedingAttention,
   type AnalyticsFilters,
 } from "@/lib/analytics-api"
+import { getAdminDashboard } from "@/lib/admin-api"
 
 import { ErrorState } from "@/components/shared/state/error-state"
-import { LoadingSkeleton } from "@/components/shared/state/loading-skeleton"
 import { AnalyticsOverviewView } from "@/components/admin/analytics/analytics-overview-view"
+import { AnalyticsFilterBar } from "@/components/admin/analytics/analytics-filter-bar"
 
 export default async function AnalyticsOverviewPage(props: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -32,13 +33,14 @@ export default async function AnalyticsOverviewPage(props: {
       typeof searchParams.academic_year === "string" ? searchParams.academic_year : null,
   }
 
-  const [deptRes, perfRes, attRes, backlogRes, riskRes, subjectsRes] = await Promise.all([
+  const [deptRes, perfRes, attRes, backlogRes, riskRes, subjectsRes, filterOptionsRes] = await Promise.all([
     getDepartmentOverview(filters),
     getPerformanceDistribution(filters),
     getAttendanceDistribution(filters),
     getBacklogDistribution(filters),
     getAtRiskStudents(filters),
     getSubjectsNeedingAttention(filters),
+    getAdminDashboard(),
   ])
 
   const firstError = [deptRes, perfRes, attRes, backlogRes, riskRes, subjectsRes].find((r) => !r.ok)
@@ -46,14 +48,19 @@ export default async function AnalyticsOverviewPage(props: {
     return <ErrorState title="Failed to load analytics overview" description={firstError.error.message} />
   }
 
+  const filterOptions = filterOptionsRes.ok ? filterOptionsRes.data.filters : { academic_years: [], departments: [], semesters: [] }
+
   return (
-    <AnalyticsOverviewView
-      department={deptRes.ok ? deptRes.data : null}
-      performance={perfRes.ok ? perfRes.data : null}
-      attendance={attRes.ok ? attRes.data : null}
-      backlog={backlogRes.ok ? backlogRes.data : null}
-      risk={riskRes.ok ? riskRes.data : null}
-      subjects={subjectsRes.ok ? subjectsRes.data : null}
-    />
+    <div className="flex flex-col gap-6">
+      <AnalyticsFilterBar filters={filterOptions} />
+      <AnalyticsOverviewView
+        department={deptRes.ok ? deptRes.data : null}
+        performance={perfRes.ok ? perfRes.data : null}
+        attendance={attRes.ok ? attRes.data : null}
+        backlog={backlogRes.ok ? backlogRes.data : null}
+        risk={riskRes.ok ? riskRes.data : null}
+        subjects={subjectsRes.ok ? subjectsRes.data : null}
+      />
+    </div>
   )
 }

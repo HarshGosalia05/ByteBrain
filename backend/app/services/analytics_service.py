@@ -395,6 +395,7 @@ class AnalyticsService:
         *,
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
     ) -> "AttendanceDistribution":
         """Distribution of students across attendance bands."""
         from app.schemas.analytics import (
@@ -405,7 +406,7 @@ class AnalyticsService:
         _validate_department_code(department_code)
         _validate_semester(semester_no)
         data = await self.repo.get_attendance_distribution(
-            department_code=department_code, semester_no=semester_no,
+            department_code=department_code, semester_no=semester_no, academic_year=academic_year,
         )
         buckets = [
             AttendanceDistributionBucket(
@@ -423,7 +424,7 @@ class AnalyticsService:
         )
 
     async def get_backlog_distribution(
-        self, *, department_code: Optional[int] = None,
+        self, *, department_code: Optional[int] = None, academic_year: Optional[str] = None,
     ) -> BacklogDistribution:
         """Distribution of backlogs across the student population."""
         from app.schemas.analytics import (
@@ -432,7 +433,7 @@ class AnalyticsService:
 
         _validate_department_code(department_code)
         data = await self.repo.get_backlog_distribution(
-            department_code=department_code,
+            department_code=department_code, academic_year=academic_year,
         )
         buckets = [
             BacklogDistributionBucket(
@@ -458,12 +459,13 @@ class AnalyticsService:
         *,
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
     ) -> AtRiskStudentsResult:
         """Students identified as at-risk by deterministic rules."""
         _validate_department_code(department_code)
         _validate_semester(semester_no)
         data = await self.repo.get_at_risk_students(
-            department_code=department_code, semester_no=semester_no,
+            department_code=department_code, semester_no=semester_no, academic_year=academic_year,
         )
         students = [
             AtRiskStudent(
@@ -493,6 +495,7 @@ class AnalyticsService:
         *,
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
         threshold: float = 75.0,
     ) -> BelowThresholdResult:
         """Students below an attendance threshold in individual subjects."""
@@ -502,6 +505,7 @@ class AnalyticsService:
         data = await self.repo.get_students_below_attendance_threshold(
             department_code=department_code,
             semester_no=semester_no,
+            academic_year=academic_year,
             threshold=threshold,
         )
         students = [
@@ -529,12 +533,13 @@ class AnalyticsService:
         *,
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
     ) -> SubjectsNeedingAttentionResult:
         """Subjects flagged for concerning metrics."""
         _validate_department_code(department_code)
         _validate_semester(semester_no)
         data = await self.repo.get_subjects_needing_attention(
-            department_code=department_code, semester_no=semester_no,
+            department_code=department_code, semester_no=semester_no, academic_year=academic_year,
         )
         subjects = [
             SubjectNeedingAttention(

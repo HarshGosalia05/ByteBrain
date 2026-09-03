@@ -281,7 +281,7 @@ class AdminRepository:
         )
         departments = await self._fetch(
             "SELECT dept_code AS department_code, department_name, "
-            "department_short_name FROM departments ORDER BY dept_code"
+            "department_short_name, total_semesters FROM departments ORDER BY dept_code"
         )
         semesters = await self._fetch(
             "SELECT DISTINCT semester_no FROM student_semester_summary "

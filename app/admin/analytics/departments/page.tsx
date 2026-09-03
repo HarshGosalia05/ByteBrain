@@ -6,9 +6,11 @@ import {
   getBacklogDistribution,
   type AnalyticsFilters,
 } from "@/lib/analytics-api"
+import { getAdminDashboard } from "@/lib/admin-api"
 
 import { ErrorState } from "@/components/shared/state/error-state"
 import { DepartmentAnalyticsView } from "@/components/admin/analytics/department-analytics-view"
+import { AnalyticsFilterBar } from "@/components/admin/analytics/analytics-filter-bar"
 
 export default async function DepartmentAnalyticsPage(props: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -29,11 +31,12 @@ export default async function DepartmentAnalyticsPage(props: {
       typeof searchParams.academic_year === "string" ? searchParams.academic_year : null,
   }
 
-  const [overviewRes, perfRes, attRes, backlogRes] = await Promise.all([
+  const [overviewRes, perfRes, attRes, backlogRes, filterOptionsRes] = await Promise.all([
     getDepartmentOverview(filters),
     getPerformanceDistribution(filters),
     getAttendanceDistribution(filters),
     getBacklogDistribution(filters),
+    getAdminDashboard(),
   ])
 
   const firstError = [overviewRes, perfRes, attRes, backlogRes].find((r) => !r.ok)
@@ -41,12 +44,17 @@ export default async function DepartmentAnalyticsPage(props: {
     return <ErrorState title="Failed to load department analytics" description={firstError.error.message} />
   }
 
+  const filterOptions = filterOptionsRes.ok ? filterOptionsRes.data.filters : { academic_years: [], departments: [], semesters: [] }
+
   return (
-    <DepartmentAnalyticsView
-      overview={overviewRes.ok ? overviewRes.data : null}
-      performance={perfRes.ok ? perfRes.data : null}
-      attendance={attRes.ok ? attRes.data : null}
-      backlog={backlogRes.ok ? backlogRes.data : null}
-    />
+    <div className="flex flex-col gap-6">
+      <AnalyticsFilterBar filters={filterOptions} />
+      <DepartmentAnalyticsView
+        overview={overviewRes.ok ? overviewRes.data : null}
+        performance={perfRes.ok ? perfRes.data : null}
+        attendance={attRes.ok ? attRes.data : null}
+        backlog={backlogRes.ok ? backlogRes.data : null}
+      />
+    </div>
   )
 }

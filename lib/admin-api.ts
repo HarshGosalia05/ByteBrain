@@ -24,6 +24,7 @@ export type DepartmentOption = {
   department_code: number
   department_name: string | null
   department_short_name: string | null
+  total_semesters: number
 }
 
 export type DashboardFilterOptions = {
