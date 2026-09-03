@@ -2,12 +2,14 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { SideNav } from "@/components/faculty/side-nav"
 import { TopBar } from "@/components/faculty/top-bar"
 import { Chatbot } from "@/components/shared/chatbot"
+import { derivePageContext } from "@/lib/page-context"
 import type { FacultyProfile } from "@/lib/faculty-api"
 
 function Brand() {
@@ -30,6 +32,8 @@ export function FacultyShell({
 }) {
   const [open, setOpen] = React.useState(false)
   const closeButtonRef = React.useRef<HTMLButtonElement>(null)
+  const pathname = usePathname()
+  const pageContext = derivePageContext(pathname, "Faculty")
 
   React.useEffect(() => {
     if (!open) return
@@ -93,7 +97,7 @@ export function FacultyShell({
       )}
 
       {/* Floating Chatbot Assistant */}
-      <Chatbot role="Faculty" />
+      <Chatbot role="Faculty" pageContext={pageContext} />
     </div>
   )
 }

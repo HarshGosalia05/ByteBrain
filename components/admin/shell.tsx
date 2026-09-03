@@ -2,12 +2,14 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { SideNav } from "@/components/admin/side-nav"
 import { TopBar } from "@/components/admin/top-bar"
 import { Chatbot } from "@/components/shared/chatbot"
+import { derivePageContext } from "@/lib/page-context"
 
 function Brand() {
   return (
@@ -29,6 +31,8 @@ export function AdminShell({
 }) {
   const [open, setOpen] = React.useState(false)
   const closeButtonRef = React.useRef<HTMLButtonElement>(null)
+  const pathname = usePathname()
+  const pageContext = derivePageContext(pathname, "Admin")
 
   React.useEffect(() => {
     if (!open) return
@@ -96,7 +100,7 @@ export function AdminShell({
       )}
 
       {/* Floating Chatbot Assistant */}
-      <Chatbot role="Admin" />
+      <Chatbot role="Admin" pageContext={pageContext} />
     </div>
   )
 }

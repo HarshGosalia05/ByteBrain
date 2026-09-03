@@ -1,4 +1,5 @@
 import { getSessionUser, getSessionToken } from "./student-session.ts"
+import { PAGE_CONTEXTS } from "./page-context.ts"
 
 const FASTAPI_URL = (process.env.FASTAPI_URL ?? "http://localhost:8000").replace(/\/+$/, "")
 
@@ -11,6 +12,7 @@ export interface ChatApiRequest {
   message: string
   intent?: string | null
   target_student_id?: string | null
+  page_context?: string | null
   conversation_history?: ConversationHistoryItem[]
 }
 
@@ -121,6 +123,13 @@ export async function sendChatMessage(req: ChatApiRequest): Promise<ChatBffResul
   // Forward target_student_id for faculty and admin roles
   if ((session.role === "Faculty" || session.role === "Admin") && req.target_student_id) {
     payload.target_student_id = req.target_student_id
+  }
+
+  // Forward page_context ONLY if it is a known, allowlisted identifier. The
+  // backend re-validates and role-scopes this server-side; it is a context hint,
+  // never authorization.
+  if (req.page_context && (Object.values(PAGE_CONTEXTS) as string[]).includes(req.page_context)) {
+    payload.page_context = req.page_context
   }
 
   try {

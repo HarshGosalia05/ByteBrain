@@ -46,6 +46,14 @@ class ChatRequest(BaseModel):
         default=None,
         description="Target student ID when querying as faculty (subject to scope check)",
     )
+    page_context: str | None = Field(
+        default=None,
+        max_length=64,
+        description=(
+            "Current page/route context from the frontend (context hint only, "
+            "never authorization). Server-side allowlisted and role-scoped."
+        ),
+    )
     conversation_history: list[ConversationMessage] = Field(
         default_factory=list,
         description="Prior conversation history for context (non-authoritative)",

@@ -367,7 +367,7 @@ class TestChatOrchestrator(unittest.TestCase):
             ("Student", {"role": "Student", "student_id": "STU1"}, "my sgpa", "academic_performance", None, "student_academic_performance_tool", {"student_id": "STU1"}),
             ("Student", {"role": "Student", "student_id": "STU1"}, "my attendance", "attendance", None, "student_attendance_tool", {"student_id": "STU1"}),
             ("Student", {"role": "Student", "student_id": "STU1"}, "weak subjects", "subject_analysis", None, "student_subject_analysis_tool", {"student_id": "STU1"}),
-            ("Student", {"role": "Student", "student_id": "STU1"}, "will i fail predicted at-risk", "prediction_explanation", None, "student_prediction_explanation_tool", {"student_id": "STU1"}),
+            ("Student", {"role": "Student", "student_id": "STU1"}, "will i fail predicted at-risk", "prediction_explanation", None, "student_prediction_explanation_tool", {"student_id": "STU1", "prediction_type": "all_available"}),
             ("Student", {"role": "Student", "student_id": "STU1"}, "career guidance job role", "career_guidance", None, "student_career_coach_tool", {"student_id": "STU1", "requested_intent": "career_guidance"}),
             # Faculty (5)
             ("Faculty", {"role": "Faculty", "faculty_id": "FAC1"}, "student performance", "student_performance", "STU2", "faculty_student_analytics_tool", {"faculty_id": "FAC1", "target_student_id": "STU2", "intent": "student_performance"}),

@@ -152,6 +152,7 @@ class IntentRequest(BaseModel):
     message: str
     intent: IntentType | None = None
     target_student_id: str | None = None
+    page_context: str | None = None
     conversation_history: list[ConversationMessage] | None = None
 
     model_config = ConfigDict(extra="forbid")

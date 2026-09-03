@@ -12,6 +12,7 @@ import type { ChatApiRequest } from "@/lib/chat-api"
 export function Chatbot({
   role = "Student",
   targetStudentId = null,
+  pageContext = null,
   className,
 }: ChatbotProps) {
   const [isOpen, setIsOpen] = React.useState(false)
@@ -65,6 +66,7 @@ export function Chatbot({
     const reqPayload: ChatApiRequest = {
       message: text,
       target_student_id: role === "Faculty" || role === "Admin" ? targetStudentId : null,
+      page_context: pageContext ?? null,
       conversation_history: recentHistory,
     }
 

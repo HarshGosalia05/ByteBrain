@@ -17,5 +17,6 @@ export interface UIMessage {
 export interface ChatbotProps {
   role?: UserRole
   targetStudentId?: string | null
+  pageContext?: string | null
   className?: string
 }

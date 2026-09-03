@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -52,6 +53,10 @@ from app.services.genai_provider import (
 )
 from app.services.genai_service import GenAIService
 from app.services.intent_router import IntentRouter
+from app.services.page_context import (
+    normalize_page_context,
+    page_context_label,
+)
 from app.services.student_academic_tool import StudentAcademicTool
 from app.services.student_attendance_tool import StudentAttendanceTool
 from app.services.student_career_coach import StudentCareerCoachTool
@@ -84,6 +89,20 @@ UNAUTHORIZED_INTENT_MSG = (
 TOOL_NOT_IMPLEMENTED_MSG = (
     "The requested tool or analytics feature is not currently available."
 )
+
+_PREDICTION_TYPE_PATTERN = re.compile(
+    r"\b(m[1-4])\b",
+    re.IGNORECASE,
+)
+
+def _extract_prediction_type(user_message: str) -> str | None:
+    """Extract a specific prediction type (m1-m4) from the user message.
+
+    Returns the matched prediction type string or None if no specific type
+    is mentioned. When None, the tool returns all available predictions.
+    """
+    match = _PREDICTION_TYPE_PATTERN.search(user_message)
+    return match.group(1).lower() if match else None
 
 def _format_verified_data_summary(data: dict[str, Any]) -> str:
     """Format structured verified tool data deterministically without LLM generation."""
@@ -245,6 +264,12 @@ class ChatOrchestrator:
                     student_id=user_context_id,
                     requested_intent=decision.intent,
                 )
+            elif tool_name == "student_prediction_explanation_tool":
+                prediction_type = _extract_prediction_type(request.message)
+                result = await tool_instance.execute(
+                    student_id=user_context_id,
+                    prediction_type=prediction_type or "all_available",
+                )
             else:
                 result = await tool_instance.execute(student_id=user_context_id)
             return tool_instance.to_verified_context(result)
@@ -316,6 +341,9 @@ class ChatOrchestrator:
         """Process a chat request through the full G0-G2 pipeline."""
         start_time = time.perf_counter()
         role, user_context_id = self._extract_identity(user)
+        # Page context is a context hint only, normalized & allowlisted per role.
+        # It is NEVER used for authorization; tampered/unknown values are dropped.
+        page_context = normalize_page_context(request.page_context, role)
         clean_message = request.message.strip()
         if not clean_message:
             raise HTTPException(
@@ -336,6 +364,7 @@ class ChatOrchestrator:
             message=clean_message,
             intent=request.intent,
             target_student_id=request.target_student_id if role == "Faculty" else None,
+            page_context=page_context,
             conversation_history=request.conversation_history,
         )
         decision = self._router.route(intent_request)
@@ -349,6 +378,7 @@ class ChatOrchestrator:
                 verified_context=[],
                 conversation_history=request.conversation_history,
                 user_message=clean_message,
+                page_context=page_context_label(page_context, role),
             )
             try:
                 genai_resp = await self._genai_service.generate(genai_req)
@@ -489,6 +519,7 @@ class ChatOrchestrator:
             verified_context=[verified_ctx],
             conversation_history=request.conversation_history,
             user_message=clean_message,
+            page_context=page_context_label(page_context, role),
         )
 
         logger.info(
@@ -530,7 +561,7 @@ class ChatOrchestrator:
             else:
                 data_summary = _format_verified_data_summary(verified_ctx.data)
                 fallback_msg = (
-                    f"AI explanation unavailable (rate-limited) â€” showing verified data:\n\n{data_summary}"
+                    f"AI explanation unavailable (rate-limited) — showing verified data:\n\n{data_summary}"
                     if verified_ctx and verified_ctx.data
                     else "The AI assistant is temporarily rate-limited. Your academic data is available, but the AI explanation cannot be generated right now. Please try again shortly."
                 )
@@ -555,7 +586,7 @@ class ChatOrchestrator:
             else:
                 data_summary = _format_verified_data_summary(verified_ctx.data)
                 fallback_msg = (
-                    f"AI explanation unavailable (response timed out) â€” showing verified data:\n\n{data_summary}"
+                    f"AI explanation unavailable (response timed out) — showing verified data:\n\n{data_summary}"
                     if verified_ctx and verified_ctx.data
                     else "The chat assistant took longer than usual to generate an explanation. Please try asking again shortly."
                 )
@@ -580,7 +611,7 @@ class ChatOrchestrator:
             else:
                 data_summary = _format_verified_data_summary(verified_ctx.data)
                 fallback_msg = (
-                    f"AI explanation unavailable (service unavailable) â€” showing verified data:\n\n{data_summary}"
+                    f"AI explanation unavailable (service unavailable) — showing verified data:\n\n{data_summary}"
                     if verified_ctx and verified_ctx.data
                     else "The AI chat service is temporarily unavailable. Please try again later."
                 )
@@ -602,6 +633,32 @@ class ChatOrchestrator:
                 "namaste", "pranam", "aati", "madad", "batao", "dikhao",
             )
         )
+        is_gujarati = any(
+            w in lowered
+            for w in (
+                "kem cho", "kem chho", "gujarati", "chhe", "su", "karvu",
+                "kay", "mate", "aave", "vat",
+            )
+        )
+        if is_gujarati and not is_hindi:
+            if role == "Student":
+                return (
+                    "Haan, main Hindi, Hinglish ane Gujarati samajhto. "
+                    "Tame mujhse apni academic performance, attendance, "
+                    "subjects, predictions, ya career guidance vise puchh sako."
+                )
+            if role == "Faculty":
+                return (
+                    "Haan, main Hindi, Hinglish ane Gujarati samajhto. "
+                    "Tame mujhse student analytics, attendance records, "
+                    "subject performance, flagged students, ya department "
+                    "insights vise puchh sako."
+                )
+            return (
+                "Haan, main Hindi, Hinglish ane Gujarati samajhto. "
+                "Tame mujhse institution analytics, department comparisons, "
+                "academic trends, ya ML insights vise puchh sako."
+            )
         if is_hindi:
             if role == "Student":
                 return (

@@ -89,6 +89,7 @@ class GenAIRequest(BaseModel):
     verified_context: list[VerifiedContext] = Field(default_factory=list)
     conversation_history: list[ConversationMessage] = Field(default_factory=list)
     user_message: str
+    page_context: str | None = None
 
 
 class GenAIResponse(BaseModel):

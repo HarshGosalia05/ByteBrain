@@ -90,6 +90,26 @@ test("empty or whitespace-only message -> 422 invalid, fetch never called", asyn
   assert.equal(calls.length, 0)
 })
 
+test("sendChatMessage forwards a known page_context and drops an unknown one", async () => {
+  mockSession = { role: "Student", student_id: "STU000001", user_id: "STU000001" }
+
+  // Valid known page context is forwarded
+  await sendChatMessage({ message: "why is this low?", page_context: "student_attendance" })
+  let call = calls[0]
+  let body = JSON.parse(String(call.options?.body))
+  assert.equal(body.page_context, "student_attendance")
+
+  calls.length = 0
+  // An unknown/injected arbitrary value is dropped (never forwarded). Note the
+  // backend additionally role-scopes known values, since a known value from
+  // another role (e.g. student_attendance vs admin_analytics) is still rejected
+  // server-side.
+  await sendChatMessage({ message: "why is this low?", page_context: "../../etc/passwd" })
+  call = calls[0]
+  body = JSON.parse(String(call.options?.body))
+  assert.equal(body.page_context, undefined)
+})
+
 test("sendChatMessage sends sanitized payload with bearer token and returns ChatApiResponse", async () => {
   const result = await sendChatMessage({
     message: "What is my SGPA?",
