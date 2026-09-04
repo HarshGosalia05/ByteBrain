@@ -14,6 +14,13 @@ export default async function AdminHealthPage(props: {
 
   const searchParams = await props.searchParams
 
+  const batch =
+    typeof searchParams.batch === "string" && searchParams.batch
+      ? searchParams.batch
+      : typeof searchParams.academic_year === "string" && searchParams.academic_year
+        ? searchParams.academic_year
+        : null
+
   // Handle department_code: can be string | string[] | undefined
   const dp = searchParams.department_code
   const department_code =
@@ -26,13 +33,14 @@ export default async function AdminHealthPage(props: {
           : null
 
   // Handle other filters
-  const ay = typeof searchParams.academic_year === "string" ? searchParams.academic_year : null
-  const semRaw = searchParams.semester
-  const semester = typeof semRaw === "string" && semRaw ? parseInt(semRaw, 10) || null : null
+  const semester = typeof searchParams.semester === "string" && searchParams.semester
+    ? parseInt(searchParams.semester, 10) || null
+    : null
 
   const filters: AdminDashboardFilters = {
     department_code,
-    academic_year: ay,
+    batch,
+    academic_year: batch,
     semester,
   }
 

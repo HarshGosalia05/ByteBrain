@@ -76,8 +76,36 @@ def _latest_attempt_per_subject(
 # ---------------------------------------------------------------------------
 
 
+def _is_completed_semester(row: Dict[str, Any]) -> bool:
+    """Determine if a semester has a completed result (not pending).
+
+    Uses multiple signals in priority order:
+    1. Explicit pending indicators in semester_result or semester_grade
+    2. semester_total_marks = 0 → pending (no marks recorded yet)
+    3. semester_sgpa = 0 with no total marks → pending
+    """
+    total_marks = row.get("semester_total_marks")
+    sgpa = row.get("sgpa")
+
+    if total_marks is not None and int(total_marks) == 0:
+        return False
+    if sgpa is not None and float(sgpa) == 0 and (total_marks is None or int(total_marks) == 0):
+        return False
+
+    result = row.get("semester_result")
+    if result is not None:
+        return str(result).lower() not in ("pending", "final result pending")
+    grade = row.get("semester_grade")
+    if grade is not None:
+        return str(grade).lower() not in ("pending", "final result pending")
+    return False
+
+
 def _compute_movement(rows: List[Dict[str, Any]], key: str) -> Dict[str, Any]:
-    valid = [r for r in rows if r.get(key) is not None]
+    valid = [
+        r for r in rows
+        if r.get(key) is not None and _is_completed_semester(r)
+    ]
     if len(valid) < 2:
         return {"available": False, "metric": key}
     previous = valid[-2]
@@ -103,7 +131,7 @@ def _compute_movement(rows: List[Dict[str, Any]], key: str) -> Dict[str, Any]:
 
 
 def _overall_direction(rows: List[Dict[str, Any]]) -> str:
-    valid = [r for r in rows if r.get("sgpa") is not None]
+    valid = [r for r in rows if r.get("sgpa") is not None and _is_completed_semester(r)]
     if len(valid) < 2:
         return "insufficient"
     diff = float(valid[-1]["sgpa"]) - float(valid[0]["sgpa"])
@@ -131,8 +159,8 @@ def _trend_interpretation(
         )
     if sgpa["direction"] == "down":
         return (
-            f"Your performance declined by {abs(delta):.2f} SGPA in the "
-            f"latest semester."
+            f"Your performance declined by {abs(delta):.2f} SGPA from "
+            f"Semester {prev_sem} to Semester {cur_sem}."
         )
     return (
         f"Your SGPA held steady at {float(sgpa['current_value']):.2f} in "

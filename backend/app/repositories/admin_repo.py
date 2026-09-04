@@ -33,6 +33,24 @@ class AdminRepository:
             row = await conn.fetchrow(query, *args)
             return dict(row) if row else None
 
+    @staticmethod
+    def _batch_sql(param: str = "$2", alias: str = "s") -> str:
+        return f"""(
+            {param}::text IS NULL
+            OR {alias}.admission_year::text = {param}
+            OR {alias}.admission_year = CASE 
+                WHEN {param} ~ '^[0-9]{{2}}-[0-9]{{2}}$' THEN ('20' || split_part({param}, '-', 1))::int
+                WHEN {param} ~ '^[0-9]{{4}}-[0-9]{{2,4}}$' THEN split_part({param}, '-', 1)::int
+                WHEN {param} ~ '^[0-9]{{4}}$' THEN {param}::int
+                ELSE -1
+            END
+            OR (EXISTS (
+                SELECT 1 FROM student_semester_summary _sss
+                WHERE _sss.student_id = {alias}.student_id
+                  AND (_sss.academic_year = {param} OR _sss.academic_year = ('20' || {param}) OR ('20' || _sss.academic_year) = {param} OR (_sss.academic_year = '2026-2027' AND ({param} = '2026-27' OR {param} = '26-27')))
+            ))
+        )"""
+
     async def get_overall_counts(
         self,
         department_code: Optional[int],
@@ -40,22 +58,18 @@ class AdminRepository:
         semester: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Students / faculty / departments totals scoped by active filters."""
+        batch_cond = self._batch_sql("$2", "s")
         row = await self._fetchrow(
-            """
+            f"""
             WITH filtered_students AS (
                 SELECT DISTINCT s.student_id
                 FROM students s
                 LEFT JOIN student_semester_summary sem ON sem.student_id = s.student_id
                 WHERE ($1::int IS NULL OR s.department_code = $1)
-                  AND (
-                      $2::text IS NULL 
-                      OR sem.academic_year = $2 
-                      OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
-                      OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
-                  )
+                  AND {batch_cond}
                   AND ($3::int IS NULL OR sem.semester_no = $3)
                   AND (
-                      ($2::text IS NULL AND $3::int IS NULL)
+                      $3::int IS NULL
                       OR sem.semester_no IS NOT NULL
                   )
             )
@@ -81,8 +95,9 @@ class AdminRepository:
         semester: Optional[int],
     ) -> Dict[str, Any]:
         """Average SGPA / percentage / attendance across semester summaries."""
+        batch_cond = self._batch_sql("$2", "s")
         row = await self._fetchrow(
-            """
+            f"""
             SELECT
                 AVG(sem.semester_sgpa) AS avg_sgpa,
                 AVG(sem.semester_percentage) AS avg_percentage,
@@ -90,12 +105,7 @@ class AdminRepository:
             FROM student_semester_summary sem
             JOIN students s ON s.student_id = sem.student_id
             WHERE ($1::int IS NULL OR s.department_code = $1)
-              AND (
-                  $2::text IS NULL 
-                  OR sem.academic_year = $2 
-                  OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
-                  OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
-              )
+              AND {batch_cond}
               AND ($3::int IS NULL OR sem.semester_no = $3)
             """,
             (department_code, academic_year, semester),
@@ -109,22 +119,18 @@ class AdminRepository:
         semester: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Stored risk levels from risk_predictions scoped to filtered students."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             WITH filtered_students AS (
                 SELECT DISTINCT s.student_id
                 FROM students s
                 LEFT JOIN student_semester_summary sem ON sem.student_id = s.student_id
                 WHERE ($1::int IS NULL OR s.department_code = $1)
-                  AND (
-                      $2::text IS NULL 
-                      OR sem.academic_year = $2 
-                      OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
-                      OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
-                  )
+                  AND {batch_cond}
                   AND ($3::int IS NULL OR sem.semester_no = $3)
                   AND (
-                      ($2::text IS NULL AND $3::int IS NULL)
+                      $3::int IS NULL
                       OR sem.semester_no IS NOT NULL
                   )
             )
@@ -143,8 +149,9 @@ class AdminRepository:
         semester: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Per-department average percentage + SGPA from semester summaries."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             SELECT
                 s.department_code,
                 COALESCE(d.department_name, s.department_name) AS department_name,
@@ -154,12 +161,7 @@ class AdminRepository:
             JOIN students s ON s.student_id = sem.student_id
             LEFT JOIN departments d ON d.dept_code = s.department_code
             WHERE ($1::int IS NULL OR s.department_code = $1)
-              AND (
-                  $2::text IS NULL 
-                  OR sem.academic_year = $2 
-                  OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
-                  OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
-              )
+              AND {batch_cond}
               AND ($3::int IS NULL OR sem.semester_no = $3)
             GROUP BY s.department_code, d.department_name, s.department_name
             ORDER BY s.department_code
@@ -173,8 +175,9 @@ class AdminRepository:
         academic_year: Optional[str],
     ) -> List[Dict[str, Any]]:
         """Average SGPA / percentage per semester, ordered numerically."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             SELECT
                 sem.semester_no AS semester,
                 AVG(sem.semester_sgpa) AS avg_sgpa,
@@ -183,12 +186,7 @@ class AdminRepository:
             FROM student_semester_summary sem
             JOIN students s ON s.student_id = sem.student_id
             WHERE ($1::int IS NULL OR s.department_code = $1)
-              AND (
-                  $2::text IS NULL 
-                  OR sem.academic_year = $2 
-                  OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
-                  OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
-              )
+              AND {batch_cond}
             GROUP BY sem.semester_no
             ORDER BY sem.semester_no
             """,
@@ -206,21 +204,18 @@ class AdminRepository:
         Scoping goes through ``student_subject_enrollment`` because the
         attendance table only carries ``enrollment_record_id`` + ``semester_no``.
         """
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             SELECT
                 COALESCE(a.attendance_status, 'Unknown') AS status,
                 COUNT(*) AS count
             FROM attendance a
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = a.enrollment_record_id
+            JOIN students s ON s.student_id = e.student_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND (
-                  $2::text IS NULL 
-                  OR e.academic_year = $2 
-                  OR (e.academic_year = '2026-2027' AND $2 = '2026-27')
-                  OR (e.academic_year = '2026-27' AND $2 = '2026-2027')
-              )
+              AND {batch_cond}
               AND ($3::int IS NULL OR e.semester_no = $3)
             GROUP BY COALESCE(a.attendance_status, 'Unknown')
             """,
@@ -234,19 +229,16 @@ class AdminRepository:
         semester: Optional[int],
     ) -> int:
         """Count of subject-level attendance rows marked exam-ineligible."""
+        batch_cond = self._batch_sql("$2", "s")
         row = await self._fetchrow(
-            """
+            f"""
             SELECT COUNT(*) AS count
             FROM attendance a
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = a.enrollment_record_id
+            JOIN students s ON s.student_id = e.student_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND (
-                  $2::text IS NULL 
-                  OR e.academic_year = $2 
-                  OR (e.academic_year = '2026-2027' AND $2 = '2026-27')
-                  OR (e.academic_year = '2026-27' AND $2 = '2026-2027')
-              )
+              AND {batch_cond}
               AND ($3::int IS NULL OR e.semester_no = $3)
               AND COALESCE(a.eligibility_status, 'Not Eligible') = 'Not Eligible'
             """,
@@ -266,8 +258,9 @@ class AdminRepository:
         canonical marks derivation where a missing end-sem keeps derived
         fields NULL. Scoping goes through ``enrollment_record_id``.
         """
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             SELECT
                 CASE
                     WHEN p.result_status IS NULL THEN 'Pending'
@@ -278,13 +271,9 @@ class AdminRepository:
             FROM student_subject_performance p
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = p.enrollment_record_id
+            JOIN students s ON s.student_id = e.student_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND (
-                  $2::text IS NULL 
-                  OR e.academic_year = $2 
-                  OR (e.academic_year = '2026-2027' AND $2 = '2026-27')
-                  OR (e.academic_year = '2026-27' AND $2 = '2026-2027')
-              )
+              AND {batch_cond}
               AND ($3::int IS NULL OR e.semester_no = $3)
             GROUP BY 1
             """,
@@ -299,8 +288,9 @@ class AdminRepository:
         limit: int = 5,
     ) -> List[Dict[str, Any]]:
         """Subjects with the most Fail results (weak-subject indicator)."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             SELECT
                 e.subject_code,
                 e.subject_name,
@@ -309,13 +299,9 @@ class AdminRepository:
             FROM student_subject_performance p
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = p.enrollment_record_id
+            JOIN students s ON s.student_id = e.student_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND (
-                  $2::text IS NULL 
-                  OR e.academic_year = $2 
-                  OR (e.academic_year = '2026-2027' AND $2 = '2026-27')
-                  OR (e.academic_year = '2026-27' AND $2 = '2026-2027')
-              )
+              AND {batch_cond}
               AND ($3::int IS NULL OR e.semester_no = $3)
             GROUP BY e.subject_code, e.subject_name
             HAVING COUNT(*) FILTER (WHERE UPPER(p.result_status) = 'FAIL') > 0
@@ -332,19 +318,15 @@ class AdminRepository:
         semester: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Per-department risk distribution for the highest-risk insight."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             WITH filtered_students AS (
                 SELECT DISTINCT s.student_id
                 FROM students s
                 LEFT JOIN student_semester_summary sem ON sem.student_id = s.student_id
                 WHERE ($1::int IS NULL OR s.department_code = $1)
-                  AND (
-                      $2::text IS NULL 
-                      OR sem.academic_year = $2 
-                      OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
-                      OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
-                  )
+                  AND {batch_cond}
                   AND ($3::int IS NULL OR sem.semester_no = $3)
                   AND (
                       ($2::text IS NULL AND $3::int IS NULL)
@@ -368,25 +350,60 @@ class AdminRepository:
             (department_code, academic_year, semester),
         )
 
-    async def get_filter_options(self) -> Dict[str, Any]:
-        """Available academic years / departments / semesters / career domains / dream roles for filters."""
-        years = await self._fetch(
-            "SELECT DISTINCT CASE WHEN academic_year = '2026-2027' THEN '2026-27' ELSE academic_year END AS academic_year "
-            "FROM student_semester_summary "
-            "WHERE academic_year IS NOT NULL ORDER BY academic_year"
+    async def get_filter_options(self, department_code: Optional[int] = None) -> Dict[str, Any]:
+        """Available starting batch years / departments / semesters / career domains / dream roles for filters.
+
+        Returns normalized starting-batch years (e.g. "2023") derived from
+        ``students.admission_year``.  Only years that have at least one
+        student with a matching admission year are included, so the
+        dropdown never shows empty cohorts.
+        """
+        batches_rows = await self._fetch(
+            """
+            SELECT DISTINCT admission_year
+            FROM students
+            WHERE admission_year IS NOT NULL
+              AND ($1::int IS NULL OR department_code = $1)
+            ORDER BY admission_year ASC
+            """,
+            (department_code,),
         )
+        admission_years = [str(r["admission_year"]) for r in batches_rows]
+
         departments = await self._fetch(
-            "SELECT d.dept_code AS department_code, d.department_name, "
-            "d.department_short_name, d.total_semesters, "
-            "COALESCE( "
-            "  (SELECT array_agg(DISTINCT sem.semester_no ORDER BY sem.semester_no) "
-            "   FROM student_semester_summary sem "
-            "   JOIN students s ON s.student_id = sem.student_id "
-            "   WHERE s.department_code = d.dept_code), "
-            "  ARRAY[]::int[] "
-            ") AS semesters "
-            "FROM departments d ORDER BY d.dept_code"
+            """
+            SELECT d.dept_code AS department_code, d.department_name,
+                   d.department_short_name, d.total_semesters,
+                   COALESCE(
+                     (SELECT array_agg(DISTINCT sem.semester_no ORDER BY sem.semester_no)
+                      FROM student_semester_summary sem
+                      JOIN students s ON s.student_id = sem.student_id
+                      WHERE s.department_code = d.dept_code),
+                     ARRAY[]::int[]
+                   ) AS semesters,
+                   COALESCE(
+                     (SELECT array_agg(DISTINCT s.admission_year ORDER BY s.admission_year)
+                      FROM students s
+                      WHERE s.department_code = d.dept_code AND s.admission_year IS NOT NULL),
+                     ARRAY[]::int[]
+                   ) AS admission_years
+            FROM departments d ORDER BY d.dept_code
+            """
         )
+        dept_list = []
+        department_batches: Dict[str, List[str]] = {}
+        for d in departments:
+            d_dict = dict(d)
+            dept_code = d_dict.get("department_code")
+            adm_years = d_dict.pop("admission_years", []) or []
+
+            dept_b = [str(y) for y in adm_years if y]
+
+            d_dict["batches"] = dept_b
+            dept_list.append(d_dict)
+            if dept_code is not None:
+                department_batches[str(dept_code)] = dept_b
+
         semesters = await self._fetch(
             "SELECT DISTINCT semester_no FROM student_semester_summary "
             "WHERE semester_no IS NOT NULL ORDER BY semester_no"
@@ -399,9 +416,12 @@ class AdminRepository:
             "SELECT DISTINCT dream_job_role FROM career_preferences "
             "WHERE dream_job_role IS NOT NULL AND dream_job_role != '' ORDER BY dream_job_role"
         )
+
         return {
-            "academic_years": [r["academic_year"] for r in years],
-            "departments": departments,
+            "batches": admission_years,
+            "academic_years": admission_years,
+            "departments": dept_list,
+            "department_batches": department_batches,
             "semesters": [r["semester_no"] for r in semesters],
             "preferred_domains": [r["preferred_domain"] for r in domains],
             "dream_roles": [r["dream_job_role"] for r in roles],
@@ -415,21 +435,19 @@ class AdminRepository:
         academic_year: Optional[str],
         semester: Optional[int],
     ) -> Dict[str, Any]:
-        """Scope-level Pass / Fail counts (Pending is neither).
-
-        NULL ``result_status`` means Pending (end-sem not entered) and is
-        excluded from both counts — a Pending row is never a Fail.
-        """
+        """Scope-level Pass / Fail counts (Pending is neither)."""
+        batch_cond = self._batch_sql("$2", "s")
         row = await self._fetchrow(
-            """
+            f"""
             SELECT
                 COUNT(*) FILTER (WHERE UPPER(p.result_status) = 'PASS') AS pass_count,
                 COUNT(*) FILTER (WHERE UPPER(p.result_status) = 'FAIL') AS fail_count
             FROM student_subject_performance p
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = p.enrollment_record_id
+            JOIN students s ON s.student_id = e.student_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND {batch_cond}
               AND ($3::int IS NULL OR e.semester_no = $3)
             """,
             (department_code, academic_year, semester),
@@ -443,15 +461,17 @@ class AdminRepository:
         semester: Optional[int],
     ) -> int:
         """Sum of credits on enrollments whose subject result is Pass."""
+        batch_cond = self._batch_sql("$2", "s")
         row = await self._fetchrow(
-            """
+            f"""
             SELECT COALESCE(SUM(e.credits), 0) AS credits_earned
             FROM student_subject_enrollment e
             JOIN student_subject_performance p
               ON p.enrollment_record_id = e.enrollment_record_id
+            JOIN students s ON s.student_id = e.student_id
             WHERE UPPER(p.result_status) = 'PASS'
               AND ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND {batch_cond}
               AND ($3::int IS NULL OR e.semester_no = $3)
             """,
             (department_code, academic_year, semester),
@@ -465,8 +485,9 @@ class AdminRepository:
         semester: Optional[int],
     ) -> List[Dict[str, Any]]:
         """Pass / Fail counts per semester for the pass-rate trend."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             SELECT
                 e.semester_no AS semester,
                 COUNT(*) FILTER (WHERE UPPER(p.result_status) = 'PASS') AS pass_count,
@@ -474,8 +495,9 @@ class AdminRepository:
             FROM student_subject_performance p
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = p.enrollment_record_id
+            JOIN students s ON s.student_id = e.student_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND {batch_cond}
               AND ($3::int IS NULL OR e.semester_no = $3)
             GROUP BY e.semester_no
             ORDER BY e.semester_no
@@ -490,16 +512,18 @@ class AdminRepository:
         semester: Optional[int],
     ) -> List[Dict[str, Any]]:
         """Stored grade counts; a NULL grade is Pending, never converted to F."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             SELECT
                 COALESCE(p.grade, 'Pending') AS grade,
                 COUNT(*) AS count
             FROM student_subject_performance p
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = p.enrollment_record_id
+            JOIN students s ON s.student_id = e.student_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND {batch_cond}
               AND ($3::int IS NULL OR e.semester_no = $3)
             GROUP BY COALESCE(p.grade, 'Pending')
             """,
@@ -512,14 +536,10 @@ class AdminRepository:
         academic_year: Optional[str],
         semester: Optional[int],
     ) -> Dict[str, Any]:
-        """Scope-level raw averages of the three marks components (NULL-safe).
-
-        ``AVG`` ignores NULL marks, so an un-entered end-sem for a live
-        semester never pulls the average down to zero — it is simply not
-        counted.
-        """
+        """Scope-level raw averages of the three marks components (NULL-safe)."""
+        batch_cond = self._batch_sql("$2", "s")
         row = await self._fetchrow(
-            """
+            f"""
             SELECT
                 AVG(p.internal_marks) AS avg_internal,
                 AVG(p.mid_sem_marks) AS avg_mid_sem,
@@ -528,8 +548,9 @@ class AdminRepository:
             FROM student_subject_performance p
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = p.enrollment_record_id
+            JOIN students s ON s.student_id = e.student_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND {batch_cond}
               AND ($3::int IS NULL OR e.semester_no = $3)
             """,
             (department_code, academic_year, semester),
@@ -543,22 +564,18 @@ class AdminRepository:
         semester: Optional[int],
     ) -> List[Dict[str, Any]]:
         """Per-department students + semester averages in the scope."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             WITH scoped_students AS (
                 SELECT DISTINCT s.student_id, s.department_code
                 FROM students s
                 LEFT JOIN student_semester_summary sem ON sem.student_id = s.student_id
                 WHERE ($1::int IS NULL OR s.department_code = $1)
-                  AND (
-                      $2::text IS NULL 
-                      OR sem.academic_year = $2 
-                      OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
-                      OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
-                  )
+                  AND {batch_cond}
                   AND ($3::int IS NULL OR sem.semester_no = $3)
                   AND (
-                      ($2::text IS NULL AND $3::int IS NULL)
+                      $3::int IS NULL
                       OR sem.semester_no IS NOT NULL
                   )
             )
@@ -573,12 +590,6 @@ class AdminRepository:
             FROM departments d
             LEFT JOIN scoped_students s ON s.department_code = d.dept_code
             LEFT JOIN student_semester_summary sem ON sem.student_id = s.student_id
-              AND (
-                  $2::text IS NULL 
-                  OR sem.academic_year = $2 
-                  OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
-                  OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
-              )
               AND ($3::int IS NULL OR sem.semester_no = $3)
             WHERE ($1::int IS NULL OR d.dept_code = $1)
             GROUP BY d.dept_code, d.department_name, d.department_short_name
@@ -608,22 +619,18 @@ class AdminRepository:
         semester: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Per-department backlog total scoped by filters."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             WITH filtered_students AS (
                 SELECT DISTINCT s.student_id, s.department_code, s.total_backlogs
                 FROM students s
                 LEFT JOIN student_semester_summary sem ON sem.student_id = s.student_id
                 WHERE ($1::int IS NULL OR s.department_code = $1)
-                  AND (
-                      $2::text IS NULL 
-                      OR sem.academic_year = $2 
-                      OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
-                      OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
-                  )
+                  AND {batch_cond}
                   AND ($3::int IS NULL OR sem.semester_no = $3)
                   AND (
-                      ($2::text IS NULL AND $3::int IS NULL)
+                      $3::int IS NULL
                       OR sem.semester_no IS NOT NULL
                   )
             )
@@ -641,8 +648,9 @@ class AdminRepository:
         semester: Optional[int],
     ) -> List[Dict[str, Any]]:
         """Per-department Pass / Fail counts (Pending excluded)."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             SELECT
                 e.department_code,
                 COUNT(*) FILTER (WHERE UPPER(p.result_status) = 'PASS') AS pass_count,
@@ -650,8 +658,9 @@ class AdminRepository:
             FROM student_subject_performance p
             JOIN student_subject_enrollment e
               ON e.enrollment_record_id = p.enrollment_record_id
+            JOIN students s ON s.student_id = e.student_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND {batch_cond}
               AND ($3::int IS NULL OR e.semester_no = $3)
             GROUP BY e.department_code
             """,
@@ -665,15 +674,10 @@ class AdminRepository:
         semester: Optional[int],
         search: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Per-subject aggregates via the canonical enrollment join.
-
-        All metrics are NULL-safe (``AVG`` skips NULL components, pass rate
-        excludes Pending) and the canonical
-        ``student_subject_performance.enrollment_record_id`` relationship is
-        the only join key used.
-        """
+        """Per-subject aggregates via the canonical enrollment join."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             SELECT
                 e.subject_code,
                 e.subject_name,
@@ -691,10 +695,11 @@ class AdminRepository:
             FROM student_subject_enrollment e
             JOIN student_subject_performance p
               ON p.enrollment_record_id = e.enrollment_record_id
+            JOIN students s ON s.student_id = e.student_id
             LEFT JOIN departments d ON d.dept_code = e.department_code
             LEFT JOIN attendance a ON a.enrollment_record_id = e.enrollment_record_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND {batch_cond}
               AND ($3::int IS NULL OR e.semester_no = $3)
               AND ($4::text IS NULL
                    OR e.subject_name ILIKE '%' || $4 || '%'
@@ -718,21 +723,17 @@ class AdminRepository:
         target: float,
         critical: float,
     ) -> Optional[Dict[str, Any]]:
-        """MD-04 student-level attendance KPIs over scoped subject rows.
-
-        A student's scoped attendance is the mean of their subject-level
-        attendance percentages (NULL-safe). ``eligible`` uses the canonical stored
-        eligibility_status per subject: a student is Eligible only when every
-        scoped subject record is Eligible.
-        """
+        """MD-04 student-level attendance KPIs over scoped subject rows."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetchrow(
-            """
+            f"""
             SELECT
                 (SELECT AVG(a.attendance_percentage)
                  FROM attendance a
                  JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
+                 JOIN students s ON s.student_id = e.student_id
                  WHERE ($1::int IS NULL OR e.department_code = $1)
-                   AND ($2::text IS NULL OR e.academic_year = $2)
+                   AND {batch_cond}
                    AND ($3::int IS NULL OR e.semester_no = $3)
                    AND a.attendance_percentage IS NOT NULL) AS avg_attendance,
                 COUNT(*) AS students_with_records,
@@ -747,8 +748,9 @@ class AdminRepository:
                     BOOL_AND(COALESCE(a.eligibility_status = 'Eligible', FALSE)) AS all_eligible
                 FROM attendance a
                 JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
+                JOIN students s ON s.student_id = e.student_id
                 WHERE ($1::int IS NULL OR e.department_code = $1)
-                  AND ($2::text IS NULL OR e.academic_year = $2)
+                  AND {batch_cond}
                   AND ($3::int IS NULL OR e.semester_no = $3)
                 GROUP BY e.student_id
             ) st
@@ -762,16 +764,18 @@ class AdminRepository:
         semester: Optional[int],
     ) -> List[Dict[str, Any]]:
         """MD-04 average attendance per department (year + semester scoped)."""
+        batch_cond = self._batch_sql("$1", "s")
         return await self._fetch(
-            """
+            f"""
             SELECT
                 e.department_code,
                 COALESCE(d.department_name, e.department_name) AS department_name,
                 AVG(a.attendance_percentage) AS avg_attendance
             FROM student_subject_enrollment e
+            JOIN students s ON s.student_id = e.student_id
             LEFT JOIN attendance a ON a.enrollment_record_id = e.enrollment_record_id
             LEFT JOIN departments d ON d.dept_code = e.department_code
-            WHERE ($1::text IS NULL OR e.academic_year = $1)
+            WHERE {batch_cond}
               AND ($2::int IS NULL OR e.semester_no = $2)
             GROUP BY e.department_code, d.department_name, e.department_name
             ORDER BY e.department_code ASC
@@ -785,15 +789,17 @@ class AdminRepository:
         academic_year: Optional[str],
     ) -> List[Dict[str, Any]]:
         """MD-04 average attendance per semester (numeric order)."""
+        batch_cond = self._batch_sql("$2", "s")
         return await self._fetch(
-            """
+            f"""
             SELECT
                 e.semester_no AS semester,
                 AVG(a.attendance_percentage) AS avg_attendance
             FROM student_subject_enrollment e
+            JOIN students s ON s.student_id = e.student_id
             LEFT JOIN attendance a ON a.enrollment_record_id = e.enrollment_record_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND {batch_cond}
             GROUP BY e.semester_no
             ORDER BY e.semester_no ASC
             """,
@@ -827,10 +833,11 @@ class AdminRepository:
                 COUNT(*) FILTER (WHERE a.eligibility_status = 'Eligible') AS eligible_count,
                 COUNT(*) FILTER (WHERE a.eligibility_status = 'Not Eligible') AS not_eligible_count
             FROM student_subject_enrollment e
+            JOIN students st ON st.student_id = e.student_id
             LEFT JOIN attendance a ON a.enrollment_record_id = e.enrollment_record_id
             LEFT JOIN departments d ON d.dept_code = e.department_code
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND {self._batch_sql("$2", "st")}
               AND ($3::int IS NULL OR e.semester_no = $3)
               AND ($6::text IS NULL OR e.subject_code ILIKE '%' || $6 || '%'
                    OR e.subject_name ILIKE '%' || $6 || '%')
@@ -842,13 +849,14 @@ class AdminRepository:
             (department_code, academic_year, semester, target, critical, search, limit, offset,),
         )
         total = await self._fetchrow(
-            """
+            f"""
             SELECT COUNT(*) AS total
             FROM (
                 SELECT e.enrollment_record_id
                 FROM student_subject_enrollment e
+                JOIN students st ON st.student_id = e.student_id
                 WHERE ($1::int IS NULL OR e.department_code = $1)
-                  AND ($2::text IS NULL OR e.academic_year = $2)
+                  AND {self._batch_sql("$2", "st")}
                   AND ($3::int IS NULL OR e.semester_no = $3)
                   AND ($4::text IS NULL OR e.subject_code ILIKE '%' || $4 || '%'
                        OR e.subject_name ILIKE '%' || $4 || '%')
@@ -871,7 +879,7 @@ class AdminRepository:
     ) -> Dict[str, Any]:
         """MD-04 students with subject-level attendance below the target."""
         items = await self._fetch(
-            """
+            f"""
             SELECT
                 st.student_id,
                 st.full_name AS student_name,
@@ -887,7 +895,7 @@ class AdminRepository:
             JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
             JOIN students st ON st.student_id = e.student_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND {self._batch_sql("$2", "st")}
               AND ($3::int IS NULL OR e.semester_no = $3)
               AND a.attendance_percentage IS NOT NULL
               AND a.attendance_percentage < $4
@@ -901,13 +909,13 @@ class AdminRepository:
             (department_code, academic_year, semester, target, search, limit, offset,),
         )
         total = await self._fetchrow(
-            """
+            f"""
             SELECT COUNT(*) AS total
             FROM attendance a
             JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
             JOIN students st ON st.student_id = e.student_id
             WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND ($2::text IS NULL OR e.academic_year = $2)
+              AND {self._batch_sql("$2", "st")}
               AND ($3::int IS NULL OR e.semester_no = $3)
               AND a.attendance_percentage IS NOT NULL
               AND a.attendance_percentage < $4
@@ -931,13 +939,13 @@ class AdminRepository:
     ) -> List[Dict[str, Any]]:
         """MD-04 stored risk band counts over the scoped students."""
         return await self._fetch(
-            """
+            f"""
             SELECT r.prediction_status AS risk_level, COUNT(*) AS count
             FROM risk_predictions r
             JOIN students s ON s.student_id = r.student_id
             WHERE ($1::int IS NULL OR s.department_code = $1)
               AND ($2::int IS NULL OR s.current_semester = $2)
-              AND ($3::text IS NULL OR s.current_academic_year = $3)
+              AND {self._batch_sql("$3", "s")}
             GROUP BY r.prediction_status
             """,
             (department_code, semester, academic_year,),
@@ -950,7 +958,7 @@ class AdminRepository:
     ) -> List[Dict[str, Any]]:
         """MD-04 per-department risk band counts (comparison chart)."""
         return await self._fetch(
-            """
+            f"""
             SELECT
                 s.department_code,
                 COALESCE(d.department_name, s.department_name) AS department_name,
@@ -960,7 +968,7 @@ class AdminRepository:
             JOIN students s ON s.student_id = r.student_id
             LEFT JOIN departments d ON d.dept_code = s.department_code
             WHERE ($1::int IS NULL OR s.current_semester = $1)
-              AND ($2::text IS NULL OR s.current_academic_year = $2)
+              AND {self._batch_sql("$2", "s")}
             GROUP BY s.department_code, d.department_name, s.department_name, r.prediction_status
             ORDER BY s.department_code ASC
             """,
@@ -974,7 +982,7 @@ class AdminRepository:
     ) -> List[Dict[str, Any]]:
         """MD-04 per-semester risk band counts (numeric semester order)."""
         return await self._fetch(
-            """
+            f"""
             SELECT
                 s.current_semester AS semester,
                 r.prediction_status AS risk_level,
@@ -982,7 +990,7 @@ class AdminRepository:
             FROM risk_predictions r
             JOIN students s ON s.student_id = r.student_id
             WHERE ($1::int IS NULL OR s.department_code = $1)
-              AND ($2::text IS NULL OR s.current_academic_year = $2)
+              AND {self._batch_sql("$2", "s")}
               AND s.current_semester IS NOT NULL
             GROUP BY s.current_semester, r.prediction_status
             ORDER BY s.current_semester ASC
@@ -1032,7 +1040,7 @@ class AdminRepository:
             JOIN students st ON st.student_id = r.student_id
             LEFT JOIN departments d ON d.dept_code = st.department_code
             WHERE ($1::int IS NULL OR st.department_code = $1)
-              AND ($2::text IS NULL OR st.current_academic_year = $2)
+              AND {self._batch_sql("$2", "st")}
               AND ($3::int IS NULL OR st.current_semester = $3)
               {risk_cond}
               AND (${search_idx}::text IS NULL OR st.full_name ILIKE '%' || ${search_idx} || '%'
@@ -1053,7 +1061,7 @@ class AdminRepository:
             FROM risk_predictions r
             JOIN students st ON st.student_id = r.student_id
             WHERE ($1::int IS NULL OR st.department_code = $1)
-              AND ($2::text IS NULL OR st.current_academic_year = $2)
+              AND {self._batch_sql("$2", "st")}
               AND ($3::int IS NULL OR st.current_semester = $3)
               {risk_cond}
               AND (${search_idx}::text IS NULL OR st.full_name ILIKE '%' || ${search_idx} || '%'
@@ -1095,7 +1103,7 @@ class AdminRepository:
             JOIN students st ON st.student_id = r.student_id
             LEFT JOIN departments d ON d.dept_code = st.department_code
             WHERE ($1::int IS NULL OR st.department_code = $1)
-              AND ($2::text IS NULL OR st.current_academic_year = $2)
+              AND {self._batch_sql("$2", "st")}
               AND st.current_semester IS NOT NULL
               {risk_cond}
             ORDER BY
@@ -1276,7 +1284,7 @@ class AdminRepository:
             ) ls ON TRUE
             WHERE ($1::int IS NULL OR s.department_code = $1)
               AND ($2::int IS NULL OR s.current_semester = $2)
-              AND ($3::text IS NULL OR s.current_academic_year = $3)
+              AND {self._batch_sql("$3", "s")}
               AND ($4::text IS NULL OR UPPER(sr.risk) = $4)
               AND ($5::text IS NULL OR s.full_name ILIKE '%' || $5 || '%'
                    OR CAST(s.enrollment_no AS text) ILIKE '%' || $5 || '%'
@@ -1301,7 +1309,7 @@ class AdminRepository:
             LIMIT $6::int OFFSET $7::int
         """
 
-        total_query = """
+        total_query = f"""
             SELECT COUNT(*) AS total
             FROM students s
             LEFT JOIN departments d ON d.dept_code = s.department_code
@@ -1326,7 +1334,7 @@ class AdminRepository:
             ) cp ON TRUE
             WHERE ($1::int IS NULL OR s.department_code = $1)
               AND ($2::int IS NULL OR s.current_semester = $2)
-              AND ($3::text IS NULL OR s.current_academic_year = $3)
+              AND {self._batch_sql("$3", "s")}
               AND ($4::text IS NULL OR UPPER(sr.risk) = $4)
               AND ($5::text IS NULL OR s.full_name ILIKE '%' || $5 || '%'
                    OR CAST(s.enrollment_no AS text) ILIKE '%' || $5 || '%'

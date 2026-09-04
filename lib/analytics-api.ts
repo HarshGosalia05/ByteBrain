@@ -313,6 +313,7 @@ export type SubjectsNeedingAttentionResult = {
 export type AnalyticsFilters = {
   department_code?: number | null
   semester_no?: number | null
+  batch?: string | null
   academic_year?: string | null
 }
 
@@ -321,11 +322,19 @@ export function getStudentAcademicProfile(studentId: string): Promise<BffResult<
 }
 
 export function getStudentSemesterHistory(studentId: string, filters: AnalyticsFilters = {}): Promise<BffResult<StudentSemesterHistory>> {
-  return callAnalytics<StudentSemesterHistory>(`students/${encodeURIComponent(studentId)}/semester-history`, BFF_TTL_MS, filters)
+  return callAnalytics<StudentSemesterHistory>(`students/${encodeURIComponent(studentId)}/semester-history`, BFF_TTL_MS, {
+    ...filters,
+    batch: filters.batch ?? filters.academic_year,
+    academic_year: filters.academic_year ?? filters.batch,
+  })
 }
 
 export function getStudentAttendanceSummary(studentId: string, filters: AnalyticsFilters = {}): Promise<BffResult<StudentAttendanceSummary>> {
-  return callAnalytics<StudentAttendanceSummary>(`students/${encodeURIComponent(studentId)}/attendance-summary`, BFF_TTL_MS, filters)
+  return callAnalytics<StudentAttendanceSummary>(`students/${encodeURIComponent(studentId)}/attendance-summary`, BFF_TTL_MS, {
+    ...filters,
+    batch: filters.batch ?? filters.academic_year,
+    academic_year: filters.academic_year ?? filters.batch,
+  })
 }
 
 export function getStudentBacklogSummary(studentId: string): Promise<BffResult<StudentBacklogSummary>> {
@@ -333,38 +342,61 @@ export function getStudentBacklogSummary(studentId: string): Promise<BffResult<S
 }
 
 export function getSubjectPerformance(subjectId: string, filters: AnalyticsFilters = {}): Promise<BffResult<SubjectPerformanceSummary>> {
-  return callAnalytics<SubjectPerformanceSummary>(`subjects/${encodeURIComponent(subjectId)}/performance`, BFF_TTL_MS, filters)
+  return callAnalytics<SubjectPerformanceSummary>(`subjects/${encodeURIComponent(subjectId)}/performance`, BFF_TTL_MS, {
+    ...filters,
+    batch: filters.batch ?? filters.academic_year,
+    academic_year: filters.academic_year ?? filters.batch,
+  })
 }
 
 export function getSubjectAttendance(subjectId: string, filters: AnalyticsFilters = {}): Promise<BffResult<SubjectAttendanceSummary>> {
-  return callAnalytics<SubjectAttendanceSummary>(`subjects/${encodeURIComponent(subjectId)}/attendance`, BFF_TTL_MS, filters)
+  return callAnalytics<SubjectAttendanceSummary>(`subjects/${encodeURIComponent(subjectId)}/attendance`, BFF_TTL_MS, {
+    ...filters,
+    batch: filters.batch ?? filters.academic_year,
+    academic_year: filters.academic_year ?? filters.batch,
+  })
 }
 
 export function getSubjectUnderperformers(subjectId: string, filters: AnalyticsFilters & { threshold?: number } = {}): Promise<BffResult<SubjectUnderperformers>> {
   const { threshold, ...rest } = filters
-  return callAnalytics<SubjectUnderperformers>(`subjects/${encodeURIComponent(subjectId)}/underperformers`, BFF_TTL_MS, { ...rest, threshold })
+  return callAnalytics<SubjectUnderperformers>(`subjects/${encodeURIComponent(subjectId)}/underperformers`, BFF_TTL_MS, {
+    ...rest,
+    batch: filters.batch ?? filters.academic_year,
+    academic_year: filters.academic_year ?? filters.batch,
+    threshold,
+  })
 }
 
 export function getDepartmentOverview(filters: AnalyticsFilters = {}): Promise<BffResult<DepartmentOverview>> {
-  return callAnalytics<DepartmentOverview>("departments/overview", BFF_TTL_MS, filters)
+  return callAnalytics<DepartmentOverview>("departments/overview", BFF_TTL_MS, {
+    ...filters,
+    batch: filters.batch ?? filters.academic_year,
+    academic_year: filters.academic_year ?? filters.batch,
+  })
 }
 
 export function getPerformanceDistribution(filters: AnalyticsFilters = {}): Promise<BffResult<SemesterPerformanceDistribution>> {
-  return callAnalytics<SemesterPerformanceDistribution>("departments/performance-distribution", BFF_TTL_MS, filters)
+  return callAnalytics<SemesterPerformanceDistribution>("departments/performance-distribution", BFF_TTL_MS, {
+    ...filters,
+    batch: filters.batch ?? filters.academic_year,
+    academic_year: filters.academic_year ?? filters.batch,
+  })
 }
 
 export function getAttendanceDistribution(filters: AnalyticsFilters = {}): Promise<BffResult<AttendanceDistribution>> {
   return callAnalytics<AttendanceDistribution>("departments/attendance-distribution", BFF_TTL_MS, {
     department_code: filters.department_code,
     semester_no: filters.semester_no,
-    academic_year: filters.academic_year,
+    batch: filters.batch ?? filters.academic_year,
+    academic_year: filters.academic_year ?? filters.batch,
   })
 }
 
 export function getBacklogDistribution(filters: AnalyticsFilters = {}): Promise<BffResult<BacklogDistribution>> {
   return callAnalytics<BacklogDistribution>("departments/backlog-distribution", BFF_TTL_MS, {
     department_code: filters.department_code,
-    academic_year: filters.academic_year,
+    batch: filters.batch ?? filters.academic_year,
+    academic_year: filters.academic_year ?? filters.batch,
   })
 }
 
@@ -372,19 +404,26 @@ export function getAtRiskStudents(filters: AnalyticsFilters = {}): Promise<BffRe
   return callAnalytics<AtRiskStudentsResult>("at-risk/students", BFF_TTL_MS, {
     department_code: filters.department_code,
     semester_no: filters.semester_no,
-    academic_year: filters.academic_year,
+    batch: filters.batch ?? filters.academic_year,
+    academic_year: filters.academic_year ?? filters.batch,
   })
 }
 
 export function getBelowAttendanceThreshold(filters: AnalyticsFilters & { threshold?: number } = {}): Promise<BffResult<BelowThresholdResult>> {
   const { threshold, ...rest } = filters
-  return callAnalytics<BelowThresholdResult>("at-risk/below-attendance-threshold", BFF_TTL_MS, { ...rest, threshold })
+  return callAnalytics<BelowThresholdResult>("at-risk/below-attendance-threshold", BFF_TTL_MS, {
+    ...rest,
+    batch: filters.batch ?? filters.academic_year,
+    academic_year: filters.academic_year ?? filters.batch,
+    threshold,
+  })
 }
 
 export function getSubjectsNeedingAttention(filters: AnalyticsFilters = {}): Promise<BffResult<SubjectsNeedingAttentionResult>> {
   return callAnalytics<SubjectsNeedingAttentionResult>("at-risk/subjects-needing-attention", BFF_TTL_MS, {
     department_code: filters.department_code,
     semester_no: filters.semester_no,
-    academic_year: filters.academic_year,
+    batch: filters.batch ?? filters.academic_year,
+    academic_year: filters.academic_year ?? filters.batch,
   })
 }

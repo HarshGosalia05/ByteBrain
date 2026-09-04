@@ -36,18 +36,14 @@ async def get_dashboard(
     user: dict = Depends(require_admin_role),
     service: AdminService = Depends(get_admin_service),
     department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
-    academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
+    batch: Optional[str] = Query(None, description="Filter by starting batch year (e.g. 2023)"),
+    academic_year: Optional[str] = Query(None, description="Filter by academic year / starting batch"),
     semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
 ):
-    """Institution-level dashboard analytics for admins.
-
-    Filters are applied only where semantically meaningful: department
-    scopes everything, academic-year and semester scope the semester-level
-    aggregates (SGPA/percentage/attendance, trends, distributions).
-    """
+    """Institution-level dashboard analytics for admins."""
     return await service.get_dashboard(
         department_code=department_code,
-        academic_year=academic_year,
+        academic_year=batch or academic_year,
         semester=semester,
     )
 
@@ -57,18 +53,14 @@ async def get_academic_overview(
     user: dict = Depends(require_admin_role),
     service: AdminService = Depends(get_admin_service),
     department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
-    academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
+    batch: Optional[str] = Query(None, description="Filter by starting batch year (e.g. 2023)"),
+    academic_year: Optional[str] = Query(None, description="Filter by academic year / starting batch"),
     semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
 ):
-    """MD-03 Part A — institution academic overview.
-
-    Pass rate excludes Pending results from numerator and denominator; a
-    scope with no completed results reports ``null``. NULL academic values
-    stay NULL.
-    """
+    """MD-03 Part A — institution academic overview."""
     return await service.get_academic_overview(
         department_code=department_code,
-        academic_year=academic_year,
+        academic_year=batch or academic_year,
         semester=semester,
     )
 
@@ -78,17 +70,14 @@ async def get_academic_departments(
     user: dict = Depends(require_admin_role),
     service: AdminService = Depends(get_admin_service),
     department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
-    academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
+    batch: Optional[str] = Query(None, description="Filter by starting batch year (e.g. 2023)"),
+    academic_year: Optional[str] = Query(None, description="Filter by academic year / starting batch"),
     semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
 ):
-    """MD-03 Part B — per-department analytics, comparison and ranking.
-
-    Ranking is deterministic and based on the real average percentage
-    (tie-broken by department code).
-    """
+    """MD-03 Part B — per-department analytics, comparison and ranking."""
     return await service.get_department_analytics(
         department_code=department_code,
-        academic_year=academic_year,
+        academic_year=batch or academic_year,
         semester=semester,
     )
 
@@ -98,21 +87,17 @@ async def get_academic_subjects(
     user: dict = Depends(require_admin_role),
     service: AdminService = Depends(get_admin_service),
     department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
-    academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
+    batch: Optional[str] = Query(None, description="Filter by starting batch year (e.g. 2023)"),
+    academic_year: Optional[str] = Query(None, description="Filter by academic year / starting batch"),
     semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
     search: Optional[str] = Query(
         None, max_length=100, description="Search subjects by name or code"
     ),
 ):
-    """MD-03 Part C — subject intelligence.
-
-    Uses the canonical ``enrollment_record_id`` relationship and the existing
-    marks scheme (Internal /20, Mid-Sem /50, End-Sem /70, Total /140). NULL
-    components are excluded from averages, never treated as zero.
-    """
+    """MD-03 Part C — subject intelligence."""
     return await service.get_subject_intelligence(
         department_code=department_code,
-        academic_year=academic_year,
+        academic_year=batch or academic_year,
         semester=semester,
         search=search,
     )
@@ -123,21 +108,17 @@ async def get_attendance_intelligence(
     user: dict = Depends(require_admin_role),
     service: AdminService = Depends(get_admin_service),
     department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
-    academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
+    batch: Optional[str] = Query(None, description="Filter by starting batch year (e.g. 2023)"),
+    academic_year: Optional[str] = Query(None, description="Filter by academic year / starting batch"),
     semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
     search: Optional[str] = Query(None, max_length=100, description="Search subjects or students"),
     limit: int = Query(100, ge=1, le=500, description="Page size"),
     offset: int = Query(0, ge=0, description="Page offset"),
 ):
-    """MD-04 Admin Attendance Intelligence.
-
-    KPIs, attendance by department, by semester, distribution, subject attendance,
-    and shortage students. Attendance thresholds come from the Threshold Engine
-    settings (never hardcoded).
-    """
+    """MD-04 Admin Attendance Intelligence."""
     return await service.get_attendance_intelligence(
         department_code=department_code,
-        academic_year=academic_year,
+        academic_year=batch or academic_year,
         semester=semester,
         search=search,
         limit=limit,
@@ -150,7 +131,8 @@ async def get_risk_intelligence(
     user: dict = Depends(require_admin_role),
     service: AdminService = Depends(get_admin_service),
     department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
-    academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
+    batch: Optional[str] = Query(None, description="Filter by starting batch year (e.g. 2023)"),
+    academic_year: Optional[str] = Query(None, description="Filter by academic year / starting batch"),
     semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
     risk: Optional[str] = Query(
         None, description="Filter students by risk band (Low, Moderate, High, Critical)"
@@ -159,15 +141,10 @@ async def get_risk_intelligence(
     limit: int = Query(100, ge=1, le=500, description="Page size"),
     offset: int = Query(0, ge=0, description="Page offset"),
 ):
-    """MD-04 Admin Risk Intelligence + Early Warning Center.
-
-    KPIs, risk distribution, by-department, by-semester, at-risk table (with
-    risk filter), and early warning (High/Critical students with
-    deterministic reasons/recommendations).
-    """
+    """MD-04 Admin Risk Intelligence + Early Warning Center."""
     return await service.get_risk_intelligence(
         department_code=department_code,
-        academic_year=academic_year,
+        academic_year=batch or academic_year,
         semester=semester,
         risk=risk,
         search=search,
@@ -181,7 +158,8 @@ async def get_admin_students(
     user: dict = Depends(require_admin_role),
     service: AdminService = Depends(get_admin_service),
     department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
-    academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
+    batch: Optional[str] = Query(None, description="Filter by starting batch year (e.g. 2023)"),
+    academic_year: Optional[str] = Query(None, description="Filter by academic year / starting batch"),
     semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
     risk: Optional[str] = Query(
         None, description="Filter students by risk band (Low, Moderate, High, Critical)"
@@ -205,7 +183,7 @@ async def get_admin_students(
     """MD-05 Part A / MD-06 — read-only Admin Student Overview with career filters."""
     return await service.get_admin_students(
         department_code=department_code,
-        academic_year=academic_year,
+        academic_year=batch or academic_year,
         semester=semester,
         risk=risk,
         search=search,
@@ -283,6 +261,7 @@ async def get_admin_ml_intelligence(
     user: dict = Depends(require_admin_role),
     service: AdminMLService = Depends(get_admin_ml_service),
     department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
+    batch: Optional[str] = Query(None, description="Filter by starting batch (e.g. 2023)"),
     academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
     semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
 ):
@@ -295,7 +274,7 @@ async def get_admin_ml_intelligence(
     """
     return await service.get_admin_ml_intelligence(
         department_code=department_code,
-        academic_year=academic_year,
+        academic_year=batch or academic_year,
         semester=semester,
     )
 

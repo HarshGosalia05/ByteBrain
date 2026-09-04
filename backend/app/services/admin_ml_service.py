@@ -75,6 +75,20 @@ class AdminMLService:
         self._prediction_service = prediction_service
         self._repo = ml_prediction_repo or MLPredictionRepository(pool)
 
+    @staticmethod
+    def _batch_condition(param: str, alias: str = "s") -> str:
+        """Generate SQL condition for batch/admission_year filtering."""
+        return f"""(
+            {param}::text IS NULL
+            OR {alias}.admission_year::text = {param}
+            OR {alias}.admission_year = CASE
+                WHEN {param} ~ '^[0-9]{{2}}-[0-9]{{2}}$' THEN ('20' || split_part({param}, '-', 1))::int
+                WHEN {param} ~ '^[0-9]{{4}}-[0-9]{{2,4}}$' THEN split_part({param}, '-', 1)::int
+                WHEN {param} ~ '^[0-9]{{4}}$' THEN {param}::int
+                ELSE -1
+            END
+        )"""
+
     async def get_admin_ml_intelligence(
         self,
         department_code: Optional[int] = None,
@@ -82,9 +96,10 @@ class AdminMLService:
         semester: Optional[int] = None,
     ) -> AdminMlIntelligenceResponse:
         """Aggregate institution-level M1-M4 ML intelligence and insights."""
+        batch_cond = self._batch_condition("$3", "s")
         async with self._pool.acquire() as conn:
             # 1. Fetch targeted students with department metadata
-            students_query = """
+            students_query = f"""
                 SELECT 
                     s.student_id,
                     s.full_name,
@@ -95,9 +110,10 @@ class AdminMLService:
                 JOIN departments d ON d.dept_code = s.department_code
                 WHERE ($1::int IS NULL OR s.department_code = $1)
                   AND ($2::int IS NULL OR s.current_semester = $2)
+                  AND {batch_cond}
                 ORDER BY d.dept_code, s.student_id
             """
-            student_records = await conn.fetch(students_query, department_code, semester)
+            student_records = await conn.fetch(students_query, department_code, semester, academic_year)
             total_students_count = len(student_records)
 
             student_map = {
@@ -113,48 +129,50 @@ class AdminMLService:
 
             # 2. Fetch current deterministic High/Critical risk count from risk_predictions
             deterministic_risk_row = await conn.fetchrow(
-                """
+                f"""
                 SELECT COUNT(*) as count
                 FROM risk_predictions r
                 JOIN students s ON s.student_id = r.student_id
                 WHERE ($1::int IS NULL OR s.department_code = $1)
                   AND ($2::int IS NULL OR s.current_semester = $2)
+                  AND {batch_cond}
                   AND UPPER(r.prediction_status) IN ('HIGH', 'CRITICAL')
                 """,
                 department_code,
                 semester,
+                academic_year,
             )
             current_high_critical_count = (
                 deterministic_risk_row["count"] if deterministic_risk_row else 0
             )
 
-            # 2b. Filter options derived from the full student population.
-            #     Deliberately NOT derived from ml_predictions and NOT narrowed
-            #     by the active department/semester selection, so every
-            #     department with students and every existing current_semester
-            #     value is always available to the admin.
+            # 2b. Filter options derived from the student population, scoped by batch.
             department_options = await conn.fetch(
-                """
+                f"""
                 SELECT
                     d.dept_code AS department_code,
                     d.department_name,
                     COUNT(s.student_id) AS student_count
                 FROM departments d
                 INNER JOIN students s ON s.department_code = d.dept_code
+                WHERE {self._batch_condition('$1', 's')}
                 GROUP BY d.dept_code, d.department_name
                 ORDER BY d.dept_code
-                """
+                """,
+                academic_year,
             )
             semester_options = await conn.fetch(
-                """
+                f"""
                 SELECT
                     s.current_semester AS semester_no,
                     COUNT(*) AS student_count
                 FROM students s
                 WHERE s.current_semester IS NOT NULL
+                  AND {self._batch_condition('$1', 's')}
                 GROUP BY s.current_semester
                 ORDER BY s.current_semester
-                """
+                """,
+                academic_year,
             )
 
         # 3. Fetch stored predictions (strictly read-only)

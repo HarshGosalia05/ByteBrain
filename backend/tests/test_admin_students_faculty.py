@@ -150,9 +150,9 @@ def _default_responses(overrides=None):
             },
         ],
         # ---- Shared filter options ----
-        ("fetch", "academic_year FROM student_semester_summary"): [
-            {"academic_year": "2025-26"},
-            {"academic_year": "2026-27"},
+        ("fetch", "DISTINCT admission_year"): [
+            {"admission_year": 2025},
+            {"admission_year": 2026},
         ],
         ("fetch", "AS department_code, d.department_name"): [
             {"department_code": 1, "department_name": "CSE", "department_short_name": "CSE"},
@@ -200,7 +200,10 @@ class AdminStudentsOverviewServiceTests(unittest.TestCase):
 
         # Filters are assembled from the shared filter options source.
         self.assertEqual(
-            [y for y in response.filters.academic_years], ["2025-26", "2026-27"]
+            [y for y in response.filters.batches], ["25-26", "26-27"]
+        )
+        self.assertEqual(
+            [y for y in response.filters.academic_years], ["25-26", "26-27"]
         )
         self.assertEqual(len(response.filters.departments), 2)
 
@@ -216,7 +219,8 @@ class AdminStudentsOverviewServiceTests(unittest.TestCase):
         for q in (items, total):
             self.assertIn("($1::int IS NULL OR s.department_code = $1)", q)
             self.assertIn("($2::int IS NULL OR s.current_semester = $2)", q)
-            self.assertIn("($3::text IS NULL OR s.current_academic_year = $3)", q)
+            self.assertIn("$3::text IS NULL", q)
+            self.assertIn("s.admission_year", q)
             self.assertIn("($4::text IS NULL OR UPPER(sr.risk) = $4)", q)
             self.assertIn("ILIKE '%' || $5 || '%'", q)
         # The risk band is forwarded uppercased so it matches stored bands.

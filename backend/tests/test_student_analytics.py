@@ -176,7 +176,7 @@ class TrendRulesTests(unittest.TestCase):
         self.assertEqual(sgpa["direction"], "down")
         self.assertEqual(sgpa["delta"], -0.2)
         self.assertEqual(trends["overall_direction"], "declining")
-        self.assertIn("declined by 0.20 SGPA in the latest semester", trends["interpretation"])
+        self.assertIn("declined by 0.20 SGPA from Semester 1 to Semester 2", trends["interpretation"])
 
     def test_trends_null_metrics_stay_null_and_do_not_break_trend(self):
         summaries = [
@@ -194,6 +194,75 @@ class TrendRulesTests(unittest.TestCase):
         self.assertEqual(trends["overall_direction"], "insufficient")
         self.assertEqual(trends["interpretation"], "Not enough semester history to determine a trend.")
         self.assertFalse(trends["movements"]["sgpa"]["available"])
+
+    def test_pending_semester_excluded_from_sgpa_trend(self):
+        """Pending semester (total_marks=0) should NOT create a false decline."""
+        summaries = [
+            summary_row(semester=6, sgpa=9.99, semester_result="Pass", semester_total_marks=1063),
+            summary_row(semester=7, sgpa=0, semester_result="Pass", semester_total_marks=0),
+        ]
+        trends = compute_trends(summaries)
+        sgpa = trends["movements"]["sgpa"]
+        self.assertFalse(sgpa["available"])
+
+    def test_pending_semester_excluded_from_attendance_trend(self):
+        """Pending semester should not drag attendance trend down."""
+        summaries = [
+            summary_row(semester=1, attendance_percentage=90.0, semester_result="Pass", semester_total_marks=850),
+            summary_row(semester=2, attendance_percentage=92.0, semester_result="Pass", semester_total_marks=870),
+            summary_row(semester=3, attendance_percentage=87.35, semester_result="Pass", semester_total_marks=0),
+        ]
+        trends = compute_trends(summaries)
+        attendance = trends["movements"]["attendance"]
+        self.assertTrue(attendance["available"])
+        self.assertEqual(attendance["current_semester"], 2)
+        self.assertEqual(attendance["delta"], 2.0)
+        self.assertEqual(attendance["direction"], "up")
+
+    def test_all_pending_semesters_show_insufficient(self):
+        """If all semesters have total_marks=0, trend should show insufficient."""
+        summaries = [
+            summary_row(semester=1, sgpa=0, semester_result="Pass", semester_total_marks=0),
+            summary_row(semester=2, sgpa=0, semester_result="Pass", semester_total_marks=0),
+        ]
+        trends = compute_trends(summaries)
+        self.assertEqual(trends["overall_direction"], "insufficient")
+        self.assertFalse(trends["movements"]["sgpa"]["available"])
+
+    def test_completed_semesters_still_used_for_trend(self):
+        """Completed semesters (total_marks>0) still contribute to trend."""
+        summaries = [
+            summary_row(semester=1, sgpa=8.0, semester_result="Pass", semester_total_marks=850),
+            summary_row(semester=2, sgpa=8.5, semester_result="Pass", semester_total_marks=900),
+            summary_row(semester=3, sgpa=0, semester_result="Pass", semester_total_marks=0),
+            summary_row(semester=4, sgpa=0, semester_result="Pass", semester_total_marks=0),
+        ]
+        trends = compute_trends(summaries)
+        sgpa = trends["movements"]["sgpa"]
+        self.assertTrue(sgpa["available"])
+        self.assertEqual(sgpa["previous_semester"], 1)
+        self.assertEqual(sgpa["current_semester"], 2)
+        self.assertEqual(sgpa["delta"], 0.5)
+
+    def test_real_db_pending_pattern(self):
+        """Real DB: result=PASS but total_marks=0 → pending, excluded from trend."""
+        summaries = [
+            summary_row(semester=6, sgpa=9.99, semester_result="Pass", semester_total_marks=1063),
+            summary_row(semester=7, sgpa=0, semester_result="Pass", semester_total_marks=0, semester_grade="B"),
+        ]
+        trends = compute_trends(summaries)
+        sgpa = trends["movements"]["sgpa"]
+        self.assertFalse(sgpa["available"])
+        self.assertEqual(trends["overall_direction"], "insufficient")
+
+    def test_pending_message_not_shown_when_all_completed(self):
+        """All semesters completed → no pending message."""
+        summaries = [
+            summary_row(semester=1, sgpa=8.0, semester_result="Pass", semester_total_marks=850),
+            summary_row(semester=2, sgpa=8.5, semester_result="Pass", semester_total_marks=900),
+        ]
+        trends = compute_trends(summaries)
+        self.assertIsNone(trends.get("pending_message"))
 
 
 # ---------------------------------------------------------------------------

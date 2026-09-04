@@ -20,6 +20,12 @@ export default async function DepartmentAnalyticsPage(props: {
   await requireRole("Admin")
 
   const searchParams = await props.searchParams
+  const batch =
+    typeof searchParams.batch === "string" && searchParams.batch
+      ? searchParams.batch
+      : typeof searchParams.academic_year === "string" && searchParams.academic_year
+        ? searchParams.academic_year
+        : null
   const filters: AnalyticsFilters = {
     department_code:
       typeof searchParams.department_code === "string" && searchParams.department_code
@@ -29,8 +35,8 @@ export default async function DepartmentAnalyticsPage(props: {
       typeof searchParams.semester_no === "string" && searchParams.semester_no
         ? parseInt(searchParams.semester_no, 10) || null
         : null,
-    academic_year:
-      typeof searchParams.academic_year === "string" ? searchParams.academic_year : null,
+    batch,
+    academic_year: batch,
   }
 
   const [overviewRes, perfRes, attRes, backlogRes, filterOptionsRes] = await Promise.all([

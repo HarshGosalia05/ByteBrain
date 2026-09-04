@@ -113,6 +113,16 @@ def _pass_rate(pass_count: int, fail_count: int) -> Optional[float]:
     return round(pass_count / total * 100, 2)
 
 
+def _normalize_batch(val: Optional[str]) -> Optional[str]:
+    """Normalize user-supplied batch / academic year filter."""
+    if not val:
+        return None
+    cleaned = str(val).strip()
+    if cleaned.lower() in ("", "all", "all batches", "all years", "all-batches", "all-years", "none", "null"):
+        return None
+    return cleaned
+
+
 class AdminService:
     def __init__(self, pool):
         self.repo = AdminRepository(pool)
@@ -123,6 +133,7 @@ class AdminService:
         academic_year: Optional[str] = None,
         semester: Optional[int] = None,
     ) -> AdminDashboardResponse:
+        academic_year = _normalize_batch(academic_year)
         kpis = DashboardKpis()
         filter_options = FilterOptions()
 
@@ -210,8 +221,9 @@ class AdminService:
             risk_distribution=risk_distribution,
         )
 
-        filter_data = await self.repo.get_filter_options()
-        filter_options.academic_years = filter_data.get("academic_years") or []
+        filter_data = await self.repo.get_filter_options(department_code=department_code)
+        filter_options.batches = filter_data.get("batches") or filter_data.get("academic_years") or []
+        filter_options.academic_years = filter_data.get("batches") or filter_data.get("academic_years") or []
         filter_options.departments = [
             {
                 "department_code": r["department_code"],
@@ -219,9 +231,11 @@ class AdminService:
                 "department_short_name": r.get("department_short_name"),
                 "total_semesters": r.get("total_semesters"),
                 "semesters": r.get("semesters") or [],
+                "batches": r.get("batches") or [],
             }
             for r in filter_data.get("departments") or []
         ]
+        filter_options.department_batches = filter_data.get("department_batches") or {}
         filter_options.semesters = filter_data.get("semesters") or []
 
         return AdminDashboardResponse(
@@ -236,11 +250,14 @@ class AdminService:
             generated_at=datetime.now(timezone.utc),
         )
 
-    async def _build_filter_options(self) -> FilterOptions:
+    async def _build_filter_options(
+        self, department_code: Optional[int] = None
+    ) -> FilterOptions:
         """Shared department / academic-year / semester / career domain / dream role filter options."""
-        filter_data = await self.repo.get_filter_options()
+        filter_data = await self.repo.get_filter_options(department_code=department_code)
         return FilterOptions(
-            academic_years=filter_data.get("academic_years") or [],
+            batches=filter_data.get("batches") or filter_data.get("academic_years") or [],
+            academic_years=filter_data.get("batches") or filter_data.get("academic_years") or [],
             departments=[
                 {
                     "department_code": r["department_code"],
@@ -248,9 +265,11 @@ class AdminService:
                     "department_short_name": r.get("department_short_name"),
                     "total_semesters": r.get("total_semesters"),
                     "semesters": r.get("semesters") or [],
+                    "batches": r.get("batches") or [],
                 }
                 for r in filter_data.get("departments") or []
             ],
+            department_batches=filter_data.get("department_batches") or {},
             semesters=filter_data.get("semesters") or [],
             preferred_domains=filter_data.get("preferred_domains") or [],
             dream_roles=filter_data.get("dream_roles") or [],
@@ -263,6 +282,7 @@ class AdminService:
         semester: Optional[int] = None,
     ) -> AcademicOverviewResponse:
         """MD-03 Part A — institution academic overview."""
+        academic_year = _normalize_batch(academic_year)
         kpis = AcademicOverviewKpis()
 
         semester_avgs = await self.repo.get_semester_averages(
@@ -327,7 +347,7 @@ class AdminService:
 
         return AcademicOverviewResponse(
             kpis=kpis,
-            filters=await self._build_filter_options(),
+            filters=await self._build_filter_options(department_code),
             trend=trend,
             pass_rate_trend=pass_rate_trend,
             grade_distribution=grade_distribution,
@@ -341,6 +361,7 @@ class AdminService:
         semester: Optional[int] = None,
     ) -> DepartmentAnalyticsResponse:
         """MD-03 Part B — per-department analytics, comparison and ranking."""
+        academic_year = _normalize_batch(academic_year)
         summaries = await self.repo.get_department_summaries(
             department_code, academic_year, semester
         )
@@ -433,7 +454,7 @@ class AdminService:
         return DepartmentAnalyticsResponse(
             departments=items,
             ranking=ranking,
-            filters=await self._build_filter_options(),
+            filters=await self._build_filter_options(department_code),
             generated_at=datetime.now(timezone.utc),
         )
 
@@ -445,6 +466,7 @@ class AdminService:
         search: Optional[str] = None,
     ) -> SubjectIntelligenceResponse:
         """MD-03 Part C — subject table, top/weak subjects and marks analysis."""
+        academic_year = _normalize_batch(academic_year)
         rows = await self.repo.get_subject_aggregates(
             department_code, academic_year, semester, search
         )
@@ -510,7 +532,7 @@ class AdminService:
             weak_subjects=weak_subjects,
             pass_rate_ranking=pass_rate_ranking,
             assessment_analysis=assessment_analysis,
-            filters=await self._build_filter_options(),
+            filters=await self._build_filter_options(department_code),
             generated_at=datetime.now(timezone.utc),
         )
 
@@ -675,6 +697,7 @@ class AdminService:
         and shortage students. Attendance thresholds come from the Threshold
         Engine settings (never hardcoded).
         """
+        academic_year = _normalize_batch(academic_year)
         from app.core.config import settings
 
         target = settings.FACULTY_ATTENDANCE_THRESHOLD
@@ -774,7 +797,7 @@ class AdminService:
         return AttendanceIntelligenceResponse(
             kpis=kpis,
             required_target=round(target, 2),
-            filters=await self._build_filter_options(),
+            filters=await self._build_filter_options(department_code),
             by_department=by_department,
             by_semester=by_semester,
             distribution=distribution,
@@ -803,6 +826,7 @@ class AdminService:
         risk filter), and early warning (High/Critical students with
         deterministic reasons/recommendations).
         """
+        academic_year = _normalize_batch(academic_year)
         # Normalize risk filter
         risk_upper = RISK_BAND_MAP.get((risk or "").upper()) if risk else None
 
@@ -899,7 +923,7 @@ class AdminService:
 
         return RiskIntelligenceResponse(
             kpis=kpis,
-            filters=await self._build_filter_options(),
+            filters=await self._build_filter_options(department_code),
             distribution=distribution,
             by_department=by_department,
             by_semester=by_semester,
@@ -1045,6 +1069,7 @@ class AdminService:
         preferred domain / dream role / internship status / placement readiness /
         career status / target package / search.
         """
+        academic_year = _normalize_batch(academic_year)
         risk_upper = RISK_BAND_MAP.get((risk or "").upper()) if risk else None
         sort_by = sort_by if sort_by in {"name", "sgpa", "percentage", "attendance", "backlogs", "risk"} else "name"
         sort_dir = sort_dir if sort_dir in {"asc", "desc"} else "asc"
@@ -1107,7 +1132,7 @@ class AdminService:
             for row in data.get("items") or []
         ]
         return AdminStudentsResponse(
-            filters=await self._build_filter_options(),
+            filters=await self._build_filter_options(department_code),
             students=students,
             students_total=int((data.get("total") or {}).get("total") or 0),
             limit=limit,

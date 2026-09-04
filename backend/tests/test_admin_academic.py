@@ -252,9 +252,9 @@ def _default_responses(overrides=None):
                 "avg_attendance": Decimal("70.0"),
             },
         ],
-        ("fetch", "academic_year FROM student_semester_summary"): [
-            {"academic_year": "2024-25"},
-            {"academic_year": "2025-26"},
+        ("fetch", "DISTINCT admission_year"): [
+            {"admission_year": 2024},
+            {"admission_year": 2025},
         ],
         ("fetch", "AS department_code, d.department_name"): [
             {
@@ -560,7 +560,8 @@ class FilteringAndSafetyTests(unittest.TestCase):
     def test_filter_options_are_populated(self):
         service, _ = _service()
         response = run(service.get_academic_overview())
-        self.assertEqual(response.filters.academic_years, ["2024-25", "2025-26"])
+        self.assertEqual(response.filters.batches, ["24-25", "25-26"])
+        self.assertEqual(response.filters.academic_years, ["24-25", "25-26"])
         self.assertEqual(response.filters.semesters, [1, 2, 3])
         self.assertEqual(
             response.filters.departments[1]["department_short_name"], "BBA"

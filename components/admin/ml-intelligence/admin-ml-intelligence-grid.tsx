@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { FilterX, Sparkles } from "lucide-react"
 
 import type { AdminMlIntelligenceData } from "@/lib/admin-api"
+import { getDepartmentBatches } from "@/lib/batch-utils"
 import { MlOverviewCard } from "./ml-overview-card"
 import { FutureRiskCard } from "./future-risk-card"
 import { AcademicPredictionCard } from "./academic-prediction-card"
@@ -19,15 +20,38 @@ export function AdminMlIntelligenceGrid({ data }: { data: AdminMlIntelligenceDat
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
+  const batch = searchParams.get("batch") || searchParams.get("academic_year") || ""
   const departmentCode = searchParams.get("department_code") || ""
   const semester = searchParams.get("semester") || ""
 
   const handleFilterChange = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString())
-    if (value) {
-      params.set(key, value)
+    if (key === "batch") {
+      if (value) {
+        params.set("batch", value)
+        params.delete("academic_year")
+      } else {
+        params.delete("batch")
+        params.delete("academic_year")
+      }
+    } else if (key === "department_code") {
+      if (value) {
+        params.set("department_code", value)
+        const targetBatches = getDepartmentBatches(value, data.filter_options as any)
+        const curBatch = params.get("batch") || params.get("academic_year")
+        if (curBatch && !targetBatches.includes(curBatch)) {
+          params.delete("batch")
+          params.delete("academic_year")
+        }
+      } else {
+        params.delete("department_code")
+      }
     } else {
-      params.delete(key)
+      if (value) {
+        params.set(key, value)
+      } else {
+        params.delete(key)
+      }
     }
     router.push(`${pathname}?${params.toString()}`)
   }
@@ -36,7 +60,9 @@ export function AdminMlIntelligenceGrid({ data }: { data: AdminMlIntelligenceDat
     router.push(pathname)
   }
 
-  const activeFiltersCount = (departmentCode ? 1 : 0) + (semester ? 1 : 0)
+  const activeFiltersCount = (batch ? 1 : 0) + (departmentCode ? 1 : 0) + (semester ? 1 : 0)
+
+  const availableBatches = getDepartmentBatches(departmentCode, data.filter_options as any)
 
   const hasM3Data =
     data.future_risk.future_at_risk_count + data.future_risk.future_low_risk_count > 0
@@ -64,6 +90,20 @@ export function AdminMlIntelligenceGrid({ data }: { data: AdminMlIntelligenceDat
 
         {/* Filter Bar */}
         <div className="flex items-center gap-3">
+          <select
+            className={selectClassName}
+            value={batch}
+            onChange={(e) => handleFilterChange("batch", e.target.value)}
+            aria-label="Starting Batch"
+          >
+            <option value="">All Starting Batches</option>
+            {availableBatches.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+
           <select
             className={selectClassName}
             value={departmentCode}

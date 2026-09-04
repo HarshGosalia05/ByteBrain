@@ -49,6 +49,7 @@ export type SemesterSummaryItem = {
   semester_grade: string | null
   semester_result: string | null
   academic_standing: string | null
+  semester_total_marks: number | null
 }
 
 export type SemesterSummaryResponse = {

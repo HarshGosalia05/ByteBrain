@@ -225,7 +225,9 @@ export default async function AcademicPage({
                         <Badge variant="secondary">{item.semester_grade}</Badge>
                       )}
                     </td>
-                    <td className="py-3 pr-4 text-right tabular-nums">{item.sgpa.toFixed(2)}</td>
+                    <td className="py-3 pr-4 text-right tabular-nums">
+                      {item.sgpa.toFixed(2)}
+                    </td>
                     <td className="py-3 pr-4 text-right tabular-nums">
                       {item.attendance_percentage.toFixed(1)}%
                     </td>

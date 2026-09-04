@@ -14,8 +14,8 @@ import { ChartContainer } from "@/components/shared/charts/chart-container"
 
 type SemesterChartData = {
   semester: string
-  sgpa: number
-  attendance: number
+  sgpa: number | null
+  attendance: number | null
   percentage: number | null
 }
 

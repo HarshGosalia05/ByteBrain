@@ -45,6 +45,19 @@ class AnalyticsRepository:
         async with self.pool.acquire() as conn:
             return await conn.fetchval(query, *args)
 
+    @staticmethod
+    def _batch_sql(param: str = "$3", alias: str = "s") -> str:
+        return f"""(
+            {param}::text IS NULL
+            OR {alias}.admission_year::text = {param}
+            OR {alias}.admission_year = CASE 
+                WHEN {param} ~ '^[0-9]{{2}}-[0-9]{{2}}$' THEN ('20' || split_part({param}, '-', 1))::int
+                WHEN {param} ~ '^[0-9]{{4}}-[0-9]{{2,4}}$' THEN split_part({param}, '-', 1)::int
+                WHEN {param} ~ '^[0-9]{{4}}$' THEN {param}::int
+                ELSE -1
+            END
+        )"""
+
     # ==================================================================
     # A. Student Analytics
     # ==================================================================
@@ -390,7 +403,7 @@ class AnalyticsRepository:
         Grain: one row per (department, semester).
         """
         row = await self._fetchrow(
-            """
+            f"""
             SELECT
                 $1::int AS department_code,
                 (SELECT d.department_name FROM departments d
@@ -409,12 +422,7 @@ class AnalyticsRepository:
             JOIN students s ON s.student_id = sem.student_id
             WHERE ($1::int IS NULL OR s.department_code = $1)
               AND ($2::int IS NULL OR sem.semester_no = $2)
-              AND (
-                  $3::text IS NULL 
-                  OR sem.academic_year = $3 
-                  OR (sem.academic_year = '2026-2027' AND $3 = '2026-27')
-                  OR (sem.academic_year = '2026-27' AND $3 = '2026-2027')
-              )
+              AND {self._batch_sql("$3", "s")}
             """,
             department_code,
             semester_no,
@@ -435,7 +443,7 @@ class AnalyticsRepository:
                Below Average (>=40), Low Performer (<40).
         """
         rows = await self._fetch(
-            """
+            f"""
             WITH bands AS (
                 SELECT
                     sem.student_id,
@@ -450,12 +458,7 @@ class AnalyticsRepository:
                 JOIN students s ON s.student_id = sem.student_id
                 WHERE ($1::int IS NULL OR s.department_code = $1)
                   AND ($2::int IS NULL OR sem.semester_no = $2)
-                  AND (
-                      $3::text IS NULL 
-                      OR sem.academic_year = $3 
-                      OR (sem.academic_year = '2026-2027' AND $3 = '2026-27')
-                      OR (sem.academic_year = '2026-27' AND $3 = '2026-2027')
-                  )
+                  AND {self._batch_sql("$3", "s")}
             ),
             counts AS (
                 SELECT band, count(*)::int AS cnt
@@ -484,18 +487,13 @@ class AnalyticsRepository:
             academic_year,
         )
         total_students = await self._fetchval(
-            """
+            f"""
             SELECT count(DISTINCT sem.student_id)::int
             FROM student_semester_summary sem
             JOIN students s ON s.student_id = sem.student_id
             WHERE ($1::int IS NULL OR s.department_code = $1)
               AND ($2::int IS NULL OR sem.semester_no = $2)
-              AND (
-                  $3::text IS NULL 
-                  OR sem.academic_year = $3 
-                  OR (sem.academic_year = '2026-2027' AND $3 = '2026-27')
-                  OR (sem.academic_year = '2026-27' AND $3 = '2026-2027')
-              )
+              AND {self._batch_sql("$3", "s")}
             """,
             department_code,
             semester_no,
@@ -522,7 +520,7 @@ class AnalyticsRepository:
                Low (>=60), Critical (<60).
         """
         rows = await self._fetch(
-            """
+            f"""
             WITH bands AS (
                 SELECT DISTINCT
                     a.student_id,
@@ -542,12 +540,7 @@ class AnalyticsRepository:
                       AND sem.semester_no = a.semester_no
                 WHERE ($1::int IS NULL OR s.department_code = $1)
                   AND ($2::int IS NULL OR a.semester_no = $2)
-                  AND (
-                      $3::text IS NULL 
-                      OR sem.academic_year = $3 
-                      OR (sem.academic_year = '2026-2027' AND $3 = '2026-27')
-                      OR (sem.academic_year = '2026-27' AND $3 = '2026-2027')
-                  )
+                  AND {self._batch_sql("$3", "s")}
             ),
             counts AS (
                 SELECT band, count(*)::int AS cnt
@@ -576,7 +569,7 @@ class AnalyticsRepository:
             academic_year,
         )
         total_students = await self._fetchval(
-            """
+            f"""
             SELECT count(DISTINCT a.student_id)::int
             FROM attendance a
             JOIN students s ON s.student_id = a.student_id
@@ -585,12 +578,7 @@ class AnalyticsRepository:
                   AND sem.semester_no = a.semester_no
             WHERE ($1::int IS NULL OR s.department_code = $1)
               AND ($2::int IS NULL OR a.semester_no = $2)
-              AND (
-                  $3::text IS NULL 
-                  OR sem.academic_year = $3 
-                  OR (sem.academic_year = '2026-2027' AND $3 = '2026-27')
-                  OR (sem.academic_year = '2026-27' AND $3 = '2026-2027')
-              )
+              AND {self._batch_sql("$3", "s")}
             """,
             department_code,
             semester_no,
@@ -614,7 +602,7 @@ class AnalyticsRepository:
         # in the specified academic year. If no academic_year is specified, use all students.
         if academic_year:
             rows = await self._fetch(
-                """
+                f"""
                 WITH banded AS (
                     SELECT
                         s.student_id,
@@ -627,15 +615,7 @@ class AnalyticsRepository:
                         END AS backlog_range
                     FROM students s
                     WHERE ($1::int IS NULL OR s.department_code = $1)
-                      AND EXISTS (
-                          SELECT 1 FROM student_semester_summary sem
-                          WHERE sem.student_id = s.student_id
-                            AND (
-                                sem.academic_year = $2
-                                OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
-                                OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
-                            )
-                      )
+                      AND {self._batch_sql("$2", "s")}
                 ),
                 counts AS (
                     SELECT backlog_range, count(*)::int AS cnt
@@ -663,32 +643,20 @@ class AnalyticsRepository:
                 academic_year,
             )
             total = await self._fetchval(
-                """
+                f"""
                 SELECT count(*)::int FROM students s
                 WHERE ($1::int IS NULL OR s.department_code = $1)
-                  AND EXISTS (
-                      SELECT 1 FROM student_semester_summary sem
-                      WHERE sem.student_id = s.student_id
-                        AND (
-                            sem.academic_year = $2
-                            OR (sem.academic_year = '2026-2027' AND $2 = '2026-27')
-                            OR (sem.academic_year = '2026-27' AND $2 = '2026-2027')
-                        )
-                  )
+                  AND {self._batch_sql("$2", "s")}
                 """,
                 department_code,
                 academic_year,
             )
             with_backlogs = await self._fetchval(
-                """
+                f"""
                 SELECT count(*)::int FROM students s
                 WHERE ($1::int IS NULL OR s.department_code = $1)
                   AND s.total_backlogs > 0
-                  AND EXISTS (
-                      SELECT 1 FROM student_semester_summary sem
-                      WHERE sem.student_id = s.student_id
-                        AND sem.academic_year = $2
-                  )
+                  AND {self._batch_sql("$2", "s")}
                 """,
                 department_code,
                 academic_year,
@@ -787,7 +755,7 @@ class AnalyticsRepository:
         # If academic_year is specified, filter students who have semester records in that year
         if academic_year:
             students = await self._fetch(
-                """
+                f"""
                 SELECT
                     s.student_id,
                     s.full_name,
@@ -799,11 +767,7 @@ class AnalyticsRepository:
                     s.overall_attendance_percentage
                 FROM students s
                 WHERE ($1::int IS NULL OR s.department_code = $1)
-                  AND EXISTS (
-                      SELECT 1 FROM student_semester_summary sem
-                      WHERE sem.student_id = s.student_id
-                        AND sem.academic_year = $2
-                  )
+                  AND {self._batch_sql("$2", "s")}
                 ORDER BY s.student_id
                 """,
                 department_code,
@@ -921,7 +885,7 @@ class AnalyticsRepository:
         Grain: one row per (student, subject) below threshold.
         """
         students = await self._fetch(
-            """
+            f"""
             SELECT
                 a.student_id,
                 s.full_name,
@@ -939,7 +903,7 @@ class AnalyticsRepository:
             WHERE a.attendance_percentage < $1
               AND ($2::int IS NULL OR s.department_code = $2)
               AND ($3::int IS NULL OR a.semester_no = $3)
-              AND ($4::text IS NULL OR sem.academic_year = $4)
+              AND {self._batch_sql("$4", "s")}
             ORDER BY a.attendance_percentage
             """,
             threshold,
@@ -972,7 +936,7 @@ class AnalyticsRepository:
         # We need to join with student_semester_summary to filter by academic_year
         if academic_year:
             rows = await self._fetch(
-                """
+                f"""
                 SELECT
                     p.subject_id,
                     sub.subject_code,
@@ -996,7 +960,7 @@ class AnalyticsRepository:
                     AND sem.semester_no = p.semester_no
                 WHERE ($1::int IS NULL OR s.department_code = $1)
                   AND ($2::int IS NULL OR p.semester_no = $2)
-                  AND sem.academic_year = $3
+                  AND {self._batch_sql("$3", "s")}
                 GROUP BY p.subject_id, sub.subject_code, sub.subject_name,
                          p.semester_no
                 """,

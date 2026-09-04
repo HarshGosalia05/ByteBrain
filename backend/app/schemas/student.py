@@ -51,6 +51,7 @@ class SemesterSummaryItem(BaseModel):
     semester_grade: Optional[str] = None
     semester_result: Optional[str] = None
     academic_standing: Optional[str] = None
+    semester_total_marks: Optional[int] = None
 
 
 class SemesterSummaryResponse(BaseModel):

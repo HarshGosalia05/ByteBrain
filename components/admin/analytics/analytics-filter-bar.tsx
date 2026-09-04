@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Filter, FilterX } from "lucide-react"
 
 import type { DashboardFilterOptions } from "@/lib/admin-api"
+import { getDepartmentBatches } from "@/lib/batch-utils"
 
 const selectClassName =
   "h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-auto"
@@ -17,13 +18,13 @@ export function AnalyticsFilterBar({ filters }: AnalyticsFilterBarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const academicYear = searchParams.get("academic_year") || ""
+  const batch = searchParams.get("batch") || searchParams.get("academic_year") || ""
   const departmentCode = searchParams.get("department_code") || ""
   const semester = searchParams.get("semester_no") || ""
   const activeFiltersCount =
-    (academicYear ? 1 : 0) + (departmentCode ? 1 : 0) + (semester ? 1 : 0)
+    (batch ? 1 : 0) + (departmentCode ? 1 : 0) + (semester ? 1 : 0)
 
-  // Derive valid semesters for the selected department
+  // Derive valid semesters and batches for the selected department
   const selectedDept = (filters.departments || []).find(
     (d) => d.department_code.toString() === departmentCode
   )
@@ -34,9 +35,19 @@ export function AnalyticsFilterBar({ filters }: AnalyticsFilterBarProps) {
         ? Array.from({ length: selectedDept.total_semesters }, (_, i) => i + 1)
         : (filters.semesters || [])
 
+  const availableBatches = getDepartmentBatches(departmentCode, filters)
+
   const handleFilterChange = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString())
-    if (key === "department_code") {
+    if (key === "batch") {
+      if (value) {
+        params.set("batch", value)
+        params.delete("academic_year")
+      } else {
+        params.delete("batch")
+        params.delete("academic_year")
+      }
+    } else if (key === "department_code") {
       if (value) {
         params.set("department_code", value)
         const targetDept = (filters.departments || []).find(
@@ -51,6 +62,13 @@ export function AnalyticsFilterBar({ filters }: AnalyticsFilterBarProps) {
         const currentSem = params.get("semester_no")
         if (currentSem && !targetSemesters.includes(parseInt(currentSem, 10))) {
           params.delete("semester_no")
+        }
+
+        const targetBatches = getDepartmentBatches(value, filters)
+        const currentBatch = params.get("batch") || params.get("academic_year")
+        if (currentBatch && !targetBatches.includes(currentBatch)) {
+          params.delete("batch")
+          params.delete("academic_year")
         }
       } else {
         params.delete("department_code")
@@ -74,14 +92,14 @@ export function AnalyticsFilterBar({ filters }: AnalyticsFilterBarProps) {
       <div className="flex flex-wrap items-center gap-3">
         <select
           className={selectClassName}
-          value={academicYear}
-          onChange={(e) => handleFilterChange("academic_year", e.target.value)}
-          aria-label="Academic year"
+          value={batch}
+          onChange={(e) => handleFilterChange("batch", e.target.value)}
+          aria-label="Starting Batch"
         >
-          <option value="">All Years</option>
-          {(filters.academic_years || []).map((y) => (
-            <option key={y} value={y}>
-              {y}
+          <option value="">All Starting Batches</option>
+          {availableBatches.map((b) => (
+            <option key={b} value={b}>
+              {b}
             </option>
           ))}
         </select>

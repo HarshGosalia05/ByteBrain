@@ -26,15 +26,20 @@ export type DepartmentOption = {
   department_short_name: string | null
   total_semesters?: number | null
   semesters?: number[]
+  batches?: string[]
 }
 
 export type DashboardFilterOptions = {
+  batches?: string[]
   academic_years: string[]
   departments: DepartmentOption[]
+  department_batches?: Record<string, string[]>
   semesters: number[]
   preferred_domains?: string[]
   dream_roles?: string[]
 }
+
+export { getDepartmentBatches } from "./batch-utils.ts"
 
 export type DepartmentPerformanceItem = {
   department_code: number
@@ -85,6 +90,7 @@ export type AdminDashboardData = {
 
 export type AdminDashboardFilters = {
   department_code?: number | null
+  batch?: string | null
   academic_year?: string | null
   semester?: number | null
   preferred_domain?: string | null
@@ -237,7 +243,8 @@ export function getAdminDashboard(
   return callFastapi<AdminDashboardData>("dashboard", BFF_TTL_MS, {
     query: {
       department_code: filters.department_code,
-      academic_year: filters.academic_year,
+      batch: filters.batch ?? filters.academic_year,
+      academic_year: filters.academic_year ?? filters.batch,
       semester: filters.semester,
     },
   })
@@ -349,7 +356,8 @@ export function getAcademicOverview(
   return callFastapi<AcademicOverviewData>("academic", BFF_TTL_MS, {
     query: {
       department_code: filters.department_code,
-      academic_year: filters.academic_year,
+      batch: filters.batch ?? filters.academic_year,
+      academic_year: filters.academic_year ?? filters.batch,
       semester: filters.semester,
     },
   })
@@ -361,7 +369,8 @@ export function getDepartmentAnalytics(
   return callFastapi<DepartmentAnalyticsData>("academic/departments", BFF_TTL_MS, {
     query: {
       department_code: filters.department_code,
-      academic_year: filters.academic_year,
+      batch: filters.batch ?? filters.academic_year,
+      academic_year: filters.academic_year ?? filters.batch,
       semester: filters.semester,
     },
   })
@@ -374,7 +383,8 @@ export function getSubjectIntelligence(
   return callFastapi<SubjectIntelligenceData>("academic/subjects", BFF_TTL_MS, {
     query: {
       department_code: filters.department_code,
-      academic_year: filters.academic_year,
+      batch: filters.batch ?? filters.academic_year,
+      academic_year: filters.academic_year ?? filters.batch,
       semester: filters.semester,
       search: search || undefined,
     },
@@ -516,7 +526,8 @@ export function getAttendanceIntelligence(
   return callFastapi<AttendanceIntelligenceData>("attendance", BFF_TTL_MS, {
     query: {
       department_code: filters.department_code,
-      academic_year: filters.academic_year,
+      batch: filters.batch ?? filters.academic_year,
+      academic_year: filters.academic_year ?? filters.batch,
       semester: filters.semester,
       search: search || undefined,
     },
@@ -531,7 +542,8 @@ export function getRiskIntelligence(
   return callFastapi<RiskIntelligenceData>("risk", BFF_TTL_MS, {
     query: {
       department_code: filters.department_code,
-      academic_year: filters.academic_year,
+      batch: filters.batch ?? filters.academic_year,
+      academic_year: filters.academic_year ?? filters.batch,
       semester: filters.semester,
       risk: risk || undefined,
       search: search || undefined,
@@ -617,7 +629,8 @@ export function getAdminStudents(
   return callFastapi<AdminStudentsData>("students", BFF_TTL_MS, {
     query: {
       department_code: query.filters?.department_code,
-      academic_year: query.filters?.academic_year,
+      batch: query.filters?.batch ?? query.filters?.academic_year,
+      academic_year: query.filters?.academic_year ?? query.filters?.batch,
       semester: query.filters?.semester,
       preferred_domain: query.filters?.preferred_domain || undefined,
       dream_job_role: query.filters?.dream_job_role || undefined,

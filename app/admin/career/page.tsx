@@ -19,6 +19,12 @@ export default async function AdminCareerPage(props: {
         ? dp
         : null
 
+  const batch =
+    typeof searchParams.batch === "string" && searchParams.batch
+      ? searchParams.batch
+      : typeof searchParams.academic_year === "string" && searchParams.academic_year
+        ? searchParams.academic_year
+        : null
   const preferred_domain = typeof searchParams.preferred_domain === "string" ? searchParams.preferred_domain : null
   const dream_job_role = typeof searchParams.dream_job_role === "string" ? searchParams.dream_job_role : null
   const internship_status = typeof searchParams.internship_status === "string" ? searchParams.internship_status : null
@@ -30,6 +36,8 @@ export default async function AdminCareerPage(props: {
   const res = await getAdminStudents({
     filters: {
       department_code,
+      batch,
+      academic_year: batch,
       preferred_domain,
       dream_job_role,
       internship_status,

@@ -64,8 +64,10 @@ class ResultOverviewItem(BaseModel):
 
 
 class FilterOptions(BaseModel):
+    batches: List[str] = []
     academic_years: List[str] = []
     departments: List[dict] = []
+    department_batches: dict = {}
     semesters: List[int] = []
     preferred_domains: List[str] = []
     dream_roles: List[str] = []

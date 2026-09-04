@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, Filter, FilterX, Search, X } from "lucide-react"
 
 import type { DashboardFilterOptions } from "@/lib/admin-api"
+import { getDepartmentBatches } from "@/lib/batch-utils"
 
 const selectClassName =
   "h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-auto"
@@ -34,7 +35,7 @@ export function StudentsFilterBar({ filters }: StudentsFilterBarProps) {
     searchParams.get("search") || "",
   )
 
-  const academicYear = searchParams.get("academic_year") || ""
+  const batch = searchParams.get("batch") || searchParams.get("academic_year") || ""
   const departmentCode = searchParams.get("department_code") || ""
   const semester = searchParams.get("semester") || ""
   const risk = searchParams.get("risk") || ""
@@ -47,16 +48,64 @@ export function StudentsFilterBar({ filters }: StudentsFilterBarProps) {
     : "name"
   const sortDir = searchParams.get("sort_dir") === "desc" ? "desc" : "asc"
 
+  const selectedDept = (filters.departments || []).find(
+    (d) => d.department_code.toString() === departmentCode
+  )
+  const availableSemesters =
+    selectedDept?.semesters && selectedDept.semesters.length > 0
+      ? selectedDept.semesters
+      : selectedDept?.total_semesters
+        ? Array.from({ length: selectedDept.total_semesters }, (_, i) => i + 1)
+        : (filters.semesters || [])
+
+  const availableBatches = getDepartmentBatches(departmentCode, filters)
+
   const applyParams = (params: URLSearchParams) => {
     router.push(`${pathname}?${params.toString()}`)
   }
 
   const setParam = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString())
-    if (value) {
-      params.set(key, value)
+    if (key === "batch") {
+      if (value) {
+        params.set("batch", value)
+        params.delete("academic_year")
+      } else {
+        params.delete("batch")
+        params.delete("academic_year")
+      }
+    } else if (key === "department_code") {
+      if (value) {
+        params.set("department_code", value)
+        const targetDept = (filters.departments || []).find(
+          (d) => d.department_code.toString() === value
+        )
+        const targetSemesters =
+          targetDept?.semesters && targetDept.semesters.length > 0
+            ? targetDept.semesters
+            : targetDept?.total_semesters
+              ? Array.from({ length: targetDept.total_semesters }, (_, i) => i + 1)
+              : (filters.semesters || [])
+        const currentSem = params.get("semester")
+        if (currentSem && !targetSemesters.includes(parseInt(currentSem, 10))) {
+          params.delete("semester")
+        }
+
+        const targetBatches = getDepartmentBatches(value, filters)
+        const currentBatch = params.get("batch") || params.get("academic_year")
+        if (currentBatch && !targetBatches.includes(currentBatch)) {
+          params.delete("batch")
+          params.delete("academic_year")
+        }
+      } else {
+        params.delete("department_code")
+      }
     } else {
-      params.delete(key)
+      if (value) {
+        params.set(key, value)
+      } else {
+        params.delete(key)
+      }
     }
     params.delete("page")
     applyParams(params)
@@ -94,7 +143,7 @@ export function StudentsFilterBar({ filters }: StudentsFilterBarProps) {
   }
 
   const activeFiltersCount =
-    (academicYear ? 1 : 0) +
+    (batch ? 1 : 0) +
     (departmentCode ? 1 : 0) +
     (semester ? 1 : 0) +
     (risk ? 1 : 0) +
@@ -105,14 +154,14 @@ export function StudentsFilterBar({ filters }: StudentsFilterBarProps) {
       <div className="flex flex-wrap items-center gap-3">
         <select
           className={selectClassName}
-          value={academicYear}
-          onChange={(e) => setParam("academic_year", e.target.value)}
-          aria-label="Academic year"
+          value={batch}
+          onChange={(e) => setParam("batch", e.target.value)}
+          aria-label="Starting Batch"
         >
-          <option value="">All Years</option>
-          {(filters.academic_years || []).map((y) => (
-            <option key={y} value={y}>
-              {y}
+          <option value="">All Starting Batches</option>
+          {availableBatches.map((b) => (
+            <option key={b} value={b}>
+              {b}
             </option>
           ))}
         </select>
@@ -136,7 +185,7 @@ export function StudentsFilterBar({ filters }: StudentsFilterBarProps) {
           aria-label="Semester"
         >
           <option value="">All Semesters</option>
-          {(filters.semesters || []).map((s) => (
+          {availableSemesters.map((s) => (
             <option key={s} value={s.toString()}>
               Semester {s}
             </option>

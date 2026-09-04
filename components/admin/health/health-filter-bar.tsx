@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Filter, FilterX, Search, X } from "lucide-react"
 
 import type { DashboardFilterOptions } from "@/lib/admin-api"
+import { getDepartmentBatches } from "@/lib/batch-utils"
 
 const selectClassName =
   "h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-auto"
@@ -14,15 +15,7 @@ const DEFAULT_DEPARTMENTS = [
   { department_code: 2, department_name: "Bachelor of Business Administration", department_short_name: "BBA" },
 ]
 
-export function HealthFilterBar({
-  filters,
-  onFilterChange,
-  onReset,
-}: {
-  filters?: DashboardFilterOptions | { department_code?: number | null }
-  onFilterChange?: (filters: { department_code?: number | null }) => void
-  onReset?: () => void
-}) {
+export function HealthFilterBar({ filters }: { filters?: DashboardFilterOptions }) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -31,14 +24,81 @@ export function HealthFilterBar({
     searchParams.get("search") || "",
   )
 
-  const applyParams = (params: URLSearchParams) => {
-    router.push(`${pathname}?${params.toString()}`)
+  const batch =
+    searchParams.get("batch") || searchParams.get("academic_year") || ""
+  const departmentCodeParam = searchParams.get("department_code")
+  const semesterParam = searchParams.get("semester")
+
+  const dp = departmentCodeParam
+    ? parseInt(departmentCodeParam, 10) || 0
+    : 0
+  const semester = semesterParam ? parseInt(semesterParam, 10) || 0 : 0
+
+  const selectedDept = filters?.departments?.find(
+    (d) => d.department_code === dp,
+  )
+
+  const departmentSemesters =
+    selectedDept && "semesters" in selectedDept && Array.isArray((selectedDept as { semesters?: number[] }).semesters)
+      ? (selectedDept as { semesters: number[] }).semesters
+      : selectedDept && "total_semesters" in selectedDept
+        ? Array.from(
+            { length: Number((selectedDept as { total_semesters?: number }).total_semesters) || 0 },
+            (_, i) => i + 1,
+          )
+        : filters?.semesters ?? []
+
+  const availableBatches = getDepartmentBatches(
+    dp || undefined,
+    filters as Parameters<typeof getDepartmentBatches>[1],
+  )
+
+  const setParam = (key: string, value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value) {
+      params.set(key, value)
+    } else {
+      params.delete(key)
+    }
+    if (key === "batch") {
+      params.delete("academic_year")
+    }
+    if (key === "department_code") {
+      if (params.has("semester")) {
+        const targetDept = filters?.departments?.find(
+          (d) => d.department_code === parseInt(value, 10),
+        )
+        const validSemesters =
+          targetDept && "semesters" in targetDept && Array.isArray((targetDept as { semesters?: number[] }).semesters)
+            ? (targetDept as { semesters: number[] }).semesters
+            : targetDept && "total_semesters" in targetDept
+              ? Array.from(
+                  { length: Number((targetDept as { total_semesters?: number }).total_semesters) || 0 },
+                  (_, i) => i + 1,
+                )
+              : filters?.semesters ?? []
+        const currentSem = parseInt(params.get("semester") || "0", 10)
+        if (currentSem && !validSemesters.includes(currentSem)) {
+          params.delete("semester")
+        }
+      }
+      if (params.has("batch")) {
+        const targetBatches = getDepartmentBatches(
+          parseInt(value, 10) || undefined,
+          filters as Parameters<typeof getDepartmentBatches>[1],
+        )
+        const currentBatch = params.get("batch") || ""
+        if (currentBatch && !targetBatches.includes(currentBatch)) {
+          params.delete("batch")
+          params.delete("academic_year")
+        }
+      }
+    }
+    applyParams(params)
   }
 
-  const handleDepartmentChange = (value: string) => {
-    const code = value ? parseInt(value, 10) || null : null
-    onFilterChange?.({ department_code: code })
-    applyParams(paramsWith(searchParams, "department_code", value))
+  const applyParams = (params: URLSearchParams) => {
+    router.push(`${pathname}?${params.toString()}`)
   }
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -62,16 +122,14 @@ export function HealthFilterBar({
 
   const handleResetFilters = () => {
     setSearchDraft("")
-    onReset?.()
     router.push(pathname)
   }
 
-  const dp = searchParams.get("department_code")
-  const defaultDp = filters && "department_code" in filters ? filters.department_code : 0
-  const departmentCode = dp ? parseInt(dp, 10) || 0 : (defaultDp ?? 0)
-
   const activeFiltersCount =
-    (departmentCode !== 0 ? 1 : 0) + (searchDraft ? 1 : 0)
+    (batch ? 1 : 0) +
+    (dp ? 1 : 0) +
+    (semester ? 1 : 0) +
+    (searchDraft ? 1 : 0)
 
   const departmentsList =
     filters && "departments" in filters && Array.isArray(filters.departments) && filters.departments.length > 0
@@ -83,14 +141,42 @@ export function HealthFilterBar({
       <div className="flex flex-wrap items-center gap-3">
         <select
           className={selectClassName}
-          value={departmentCode ? String(departmentCode) : ""}
-          onChange={(e) => handleDepartmentChange(e.target.value)}
+          value={batch}
+          onChange={(e) => setParam("batch", e.target.value)}
+          aria-label="Starting Batch"
+        >
+          <option value="">All Starting Batches</option>
+          {availableBatches.map((b) => (
+            <option key={b} value={b}>
+              {b}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className={selectClassName}
+          value={dp ? String(dp) : ""}
+          onChange={(e) => setParam("department_code", e.target.value)}
           aria-label="Department"
         >
           <option value="">All Departments</option>
           {departmentsList.map((d) => (
             <option key={d.department_code} value={String(d.department_code)}>
               {d.department_name || d.department_short_name || `Dept ${d.department_code}`}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className={selectClassName}
+          value={semester ? String(semester) : ""}
+          onChange={(e) => setParam("semester", e.target.value)}
+          aria-label="Semester"
+        >
+          <option value="">All Semesters</option>
+          {departmentSemesters.map((s) => (
+            <option key={s} value={String(s)}>
+              Sem {s}
             </option>
           ))}
         </select>
@@ -104,7 +190,7 @@ export function HealthFilterBar({
             type="text"
             value={searchDraft}
             onChange={(e) => setSearchDraft(e.target.value)}
-            placeholder="Search students…"
+            placeholder="Search students..."
             aria-label="Search students"
             className="h-7 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
@@ -138,14 +224,4 @@ export function HealthFilterBar({
       </div>
     </div>
   )
-}
-
-function paramsWith(currentParams: URLSearchParams, key: string, value: string): URLSearchParams {
-  const params = new URLSearchParams(currentParams.toString())
-  if (value) {
-    params.set(key, value)
-  } else {
-    params.delete(key)
-  }
-  return params
 }

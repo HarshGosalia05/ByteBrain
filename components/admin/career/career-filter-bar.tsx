@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Filter, FilterX, Search, X } from "lucide-react"
 
 import type { DashboardFilterOptions } from "@/lib/admin-api"
+import { getDepartmentBatches } from "@/lib/batch-utils"
 
 const selectClassName =
   "h-9 min-w-36 rounded-md border border-input bg-background px-2.5 py-1 text-xs ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -34,10 +35,32 @@ export function CareerFilterBar({
 
   const applyParams = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString())
-    if (value) {
-      params.set(key, value)
+    if (key === "batch") {
+      if (value) {
+        params.set("batch", value)
+        params.delete("academic_year")
+      } else {
+        params.delete("batch")
+        params.delete("academic_year")
+      }
+    } else if (key === "department_code") {
+      if (value) {
+        params.set("department_code", value)
+        const targetBatches = getDepartmentBatches(value, filters)
+        const curBatch = params.get("batch") || params.get("academic_year")
+        if (curBatch && !targetBatches.includes(curBatch)) {
+          params.delete("batch")
+          params.delete("academic_year")
+        }
+      } else {
+        params.delete("department_code")
+      }
     } else {
-      params.delete(key)
+      if (value) {
+        params.set(key, value)
+      } else {
+        params.delete(key)
+      }
     }
     router.push(`${pathname}?${params.toString()}`)
   }
@@ -57,6 +80,7 @@ export function CareerFilterBar({
     router.push(pathname)
   }
 
+  const currentBatch = searchParams.get("batch") || searchParams.get("academic_year") || ""
   const currentDept = searchParams.get("department_code") || ""
   const currentDomain = searchParams.get("preferred_domain") || ""
   const currentRole = searchParams.get("dream_job_role") || ""
@@ -67,6 +91,7 @@ export function CareerFilterBar({
   const currentSearch = searchParams.get("search") || ""
 
   const activeFiltersCount =
+    (currentBatch ? 1 : 0) +
     (currentDept ? 1 : 0) +
     (currentDomain ? 1 : 0) +
     (currentRole ? 1 : 0) +
@@ -75,6 +100,8 @@ export function CareerFilterBar({
     (currentCareerStatus ? 1 : 0) +
     (currentPackage ? 1 : 0) +
     (currentSearch ? 1 : 0)
+
+  const availableBatches = getDepartmentBatches(currentDept, filters)
 
   const departmentsList =
     filters && Array.isArray(filters.departments) && filters.departments.length > 0
@@ -134,6 +161,21 @@ export function CareerFilterBar({
             </button>
           )}
         </form>
+
+        {/* Batch Filter */}
+        <select
+          className={selectClassName}
+          value={currentBatch}
+          onChange={(e) => applyParams("batch", e.target.value)}
+          aria-label="Starting Batch"
+        >
+          <option value="">All Starting Batches</option>
+          {availableBatches.map((b) => (
+            <option key={b} value={b}>
+              {b}
+            </option>
+          ))}
+        </select>
 
         {/* Department Filter */}
         <select

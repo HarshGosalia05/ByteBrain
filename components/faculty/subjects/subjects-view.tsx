@@ -162,7 +162,7 @@ export function SubjectsView({ data }: { data: FacultySubjectsResponse }) {
               value={data.applied.batch || ""}
               onChange={(e) => handleFilterChange("batch", e.target.value)}
             >
-              <option value="">All Batches</option>
+              <option value="">All Starting Batches</option>
               {(data.filters.batches || []).map((b) => (
                 <option key={b} value={b}>
                   {b}
