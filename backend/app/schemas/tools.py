@@ -26,9 +26,11 @@ from app.schemas.genai import ConversationMessage, UserRole
 # ---------------------------------------------------------------------------
 
 STUDENT_INTENTS = (
+    "student_profile",
     "academic_performance",
     "attendance",
     "subject_analysis",
+    "timetable",
     "prediction_explanation",
     "career_readiness",
     "career_guidance",
@@ -55,9 +57,11 @@ ADMIN_INTENTS = (
 )
 
 IntentType = Literal[
+    "student_profile",
     "academic_performance",
     "attendance",
     "subject_analysis",
+    "timetable",
     "prediction_explanation",
     "career_readiness",
     "career_guidance",

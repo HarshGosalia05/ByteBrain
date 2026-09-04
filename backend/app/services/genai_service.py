@@ -25,11 +25,14 @@ from datetime import datetime, timezone
 from app.core.config import settings
 from app.schemas.genai import GenAIRequest, GenAIResponse
 from app.services.genai_provider import (
+    FailoverProvider,
     GenAIConfigurationError,
     GenAIContextError,
     GenAIError,
     GenAIProvider,
     GenAIProviderError,
+    GroqProvider,
+    OllamaProvider,
     OpenAICompatibleProvider,
 )
 
@@ -42,13 +45,24 @@ GROUNDING_SYSTEM_INSTRUCTION = (
     "\n"
     "RULES:\n"
     "- Use ONLY the verified context data provided below. Never invent any data.\n"
-    "- Reply in the same language as the user (English, Hindi, or Hinglish).\n"
+    "- Reply in the same language as the user (English, Hindi, Hinglish, or "
+    "Gujarati/Romanized Gujarati). Language must NEVER change the data used; "
+    "always answer from the verified context regardless of language.\n"
     "- Never make up marks, percentages, SGPA, attendance, or prediction numbers.\n"
     "- Never claim information you were not given.\n"
     "- If context is missing, say: \"Required information is unavailable.\"\n"
     "- For predictions, say \"The model estimates...\", never \"You will...\".\n"
     "- For career advice, distinguish verified facts from suggestions.\n"
     "- Format with Markdown: bullet points, bold text. Be concise.\n"
+    "- If asked for a student's name but no verified name is present, say the name "
+    "is not available in the authorized context. Never substitute CGPA, semester, "
+    "attendance, or any other metric for a name.\n"
+    "- If the user asks about a specific semester but that semester's verified data "
+    "is not present, say that semester's information is unavailable. Never silently "
+    "substitute the current/latest semester, another subject, or another value.\n"
+    "- Aggregate (average across all subjects/predictions) is only available if "
+    "explicitly present in the verified context; otherwise say aggregate data is "
+    "unavailable rather than computing it yourself.\n"
     "\n"
     "VERIFIED CONTEXT (use only this data):\n"
 )
@@ -56,11 +70,119 @@ GROUNDING_SYSTEM_INSTRUCTION = (
 _PROVIDER_TYPES: dict[str, type] = {"openai_compatible": OpenAICompatibleProvider}
 
 
+def _build_openai_compatible(model: str, *, fallback_models: list[str] | None = None) -> OpenAICompatibleProvider:
+    """Build the legacy OpenAI-compatible provider from ``settings.GENAI_*``."""
+    return OpenAICompatibleProvider(
+        api_key=settings.GENAI_API_KEY,
+        model=model,
+        base_url=settings.GENAI_BASE_URL,
+        temperature=settings.GENAI_TEMPERATURE,
+        max_tokens=settings.GENAI_MAX_TOKENS,
+        timeout_seconds=settings.GENAI_TIMEOUT_SECONDS,
+        max_retries=settings.GENAI_MAX_RETRIES,
+        retry_backoff_seconds=settings.GENAI_RETRY_BACKOFF_SECONDS,
+        fallback_models=fallback_models,
+    )
+
+
+def _legacy_primary_model() -> str:
+    """Primary model when using the legacy single-provider path."""
+    return settings.GENAI_MODEL or settings.GENAI_PRIMARY_MODEL
+
+
+def _legacy_fallback_models() -> list[str]:
+    fallback_models = list(settings.GENAI_FALLBACK_MODELS)
+    if settings.GENAI_FALLBACK_MODEL_1:
+        fallback_models.append(settings.GENAI_FALLBACK_MODEL_1)
+    if settings.GENAI_FALLBACK_MODEL_2:
+        fallback_models.append(settings.GENAI_FALLBACK_MODEL_2)
+    return fallback_models
+
+
+def _build_primary_provider(name: str) -> GenAIProvider:
+    """Build the primary provider named by configuration."""
+    if name == "groq":
+        if not settings.GROQ_API_KEY:
+            raise GenAIConfigurationError("GROQ_API_KEY is not configured")
+        return GroqProvider(
+            api_key=settings.GROQ_API_KEY,
+            model=settings.GROQ_MODEL,
+            base_url=settings.GROQ_BASE_URL,
+            temperature=settings.GENAI_TEMPERATURE,
+            max_tokens=settings.GENAI_MAX_TOKENS,
+            timeout_seconds=settings.GENAI_TIMEOUT_SECONDS,
+            max_retries=settings.GENAI_MAX_RETRIES,
+            retry_backoff_seconds=settings.GENAI_RETRY_BACKOFF_SECONDS,
+        )
+    if name == "ollama":
+        return OllamaProvider(
+            model=settings.OLLAMA_MODEL,
+            api_key="",
+            base_url=settings.OLLAMA_BASE_URL,
+            temperature=settings.GENAI_TEMPERATURE,
+            max_tokens=settings.GENAI_MAX_TOKENS,
+            timeout_seconds=settings.GENAI_TIMEOUT_SECONDS,
+            max_retries=settings.GENAI_MAX_RETRIES,
+            retry_backoff_seconds=settings.GENAI_RETRY_BACKOFF_SECONDS,
+        )
+    if name == "openai_compatible":
+        if not settings.GENAI_API_KEY:
+            raise GenAIConfigurationError("GENAI_API_KEY is not configured")
+        primary_model = _legacy_primary_model()
+        if not primary_model:
+            raise GenAIConfigurationError(
+                "GENAI_MODEL or GENAI_PRIMARY_MODEL is not configured"
+            )
+        return _build_openai_compatible(
+            primary_model, fallback_models=_legacy_fallback_models()
+        )
+    raise GenAIConfigurationError(f"Unsupported GENAI provider {name!r}")
+
+
+def _build_fallback_provider(name: str) -> GenAIProvider | None:
+    """Build the fallback provider named by configuration, or ``None`` if unset."""
+    if not name:
+        return None
+    if name == "groq":
+        if not settings.GROQ_API_KEY:
+            raise GenAIConfigurationError("GROQ_API_KEY is not configured")
+        return GroqProvider(
+            api_key=settings.GROQ_API_KEY,
+            model=settings.GROQ_MODEL,
+            base_url=settings.GROQ_BASE_URL,
+            temperature=settings.GENAI_TEMPERATURE,
+            max_tokens=settings.GENAI_MAX_TOKENS,
+            timeout_seconds=settings.GENAI_TIMEOUT_SECONDS,
+            max_retries=settings.GENAI_MAX_RETRIES,
+            retry_backoff_seconds=settings.GENAI_RETRY_BACKOFF_SECONDS,
+        )
+    if name == "ollama":
+        return OllamaProvider(
+            model=settings.OLLAMA_MODEL,
+            api_key="",
+            base_url=settings.OLLAMA_BASE_URL,
+            temperature=settings.GENAI_TEMPERATURE,
+            max_tokens=settings.GENAI_MAX_TOKENS,
+            timeout_seconds=settings.GENAI_TIMEOUT_SECONDS,
+            max_retries=settings.GENAI_MAX_RETRIES,
+            retry_backoff_seconds=settings.GENAI_RETRY_BACKOFF_SECONDS,
+        )
+    if name == "openai_compatible":
+        if not settings.GENAI_API_KEY:
+            raise GenAIConfigurationError("GENAI_API_KEY is not configured")
+        return _build_openai_compatible(
+            _legacy_primary_model(), fallback_models=_legacy_fallback_models()
+        )
+    raise GenAIConfigurationError(f"Unsupported GENAI provider {name!r}")
+
+
 class GenAIService:
     """Central, provider-agnostic LLM entry point (G0).
 
     ``provider`` is injectable for isolated tests; when omitted it is
-    resolved once per call from ``settings.GENAI_*``.
+    resolved once per call from ``settings.GENAI_PRIMARY_PROVIDER`` /
+    ``settings.GENAI_FALLBACK_PROVIDER`` (with the legacy ``GENAI_PROVIDER``
+    path retained for backward compatibility when the primary is unset).
     """
 
     def __init__(self, *, provider: GenAIProvider | None = None):
@@ -70,36 +192,34 @@ class GenAIService:
         if self._provider is not None:
             return self._provider
 
-        if not settings.GENAI_PROVIDER:
-            raise GenAIConfigurationError("GENAI_PROVIDER is not configured")
-        provider_cls = _PROVIDER_TYPES.get(settings.GENAI_PROVIDER)
-        if provider_cls is None:
+        primary_name = settings.GENAI_PRIMARY_PROVIDER or settings.GENAI_PROVIDER
+        if not primary_name:
             raise GenAIConfigurationError(
-                f"Unsupported GENAI_PROVIDER {settings.GENAI_PROVIDER!r}"
+                "GENAI_PRIMARY_PROVIDER or GENAI_PROVIDER is not configured"
             )
-        if not settings.GENAI_API_KEY:
-            raise GenAIConfigurationError("GENAI_API_KEY is not configured")
-        primary_model = settings.GENAI_MODEL or settings.GENAI_PRIMARY_MODEL
-        if not primary_model:
-            raise GenAIConfigurationError("GENAI_MODEL or GENAI_PRIMARY_MODEL is not configured")
 
-        fallback_models = list(settings.GENAI_FALLBACK_MODELS)
-        if settings.GENAI_FALLBACK_MODEL_1:
-            fallback_models.append(settings.GENAI_FALLBACK_MODEL_1)
-        if settings.GENAI_FALLBACK_MODEL_2:
-            fallback_models.append(settings.GENAI_FALLBACK_MODEL_2)
+        if not settings.GENAI_PRIMARY_PROVIDER:
+            provider_cls = _PROVIDER_TYPES.get(settings.GENAI_PROVIDER)
+            if provider_cls is None:
+                raise GenAIConfigurationError(
+                    f"Unsupported GENAI_PROVIDER {settings.GENAI_PROVIDER!r}"
+                )
+            if not settings.GENAI_API_KEY:
+                raise GenAIConfigurationError("GENAI_API_KEY is not configured")
+            primary_model = _legacy_primary_model()
+            if not primary_model:
+                raise GenAIConfigurationError(
+                    "GENAI_MODEL or GENAI_PRIMARY_MODEL is not configured"
+                )
+            return _build_openai_compatible(
+                primary_model, fallback_models=_legacy_fallback_models()
+            )
 
-        return provider_cls(
-            api_key=settings.GENAI_API_KEY,
-            model=primary_model,
-            base_url=settings.GENAI_BASE_URL,
-            temperature=settings.GENAI_TEMPERATURE,
-            max_tokens=settings.GENAI_MAX_TOKENS,
-            timeout_seconds=settings.GENAI_TIMEOUT_SECONDS,
-            max_retries=settings.GENAI_MAX_RETRIES,
-            retry_backoff_seconds=settings.GENAI_RETRY_BACKOFF_SECONDS,
-            fallback_models=fallback_models,
-        )
+        primary = _build_primary_provider(primary_name)
+        fallback = _build_fallback_provider(settings.GENAI_FALLBACK_PROVIDER)
+        if fallback is None:
+            return primary
+        return FailoverProvider([primary, fallback])
 
     @staticmethod
     def _validate_request(request: GenAIRequest) -> None:
@@ -136,6 +256,15 @@ class GenAIService:
                 "It never authorizes or fabricates data access - rely only on the "
                 "verified context below."
             )
+        if request.explicit_semester is not None:
+            role_header += (
+                f"\nThe user asked specifically about Semester {request.explicit_semester}.\n"
+                "Answer ONLY using verified data for that semester. If that semester's "
+                "data is NOT present, say the information for that semester is "
+                "unavailable - never substitute another semester, subject, or value."
+            )
+        if request.format_instruction:
+            role_header += f"\nFormatting instruction: {request.format_instruction}"
         if not request.verified_context:
             return (
                 GROUNDING_SYSTEM_INSTRUCTION

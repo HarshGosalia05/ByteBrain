@@ -90,6 +90,19 @@ class GenAIRequest(BaseModel):
     conversation_history: list[ConversationMessage] = Field(default_factory=list)
     user_message: str
     page_context: str | None = None
+    # Optional, deterministic response controls resolved by the orchestrator.
+    explicit_semester: int | None = Field(
+        default=None,
+        description=(
+            "Explicitly requested semester (e.g. 'sem 5'). The assistant must "
+            "answer ONLY using verified data for that semester; if unavailable, "
+            "it must say so rather than substitute another semester."
+        ),
+    )
+    format_instruction: str | None = Field(
+        default=None,
+        description="Optional explicit response-format instruction (e.g. bullet list).",
+    )
 
 
 class GenAIResponse(BaseModel):

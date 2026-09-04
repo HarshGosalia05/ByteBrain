@@ -760,5 +760,339 @@ class TestG0Boundary(unittest.TestCase):
         self.assertIsNone(verified.uncertainty)
 
 
+# ------------------------------------------------------------------
+# M1 service-wiring regression tests
+# ------------------------------------------------------------------
+
+
+class _FakePerformanceRecord:
+    """Minimal stand-in for SubjectPerformanceItem used by _m1_resolve_subject_id."""
+
+    def __init__(self, subject_id, subject_code, subject_name, semester,
+                 internal_marks=None, mid_sem_marks=None, end_sem_marks=None):
+        self.subject_id = subject_id
+        self.subject_code = subject_code
+        self.subject_name = subject_name
+        self.semester = semester
+        self.internal_marks = internal_marks
+        self.mid_sem_marks = mid_sem_marks
+        self.end_sem_marks = end_sem_marks
+
+
+class _FakePerformanceResponse:
+    def __init__(self, records):
+        self.performance = records
+
+
+class _FakeStudentServiceForM1:
+    """Injectable student-service stub for M1 subject-resolution tests."""
+
+    def __init__(self, records):
+        self._records = records
+
+    async def get_performance(self, student_id, semester=None):
+        items = self._records
+        if semester is not None:
+            items = [r for r in items if r.semester == semester]
+        return _FakePerformanceResponse(items)
+
+
+class FakePredictionServiceNoHistory:
+    """Service exposing ONLY get_latest (no get_history) — validates the
+    getattr guard fallback path in _collect_m1."""
+
+    def __init__(self, rows=None):
+        self.rows = dict(rows or {})
+        self.latest_calls = []
+
+    async def get_latest(self, student_id, prediction_type):
+        self.latest_calls.append((student_id, prediction_type))
+        return self.rows.get(prediction_type)
+
+
+class FakePredictionServiceWithHistory:
+    """Service exposing get_history (real MLPredictionService contract)."""
+
+    def __init__(self, history_rows):
+        self._history = history_rows
+        self.history_calls = []
+
+    async def get_history(self, student_id, prediction_type=None, **kw):
+        self.history_calls.append((student_id, prediction_type))
+        return [
+            r for r in self._history
+            if prediction_type is None or r.get("prediction_type") == prediction_type
+        ]
+
+    async def get_latest(self, student_id, prediction_type):
+        for r in self._history:
+            if r.get("prediction_type") == prediction_type:
+                return r
+        return None
+
+
+_DL_PERFORMANCE_RECORDS = [
+    _FakePerformanceRecord(
+        subject_id="SUB-DL-701",
+        subject_code="CS701",
+        subject_name="Deep Learning",
+        semester=7,
+        internal_marks=14,
+        mid_sem_marks=40,
+        end_sem_marks=None,
+    ),
+    _FakePerformanceRecord(
+        subject_id="SUB-LA-501",
+        subject_code="CS501",
+        subject_name="Linear Algebra",
+        semester=5,
+        internal_marks=18,
+        mid_sem_marks=38,
+        end_sem_marks=None,
+    ),
+]
+
+
+def _dl_m1_row(**overrides):
+    value = {
+        "subject_id": "SUB-DL-701",
+        "semester_no": 7,
+        "predicted_end_sem_marks": 54.0,
+        "clipped": False,
+    }
+    return prediction_row("m1", value, **overrides)
+
+
+def _la_m1_row(**overrides):
+    value = {
+        "subject_id": "SUB-LA-501",
+        "semester_no": 5,
+        "predicted_end_sem_marks": 61.0,
+        "clipped": False,
+    }
+    return prediction_row("m1", value, **overrides)
+
+
+def _make_tool_with_student_svc(pred_rows, student_records):
+    pred_service = FakePredictionServiceWithHistory(pred_rows)
+    tool = StudentPredictionExplanationTool(
+        pool=None,
+        prediction_service=pred_service,
+        explanation_service=FakeExplanation(),
+    )
+    fake_svc = _FakeStudentServiceForM1(student_records)
+    tool._student_service = lambda: fake_svc
+    return tool, pred_service
+
+
+class TestM1ServiceWiring(unittest.TestCase):
+    """Regression: M1 service wiring and subject-resolution correctness."""
+
+    # -- getattr guard: get_history absent, falls back to get_latest --------
+    def test_get_latest_fallback_when_get_history_absent(self):
+        svc = FakePredictionServiceNoHistory({"m1": _dl_m1_row()})
+        self.assertFalse(hasattr(svc, "get_history"))
+        tool = StudentPredictionExplanationTool(
+            pool=None, prediction_service=svc, explanation_service=FakeExplanation(),
+        )
+        result = run(tool.execute(student_id="STU-A", prediction_type="m1"))
+        self.assertTrue(result.data_available)
+        self.assertEqual(len(result.predictions), 1)
+        self.assertTrue(result.predictions[0].prediction_available)
+        self.assertEqual(svc.latest_calls, [("STU-A", "m1")])
+
+    # -- get_history path (real service contract) ---------------------------
+    def test_get_history_path_returns_per_subject_rows(self):
+        rows = [_dl_m1_row(), _la_m1_row()]
+        svc = FakePredictionServiceWithHistory(rows)
+        tool = StudentPredictionExplanationTool(
+            pool=None, prediction_service=svc, explanation_service=FakeExplanation(),
+        )
+        result = run(tool.execute(student_id="STU-A", prediction_type="m1"))
+        self.assertTrue(result.data_available)
+        self.assertEqual(len(result.predictions), 2)
+        self.assertEqual(svc.history_calls, [("STU-A", "m1")])
+
+    # -- subject_id resolution: Deep Learning → SUB-DL-701 ------------------
+    def test_deep_learning_resolves_to_correct_subject_id(self):
+        tool, _ = _make_tool_with_student_svc(
+            [_dl_m1_row()],
+            _DL_PERFORMANCE_RECORDS,
+        )
+        result = run(tool.execute(
+            student_id="STU-A",
+            prediction_type="m1",
+            subject_filter="Deep Learning",
+        ))
+        self.assertEqual(len(result.predictions), 1)
+        item = result.predictions[0]
+        self.assertTrue(item.prediction_available)
+        self.assertEqual(item.subject_id, "SUB-DL-701")
+        self.assertIn("Deep Learning", item.subject_name or "")
+
+    def test_deep_learning_code_resolves(self):
+        tool, _ = _make_tool_with_student_svc(
+            [_dl_m1_row()],
+            _DL_PERFORMANCE_RECORDS,
+        )
+        result = run(tool.execute(
+            student_id="STU-A",
+            prediction_type="m1",
+            subject_filter="CS701",
+        ))
+        item = result.predictions[0]
+        self.assertTrue(item.prediction_available)
+        self.assertEqual(item.subject_id, "SUB-DL-701")
+
+    def test_partial_name_resolves_deep_learning(self):
+        tool, _ = _make_tool_with_student_svc(
+            [_dl_m1_row()],
+            _DL_PERFORMANCE_RECORDS,
+        )
+        result = run(tool.execute(
+            student_id="STU-A",
+            prediction_type="m1",
+            subject_filter="deep learn",
+        ))
+        item = result.predictions[0]
+        self.assertTrue(item.prediction_available)
+        self.assertEqual(item.subject_id, "SUB-DL-701")
+
+    # -- no cross-subject substitution --------------------------------------
+    def test_deep_learning_request_never_returns_linear_algebra(self):
+        tool, _ = _make_tool_with_student_svc(
+            [_dl_m1_row(), _la_m1_row()],
+            _DL_PERFORMANCE_RECORDS,
+        )
+        result = run(tool.execute(
+            student_id="STU-A",
+            prediction_type="m1",
+            subject_filter="Deep Learning",
+        ))
+        self.assertEqual(len(result.predictions), 1)
+        item = result.predictions[0]
+        self.assertEqual(item.subject_id, "SUB-DL-701")
+        self.assertNotEqual(item.subject_id, "SUB-LA-501")
+        self.assertIn("Deep Learning", item.subject_name or "")
+
+    def test_linear_algebra_request_never_returns_deep_learning(self):
+        tool, _ = _make_tool_with_student_svc(
+            [_dl_m1_row(), _la_m1_row()],
+            _DL_PERFORMANCE_RECORDS,
+        )
+        result = run(tool.execute(
+            student_id="STU-A",
+            prediction_type="m1",
+            subject_filter="Linear Algebra",
+        ))
+        self.assertEqual(len(result.predictions), 1)
+        item = result.predictions[0]
+        self.assertEqual(item.subject_id, "SUB-LA-501")
+        self.assertNotEqual(item.subject_id, "SUB-DL-701")
+
+    # -- semester 7 M1 ------------------------------------------------------
+    def test_semester_7_m1_deep_learning(self):
+        tool, _ = _make_tool_with_student_svc(
+            [_dl_m1_row()],
+            _DL_PERFORMANCE_RECORDS,
+        )
+        result = run(tool.execute(
+            student_id="STU-A",
+            prediction_type="m1",
+            subject_filter="Deep Learning",
+            semester=7,
+        ))
+        item = result.predictions[0]
+        self.assertTrue(item.prediction_available)
+        self.assertEqual(item.predicted_value["semester_no"], 7)
+
+    def test_wrong_semester_returns_unavailable(self):
+        """Semester filtering applies in the non-subject-filter path."""
+        svc = FakePredictionServiceWithHistory([_dl_m1_row()])
+        tool = StudentPredictionExplanationTool(
+            pool=None, prediction_service=svc, explanation_service=FakeExplanation(),
+        )
+        result = run(tool.execute(
+            student_id="STU-A",
+            prediction_type="m1",
+            semester=5,
+        ))
+        self.assertFalse(result.data_available)
+        self.assertEqual(result.unavailable_items, ["m1"])
+
+    # -- subject not in records → unavailable, no substitution ---------------
+    def test_nonexistent_subject_returns_unavailable(self):
+        tool, _ = _make_tool_with_student_svc(
+            [_dl_m1_row()],
+            _DL_PERFORMANCE_RECORDS,
+        )
+        result = run(tool.execute(
+            student_id="STU-A",
+            prediction_type="m1",
+            subject_filter="Quantum Computing",
+        ))
+        self.assertFalse(result.data_available)
+        self.assertEqual(result.unavailable_items, ["m1"])
+
+    # -- marks reconciliation ------------------------------------------------
+    def test_authoritative_marks_attached_after_reconciliation(self):
+        tool, _ = _make_tool_with_student_svc(
+            [_dl_m1_row()],
+            _DL_PERFORMANCE_RECORDS,
+        )
+        result = run(tool.execute(
+            student_id="STU-A",
+            prediction_type="m1",
+            subject_filter="Deep Learning",
+        ))
+        item = result.predictions[0]
+        self.assertTrue(item.prediction_available)
+        self.assertIsNotNone(item.authoritative_marks)
+        marks = item.authoritative_marks
+        self.assertEqual(marks["subject_name"], "Deep Learning")
+        self.assertEqual(marks["internal_marks"], 14)
+        self.assertEqual(marks["mid_sem_marks"], 40)
+
+    def test_marks_reconciliation_does_not_alter_prediction_value(self):
+        tool, _ = _make_tool_with_student_svc(
+            [_dl_m1_row()],
+            _DL_PERFORMANCE_RECORDS,
+        )
+        result = run(tool.execute(
+            student_id="STU-A",
+            prediction_type="m1",
+            subject_filter="Deep Learning",
+        ))
+        item = result.predictions[0]
+        self.assertEqual(item.predicted_value["predicted_end_sem_marks"], 54.0)
+
+    # -- subject_id resolution failure → no match, controlled FALSE ---------
+    def test_resolution_failure_yields_controlled_unavailable(self):
+        tool, _ = _make_tool_with_student_svc(
+            [_dl_m1_row()],
+            [],  # empty performance records → resolution returns None
+        )
+        result = run(tool.execute(
+            student_id="STU-A",
+            prediction_type="m1",
+            subject_filter="Deep Learning",
+        ))
+        self.assertFalse(result.data_available)
+        self.assertEqual(result.unavailable_items, ["m1"])
+
+    # -- the real service signature is compatible ----------------------------
+    def test_real_service_has_get_history(self):
+        from app.services.ml_prediction_service import MLPredictionService
+        self.assertTrue(callable(getattr(MLPredictionService, "get_history", None)))
+
+    def test_real_service_get_history_signature_accepts_type(self):
+        import inspect
+        from app.services.ml_prediction_service import MLPredictionService
+        sig = inspect.signature(MLPredictionService.get_history)
+        params = list(sig.parameters)
+        self.assertIn("student_id", params)
+        self.assertIn("prediction_type", params)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -83,6 +83,7 @@ class StudentPrediction(BaseModel):
     verified_inputs: list[VerifiedInput] = Field(default_factory=list)
     verified_factors: list[VerifiedFactor] = Field(default_factory=list)
     rule_context: dict[str, Any] | None = None
+    authoritative_marks: dict[str, Any] | None = None
     note: str | None = None
 
     model_config = ConfigDict(extra="forbid")

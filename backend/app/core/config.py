@@ -41,7 +41,24 @@ class Settings(BaseSettings):
     GENAI_TIMEOUT_SECONDS: float = 60.0
     GENAI_MAX_RETRIES: int = 1
     GENAI_RETRY_BACKOFF_SECONDS: float = 1.0
-    
+
+    # GenAI provider selection (Groq primary + Ollama fallback).
+    # These are configuration-driven: GENAI_PRIMARY_PROVIDER names the primary
+    # provider ("groq" | "ollama" | "openai_compatible") and GENAI_FALLBACK_PROVIDER
+    # names the failover provider used when the primary hits a temporary error,
+    # timeout, connection failure, or rate limit. When GENAI_PRIMARY_PROVIDER is
+    # left empty the legacy single-provider path (GENAI_PROVIDER) is used.
+    # GROQ_API_KEY is intentionally empty by default so a Groq primary FAILS
+    # CLOSED with a configuration error instead of ever emitting an ungrounded
+    # answer; it is supplied via environment/secret management only.
+    GENAI_PRIMARY_PROVIDER: str = ""
+    GENAI_FALLBACK_PROVIDER: str = ""
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    OLLAMA_MODEL: str = "qwen2.5:3b"
+    OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
+
     # JWT authentication (Phase 1 security fix).
     # JWT_SECRET is intentionally empty by default so the service fails
     # closed if not configured. Never hardcode secrets here.

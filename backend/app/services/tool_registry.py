@@ -109,6 +109,28 @@ def build_default_registry() -> ToolRegistry:
     # --- Student tools (own scope only) -----------------------------------
     _register(
         registry,
+        tool_name="student_profile_tool",
+        description="Own verified profile identity (name, program, enrollment).",
+        intents=["student_profile"],
+        allowed_roles=["Student"],
+        category="analytics",
+        scope="own_student",
+        analytics_backed=True,
+        implemented=True,
+    )
+    _register(
+        registry,
+        tool_name="student_timetable_tool",
+        description="Own current-week timetable (days, time slots, subjects, faculty).",
+        intents=["timetable"],
+        allowed_roles=["Student"],
+        category="analytics",
+        scope="own_student",
+        analytics_backed=True,
+        implemented=True,
+    )
+    _register(
+        registry,
         tool_name="student_academic_performance_tool",
         description="Own academic performance (marks, SGPA, percentage, grades).",
         intents=["academic_performance"],

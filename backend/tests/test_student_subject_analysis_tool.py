@@ -596,5 +596,73 @@ class TestSecurityCapabilities(unittest.TestCase):
         self.assertIsInstance(verified.data["semester_subjects"], list)
 
 
+def _dl_records():
+    """Both 'Deep Learning' and the distinct 'Deep Learning Laboratory' exist."""
+    return [
+        ToolSubjectRecord(
+            semester=7, academic_year="2025-26", subject_id="A",
+            subject_code="SUB-DL-701", subject_name="Deep Learning",
+            credits=4, internal_marks=14.0, mid_sem_marks=40.0,
+            end_sem_marks=None, total_marks=None, percentage=72.0,
+            grade="B", grade_point=7.0, result_status="Pass",
+            attempt_number=1, classification=None, attendance_percentage=85.0,
+        ),
+        ToolSubjectRecord(
+            semester=7, academic_year="2025-26", subject_id="B",
+            subject_code="SUB-DLL-702", subject_name="Deep Learning Laboratory",
+            credits=2, internal_marks=20.0, mid_sem_marks=30.0,
+            end_sem_marks=None, total_marks=None, percentage=60.0,
+            grade="B", grade_point=6.0, result_status="Pass",
+            attempt_number=1, classification=None, attendance_percentage=90.0,
+        ),
+    ]
+
+
+class TestNoSilentSubjectSubstitution(unittest.TestCase):
+    """A more specific subject name must never silently collapse into a prefix
+    subject ('Deep Learning Laboratory' -> 'Deep Learning')."""
+
+    def test_laboratory_query_matches_the_laboratory_subject(self):
+        records = _dl_records()
+        hit = StudentSubjectAnalysisTool.match_subject_query(
+            "Deep Learning Laboratory marks", records
+        )
+        self.assertEqual(hit, "Deep Learning Laboratory")
+
+    def test_laboratory_short_query_matches_laboratory(self):
+        records = _dl_records()
+        hit = StudentSubjectAnalysisTool.match_subject_query(
+            "deep learning laboratory", records
+        )
+        self.assertEqual(hit, "Deep Learning Laboratory")
+
+    def test_plain_deep_learning_still_matches_deep_learning(self):
+        records = _dl_records()
+        hit = StudentSubjectAnalysisTool.match_subject_query(
+            "my Deep Learning mid sem marks", records
+        )
+        self.assertEqual(hit, "Deep Learning")
+
+    def test_laboratory_filter_executes_laboratory_record_not_theory(self):
+        # End-to-end: subject_filter from match feeds the resolve step; asking
+        # for the Laboratory subject must select ONLY the Laboratory record.
+        conn = _conn(
+            [
+                subject_row(7, "SUB-DL-701", "SUB-DL-701", "Deep Learning"),
+                subject_row(7, "SUB-DLL-702", "SUB-DLL-702", "Deep Learning Laboratory"),
+            ]
+        )
+        result = run(
+            _service(conn).execute(
+                student_id="STU-A",
+                subject_filter="Deep Learning Laboratory",
+            )
+        )
+        self.assertTrue(result.requested_subject_found)
+        names = [r.subject_name for r in result.semester_subjects]
+        self.assertIn("Deep Learning Laboratory", names)
+        self.assertNotIn("Deep Learning", names)
+
+
 if __name__ == "__main__":
     unittest.main()

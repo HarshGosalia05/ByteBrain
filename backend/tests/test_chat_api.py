@@ -349,7 +349,7 @@ class TestChatApi(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
         self.assertEqual(body["status"], "unavailable")
-        self.assertIn("AI explanation unavailable", body["message"])
+        self.assertIn("currently unavailable", body["message"])
 
     # -----------------------------------------------------------------------
     # Validation & Security Edge Cases

@@ -43,7 +43,9 @@ G0 boundary:
 """
 from __future__ import annotations
 
+import difflib
 import logging
+import re
 from collections import Counter
 from datetime import datetime, timezone
 
@@ -68,6 +70,26 @@ SOURCE_LABEL = "students/student_subject_performance"
 _CATEGORIES = ("Strong", "Good", "Needs Attention", "Critical")
 
 
+def _fuzzy_single_word(record, query: str) -> ToolSubjectRecord | None:
+    """Match a query to one significant token of a subject name (typo-safe).
+
+    Exact token wins first; a near miss (ratio >= 0.8) is accepted only when
+    there is exactly one plausible subject so we never guess on ambiguity.
+    """
+    name = record.subject_name
+    if not name:
+        return None
+    tokens = re.findall(r"[A-Za-z]+", name)
+    if not tokens:
+        return None
+    lowered = [token.lower() for token in tokens]
+    if query in lowered:
+        return record
+    if max(difflib.SequenceMatcher(None, query, token).ratio() for token in lowered) >= 0.8:
+        return record
+    return None
+
+
 class StudentSubjectAnalysisTool:
     """Verified subject-level performance for the authenticated student."""
 
@@ -80,6 +102,7 @@ class StudentSubjectAnalysisTool:
         student_id: str,
         target_student_id: str | None = None,
         subject_filter: str | None = None,
+        semester: int | None = None,
     ) -> StudentSubjectAnalysisResult:
         """Return verified subject analysis, scoped to the authenticated student.
 
@@ -99,7 +122,7 @@ class StudentSubjectAnalysisTool:
                 detail="Students can only access their own subject data",
             )
 
-        response = await self._student_service.get_performance(student_id)
+        response = await self._student_service.get_performance(student_id, semester)
         records = self._records(response.performance)
         data_available = bool(records)
 
@@ -175,9 +198,19 @@ class StudentSubjectAnalysisTool:
         return records
 
     @staticmethod
-    def _match(records: list[ToolSubjectRecord], requested: str) -> list[ToolSubjectRecord]:
-        """Match by subject_code (exact, case-insensitive) then subject_name."""
+    def _match(
+        records: list[ToolSubjectRecord], requested: str
+    ) -> list[ToolSubjectRecord]:
+        """Resolve a subject by code / name, tolerating typos and abbreviations.
+
+        Never guesses on ambiguity: an abbreviation that matches more than one
+        distinct subject resolves to ``[]`` (caller reports "not found") rather
+        than a best-effort pick.
+        """
         query = requested.strip().lower()
+        if not query:
+            return []
+
         by_code = [
             record
             for record in records
@@ -185,11 +218,183 @@ class StudentSubjectAnalysisTool:
         ]
         if by_code:
             return by_code
-        return [
+
+        names = [
             record
             for record in records
-            if query in record.subject_name.lower()
+            if record.subject_name and record.subject_name.lower() == query
         ]
+        if names:
+            return names
+
+        substring = [
+            record
+            for record in records
+            if record.subject_name and query in record.subject_name.lower()
+        ]
+        if substring:
+            return substring
+
+        # Abbreviation resolution ("DL" -> "Deep Learning"), only if unambiguous.
+        abbr_matches: list[ToolSubjectRecord] = []
+        for record in records:
+            abbr = StudentSubjectAnalysisTool._abbrev(record.subject_name)
+            if abbr and abbr == query:
+                abbr_matches.append(record)
+        if len(abbr_matches) == 1:
+            return abbr_matches
+        if len(abbr_matches) > 1:
+            return []
+
+        # Fuzzy match against the full name when query is reasonably close.
+        close = [
+            record
+            for record in records
+            if StudentSubjectAnalysisTool._fuzzy_close(record.subject_name, query)
+        ]
+        if close:
+            return close
+
+        # Space-agnostic concatenated-name fuzzy ("deeplearing" -> "deeplearning").
+        concat_close = [
+            record
+            for record in records
+            if StudentSubjectAnalysisTool._fuzzy_concat(record.subject_name, query)
+        ]
+        if len(concat_close) == 1:
+            return concat_close
+
+        # Single-word fuzzy match ("deeplearing" -> "deep learning").
+        token_hits = [_fuzzy_single_word(record, query) for record in records]
+        token_hits = [record for record in token_hits if record is not None]
+        if len(token_hits) == 1:
+            return token_hits
+        return []
+
+    @staticmethod
+    def _abbrev(subject_name: str | None) -> str | None:
+        if not subject_name:
+            return None
+        words = re.findall(r"[A-Za-z]+", subject_name)
+        if not words:
+            return None
+        abbr = "".join(word[0] for word in words).lower()
+        return abbr if len(abbr) > 1 else None
+
+    @staticmethod
+    def _fuzzy_close(subject_name: str | None, query: str) -> bool:
+        if not subject_name:
+            return False
+        ratio = difflib.SequenceMatcher(
+            None, subject_name.lower(), query
+        ).ratio()
+        return ratio >= 0.8
+
+    @staticmethod
+    def _fuzzy_concat(subject_name: str | None, query: str) -> bool:
+        """Match a query against the subject name with spaces removed.
+
+        Handles "deep learning" vs "deeplearing" / "deeplearning" by comparing
+        concatenated forms (query stripped of spaces vs name stripped of spaces).
+        """
+        if not subject_name:
+            return False
+        name_concat = re.sub(r"\s+", "", subject_name.lower())
+        query_concat = re.sub(r"\s+", "", query)
+        if not name_concat or not query_concat:
+            return False
+        if query_concat in name_concat:
+            return True
+        return (
+            difflib.SequenceMatcher(None, name_concat, query_concat).ratio() >= 0.85
+        )
+
+    @staticmethod
+    def find_subject_names(records: list[ToolSubjectRecord]) -> list[str]:
+        """Distinct verified subject names for gateway-level subject routing."""
+        seen: list[str] = []
+        for record in records:
+            name = record.subject_name
+            if name and name.lower() not in {n.lower() for n in seen}:
+                seen.append(name)
+        return seen
+
+    async def discover_subject_records(
+        self, *, student_id: str
+    ) -> list[ToolSubjectRecord]:
+        """Return the student's verified subject records (name + code) for routing."""
+        response = await self._student_service.get_performance(student_id)
+        return self._records(response.performance)
+
+    @staticmethod
+    def match_subject_query(
+        message: str, records: list[ToolSubjectRecord]
+    ) -> str | None:
+        """Find a student subject (name/code/typo/unambiguous abbreviation) in ``message``.
+
+        Returns the matched subject query string (to be used as ``subject_filter``)
+        or ``None`` when no verified subject is clearly referenced.
+        """
+        msg = message.lower().strip()
+        if not msg:
+            return None
+
+        for record in records:
+            code = record.subject_code
+            if code and code.lower() and code.lower() in msg:
+                return code
+
+        # Name matching: choose the MOST SPECIFIC (longest) subject name that is
+        # a substring of the message. This prevents silently collapsing a more
+        # specific subject ("Deep Learning Laboratory") into a prefix subject
+        # ("Deep Learning") when both exist. Exact and strict substrings always
+        # win over fuzzy/abbreviation resolution below.
+        name_hits: set[str] = set()
+        for record in records:
+            name = record.subject_name
+            if name and name.lower() and name.lower() in msg:
+                name_hits.add(name)
+        if name_hits:
+            longest = max(name_hits, key=len)
+            return longest
+
+        words = re.findall(r"[A-Za-z]+", message)
+        token_matches: set[str] = set()
+        for token in words:
+            lowered = token.lower()
+            token_len = len(lowered)
+            if token_len not in (2, 3):
+                if token_len >= 4 and len(token_matches) < 2:
+                    concat_hits = [
+                        record.subject_name
+                        for record in records
+                        if StudentSubjectAnalysisTool._fuzzy_concat(
+                            record.subject_name, lowered
+                        )
+                    ]
+                    if len(concat_hits) == 1:
+                        token_matches.add(concat_hits[0])
+                continue
+            abbr_hits = [
+                record.subject_name
+                for record in records
+                if StudentSubjectAnalysisTool._abbrev(record.subject_name) == lowered
+            ]
+            if len(abbr_hits) == 1:
+                token_matches.add(abbr_hits[0])
+            elif len(abbr_hits) > 1:
+                continue
+            elif token_len >= 3:
+                single = [
+                    record.subject_name
+                    for record in records
+                    if _fuzzy_single_word(record, lowered) is not None
+                ]
+                if len(single) == 1:
+                    token_matches.add(single[0])
+        if len(token_matches) == 1:
+            return next(iter(token_matches))
+        return None
 
     @staticmethod
     def _summary(records: list[ToolSubjectRecord]) -> ToolSubjectSummary:

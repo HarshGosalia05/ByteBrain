@@ -162,6 +162,11 @@ class StudentPredictionExplanationTool:
             self._explanation = ExplanationService(self._pool)
         return self._explanation
 
+    def _student_service(self) -> Any:
+        from app.services.student_service import StudentService  # noqa: PLC0415
+
+        return StudentService(self._pool)
+
     # ------------------------------------------------------------------
     # Execute
     # ------------------------------------------------------------------
@@ -172,6 +177,8 @@ class StudentPredictionExplanationTool:
         student_id: str,
         target_student_id: str | None = None,
         prediction_type: str = "all_available",
+        subject_filter: str | None = None,
+        semester: int | None = None,
     ) -> StudentPredictionExplanationResult:
         """Return verified predictions, scoped to the authenticated student.
 
@@ -209,6 +216,20 @@ class StudentPredictionExplanationTool:
         predictions: list[StudentPrediction] = []
         unavailable: list[str] = []
         for prediction_type_id in types:
+            if prediction_type_id == "m1":
+                # M1 is persisted one row per subject. Route it through the
+                # subject-aware collect path so a requested subject/semester is
+                # answered with that subject's OWN prediction (never substituted).
+                await self._collect_m1(
+                    service,
+                    student_id,
+                    semester,
+                    subject_filter,
+                    predictions,
+                    unavailable,
+                    requested,
+                )
+                continue
             row = await service.get_latest(student_id, prediction_type_id)
             if row is None:
                 if requested != "all_available":
@@ -225,9 +246,8 @@ class StudentPredictionExplanationTool:
                     )
                 unavailable.append(prediction_type_id)
                 continue
-            predictions.append(
-                await self._build(prediction_type_id, row, student_id)
-            )
+            built = await self._build(prediction_type_id, row, student_id)
+            predictions.append(built)
 
         data_available = any(p.prediction_available for p in predictions)
         return StudentPredictionExplanationResult(
@@ -406,8 +426,286 @@ class StudentPredictionExplanationTool:
                 common["rule_context"] = dict(rule_context)
 
     # ------------------------------------------------------------------
-    # G0 boundary
+    # M1 subject-aware collection (never silent substitution)
     # ------------------------------------------------------------------
+
+    async def _collect_m1(
+        self,
+        service: Any,
+        student_id: str,
+        semester: int | None,
+        subject_filter: str | None,
+        predictions: list[StudentPrediction],
+        unavailable: list[str],
+        requested: str,
+    ) -> None:
+        """Collect the student's M1 predictions with full subject awareness.
+
+        Because M1 predictions are persisted per subject, we pull the real
+        history and match ONLY to the requested subject/semester. When a
+        specific subject or semester is requested but no prediction exists, we
+        build the controlled FALSE record (mentioning exactly what is missing)
+        instead of silently substituting another subject or another semester.
+
+        When no subject is requested we surface each available prediction with
+        its own semester/subject identity; nothing is merged or invented.
+        """
+        history_fn = getattr(service, "get_history", None)
+        if callable(history_fn):
+            history = await history_fn(student_id, "m1")
+            rows = [
+                row for row in history if isinstance(row.get("prediction_value"), dict)
+            ]
+        else:
+            # Legacy path: services/fakes exposing only ``get_latest`` still work.
+            latest = await service.get_latest(student_id, "m1")
+            rows = (
+                [latest]
+                if latest and isinstance(latest.get("prediction_value"), dict)
+                else []
+            )
+
+        if subject_filter:
+            requested_subject = subject_filter.strip()
+            subject_id = await self._m1_resolve_subject_id(
+                student_id, requested_subject
+            )
+            matched = self._m1_match(rows, subject_id, requested_subject)
+            if matched:
+                await self._append_m1_batch(
+                    matched, student_id, predictions, unavailable,
+                    requested_subject, semester,
+                )
+                return
+            predictions.append(
+                StudentPrediction(
+                    model_id="m1",
+                    model_kind="ml",
+                    prediction_available=False,
+                    is_prediction=True,
+                    uncertainty=PredictionUncertainty(),
+                    subject_name=requested_subject,
+                    note=(
+                        f"No verified M1 prediction is available for "
+                        f"{requested_subject}."
+                    ),
+                )
+            )
+            unavailable.append("m1")
+            return
+
+        if semester is not None:
+            scoped = [
+                row
+                for row in rows
+                if _int_or_none(row["prediction_value"].get("semester_no")) == semester
+            ]
+            if not scoped:
+                predictions.append(
+                    StudentPrediction(
+                        model_id="m1",
+                        model_kind="ml",
+                        prediction_available=False,
+                        is_prediction=True,
+                        uncertainty=PredictionUncertainty(),
+                        note=(
+                            f"No verified M1 prediction is available for "
+                            f"Semester {semester}."
+                        ),
+                    )
+                )
+                unavailable.append("m1")
+                return
+            await self._append_m1_batch(
+                scoped, student_id, predictions, unavailable, None, semester
+            )
+            return
+
+        if not rows:
+            if requested != "all_available":
+                predictions.append(
+                    StudentPrediction(
+                        model_id="m1",
+                        model_kind="ml",
+                        prediction_available=False,
+                        is_prediction=True,
+                        uncertainty=PredictionUncertainty(),
+                        note=_UNAVAILABLE_NOTES["m1"],
+                    )
+                )
+            unavailable.append("m1")
+            return
+        await self._append_m1_batch(
+            rows, student_id, predictions, unavailable, None, None
+        )
+
+    async def _m1_resolve_subject_id(
+        self, student_id: str, requested_subject: str
+    ) -> str | None:
+        """Map a subject name/code to the verified subject_id (authoritative source).
+
+        The M1 ``prediction_value`` stores only ``subject_id``. We resolve the
+        requested subject against the SAME authoritative
+        ``student_subject_performance`` table the Subject page uses, so the M1
+        row selected is that subject's own prediction - never another subject's.
+        """
+        query = (requested_subject or "").strip().lower()
+        if not query:
+            return None
+        try:
+            response = await self._student_service().get_performance(student_id)
+        except Exception as exc:  # noqa: BLE001 - resolution is best-effort
+            logger.warning("M1 subject resolution unavailable for %s: %s", student_id, exc)
+            return None
+        records = list(getattr(response, "performance", None) or [])
+        for record in records:
+            if record.subject_code and record.subject_code.lower() == query:
+                return record.subject_id
+        for record in records:
+            if record.subject_name and record.subject_name.lower() == query:
+                return record.subject_id
+        for record in records:
+            if record.subject_name and query in record.subject_name.lower():
+                return record.subject_id
+        return None
+
+    @staticmethod
+    def _m1_match(
+        rows: list[dict[str, Any]],
+        subject_id: str | None,
+        requested_subject: str,
+    ) -> list[dict[str, Any]]:
+        """Resolve M1 history rows to the requested subject.
+
+        Matching is exact by the authoritative ``subject_id`` when it resolves;
+        otherwise no match is reported (never a fuzzy guess on another subject).
+        """
+        if not rows:
+            return []
+        if subject_id:
+            return [
+                row
+                for row in rows
+                if str((row["prediction_value"].get("subject_id") or "")).lower()
+                == str(subject_id).lower()
+            ]
+        # Subject could not be resolved to an id: only an exact stored
+        # subject_id already matching the requested token is acceptable.
+        token = (requested_subject or "").strip().lower()
+        if not token:
+            return []
+        return [
+            row
+            for row in rows
+            if str((row["prediction_value"].get("subject_id") or "")).lower() == token
+        ]
+
+    async def _append_m1_batch(
+        self,
+        rows: list[dict[str, Any]],
+        student_id: str,
+        predictions: list[StudentPrediction],
+        unavailable: list[str],
+        label: str | None,
+        semester: int | None,
+    ) -> None:
+        """Build one projection per M1 row; reconcile marks against authoritative data."""
+        for row in rows:
+            built = await self._build("m1", row, student_id)
+            if not built.subject_name and label:
+                built.subject_name = label
+            built = await self._reconcile_authoritative_marks(
+                built, student_id, semester, built.subject_name or label
+            )
+            predictions.append(built)
+        if not rows:
+            unavailable.append("m1")
+
+    # ------------------------------------------------------------------
+    # M1 authoritative-marks reconciliation
+    # ------------------------------------------------------------------
+
+    async def _reconcile_authoritative_marks(
+        self,
+        prediction: StudentPrediction,
+        student_id: str,
+        semester: int | None,
+        subject_filter: str | None,
+    ) -> StudentPrediction:
+        """Cross-check an M1 prediction against the authoritative subject marks.
+
+        The M1 verbalizer flags inputs as *present/missing* based on the exact
+        inference row the prediction consumed. That can disagree with the
+        authoritative ``student_subject_performance`` table (the same source the
+        Subject page and the subject-analysis tool use). When the authoritative
+        record DOES carry the marks, we surface them so the response layer never
+        claims a subject's marks are "missing" while the backend has them.
+
+        This is a data-reconciliation step only - it never modifies the M1
+        prediction value and never re-runs the model.
+        """
+        subject_id = (prediction.predicted_value or {}).get("subject_id")
+        if not subject_id:
+            return prediction
+        try:
+            response = await self._student_service().get_performance(student_id, semester)
+        except Exception as exc:  # noqa: BLE001 - reconciliation is best-effort
+            logger.warning(
+                "M1 authoritative-marks reconciliation unavailable for %s: %s",
+                student_id,
+                exc,
+            )
+            return prediction
+
+        record = self._match_record(response.performance, subject_id, subject_filter, semester)
+        if record is None:
+            return prediction
+
+        prediction.authoritative_marks = {
+            "subject_id": record.subject_id,
+            "subject_code": record.subject_code,
+            "subject_name": record.subject_name,
+            "semester": record.semester,
+            "internal_marks": record.internal_marks,
+            "mid_sem_marks": record.mid_sem_marks,
+            "end_sem_marks": record.end_sem_marks,
+        }
+        reconciled_note = (
+            f"Authoritative subject record shows internal_marks="
+            f"{record.internal_marks}, mid_sem_marks={record.mid_sem_marks}, "
+            f"end_sem_marks={record.end_sem_marks}."
+        )
+        prediction.note = " ".join(
+            part for part in (prediction.note, reconciled_note) if part
+        ) or None
+        return prediction
+
+    @staticmethod
+    def _match_record(performance: Any, subject_id: str, subject_filter: str | None, semester: int | None):
+        """Find the authoritative subject record for the M1 prediction.
+
+        Matches primarily by ``subject_id``; falls back to subject name/code
+        (including a requested ``subject_filter``) when needed.
+        """
+        items = list(performance or [])
+        if not items:
+            return None
+        if semester is not None:
+            sem_items = [i for i in items if int(i.semester or 0) == semester]
+            if sem_items:
+                items = sem_items
+        for item in items:
+            if item.subject_id and str(item.subject_id) == str(subject_id):
+                return item
+        if subject_filter:
+            query = subject_filter.strip().lower()
+            for item in items:
+                if item.subject_code and item.subject_code.lower() == query:
+                    return item
+            for item in items:
+                if item.subject_name and query in item.subject_name.lower():
+                    return item
+        return None
 
     def to_verified_context(
         self, result: StudentPredictionExplanationResult

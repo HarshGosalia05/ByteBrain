@@ -147,10 +147,10 @@ PAGE_CONTEXT_INTENT_SEED: dict[str, str | None] = {
     STUDENT_ATTENDANCE: "attendance",
     STUDENT_SUBJECTS: "subject_analysis",
     STUDENT_ACADEMIC: "academic_performance",
-    STUDENT_PROFILE: "academic_performance",
+    STUDENT_PROFILE: "student_profile",
     STUDENT_REPORT_CARD: "academic_performance",
     STUDENT_DASHBOARD: "academic_performance",
-    STUDENT_TIMETABLE: None,
+    STUDENT_TIMETABLE: "timetable",
     STUDENT_SETTINGS: None,
     STUDENT_NOTIFICATIONS: None,
     # Faculty

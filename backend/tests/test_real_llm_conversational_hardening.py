@@ -140,7 +140,11 @@ class TestRealLLMConversationalHardening(unittest.TestCase):
 
     # 1. Real provider configuration loading
     def test_01_real_provider_config_loading(self):
-        with patch.object(settings, "GENAI_PROVIDER", "openai_compatible"), \
+        # Legacy single-provider path: it is only reached when the Groq-primary
+        # selector (GENAI_PRIMARY_PROVIDER) is empty, so clear it explicitly.
+        with patch.object(settings, "GENAI_PRIMARY_PROVIDER", ""), \
+             patch.object(settings, "GENAI_FALLBACK_PROVIDER", ""), \
+             patch.object(settings, "GENAI_PROVIDER", "openai_compatible"), \
              patch.object(settings, "GENAI_API_KEY", "test-secret-key-12345"), \
              patch.object(settings, "GENAI_MODEL", "gpt-4o-mini"), \
              patch.object(settings, "GENAI_BASE_URL", "https://api.openai.com/v1"):
@@ -152,7 +156,9 @@ class TestRealLLMConversationalHardening(unittest.TestCase):
 
     # 2. Missing API key fails closed
     def test_02_missing_api_key_fails_closed(self):
-        with patch.object(settings, "GENAI_PROVIDER", "openai_compatible"), \
+        with patch.object(settings, "GENAI_PRIMARY_PROVIDER", ""), \
+             patch.object(settings, "GENAI_FALLBACK_PROVIDER", ""), \
+             patch.object(settings, "GENAI_PROVIDER", "openai_compatible"), \
              patch.object(settings, "GENAI_API_KEY", ""), \
              patch.object(settings, "GENAI_MODEL", "gpt-4o-mini"):
             svc = GenAIService()
@@ -515,7 +521,8 @@ class TestRealLLMConversationalHardening(unittest.TestCase):
             resp = run(self.orchestrator.process_chat(user=user, request=req))
             self.assertEqual(resp.status, "rate_limited")
             self.assertEqual(resp.tool_name, "student_attendance_tool")
-            self.assertIn("AI explanation unavailable (rate-limited) — showing verified data:", resp.message)
+            self.assertIn("attendance", resp.message)
+            self.assertNotIn("showing verified data", resp.message)
             self.assertTrue(len(resp.verified_sources) > 0)
 
     # 29. Rate-limited response without tool data (general conversation)

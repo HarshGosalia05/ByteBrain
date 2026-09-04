@@ -258,7 +258,7 @@ class TestChatOrchestrator(unittest.TestCase):
 
         resp = run(orchestrator.process_chat(user=user, request=req))
         self.assertEqual(resp.status, "unavailable")
-        self.assertIn("AI explanation unavailable", resp.message)
+        self.assertIn("currently unavailable", resp.message)
         self.assertEqual(len(failing_provider.recorded_requests), 1)
 
     def test_provider_rate_limit_returns_rate_limited_status_and_verified_data(self):
@@ -274,8 +274,10 @@ class TestChatOrchestrator(unittest.TestCase):
 
         resp = run(orchestrator.process_chat(user=user, request=req))
         self.assertEqual(resp.status, "rate_limited")
-        self.assertIn("AI explanation unavailable (rate-limited)", resp.message)
-        self.assertIn("Student Name", resp.message)
+        self.assertIn("temporarily unavailable", resp.message)
+        # Security guard: raw tool payload (incl. student name) must never leak.
+        self.assertNotIn("John Doe", resp.message)
+        self.assertNotIn("Student Name", resp.message)
         self.assertEqual(resp.tool_name, "faculty_student_analytics_tool")
         self.assertEqual(len(rate_limited_provider.recorded_requests), 1)
 
@@ -292,7 +294,7 @@ class TestChatOrchestrator(unittest.TestCase):
 
         resp = run(orchestrator.process_chat(user=user, request=req))
         self.assertEqual(resp.status, "unavailable")
-        self.assertIn("AI explanation unavailable (response timed out)", resp.message)
+        self.assertIn("currently unavailable", resp.message)
         self.assertEqual(len(timeout_provider.recorded_requests), 1)
 
     def test_provider_timeout_on_general_conversation_returns_friendly_fallback(self):
@@ -366,8 +368,8 @@ class TestChatOrchestrator(unittest.TestCase):
             # Student (5)
             ("Student", {"role": "Student", "student_id": "STU1"}, "my sgpa", "academic_performance", None, "student_academic_performance_tool", {"student_id": "STU1"}),
             ("Student", {"role": "Student", "student_id": "STU1"}, "my attendance", "attendance", None, "student_attendance_tool", {"student_id": "STU1"}),
-            ("Student", {"role": "Student", "student_id": "STU1"}, "weak subjects", "subject_analysis", None, "student_subject_analysis_tool", {"student_id": "STU1"}),
-            ("Student", {"role": "Student", "student_id": "STU1"}, "will i fail predicted at-risk", "prediction_explanation", None, "student_prediction_explanation_tool", {"student_id": "STU1", "prediction_type": "all_available"}),
+            ("Student", {"role": "Student", "student_id": "STU1"}, "weak subjects", "subject_analysis", None, "student_subject_analysis_tool", {"student_id": "STU1", "subject_filter": None, "semester": None}),
+            ("Student", {"role": "Student", "student_id": "STU1"}, "will i fail predicted at-risk", "prediction_explanation", None, "student_prediction_explanation_tool", {"student_id": "STU1", "prediction_type": "all_available", "subject_filter": None, "semester": None}),
             ("Student", {"role": "Student", "student_id": "STU1"}, "career guidance job role", "career_guidance", None, "student_career_coach_tool", {"student_id": "STU1", "requested_intent": "career_guidance"}),
             # Faculty (5)
             ("Faculty", {"role": "Faculty", "faculty_id": "FAC1"}, "student performance", "student_performance", "STU2", "faculty_student_analytics_tool", {"faculty_id": "FAC1", "target_student_id": "STU2", "intent": "student_performance"}),

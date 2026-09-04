@@ -92,9 +92,19 @@ _GENERAL_CONVERSATION_PHRASES: tuple[str, ...] = (
     "kaise use kare",
 )
 
+# Follow-up / clarification markers used to resolve a short reply onto the
+# immediately prior conversation intent (e.g. "why?", "how is that missing?",
+# "then what?"). Only consulted when explicit keyword matching found nothing
+# and a single prior intent is recoverable from bounded history.
+_FOLLOWUP_MARKERS: tuple[str, ...] = (
+    " how ", " why ", " missing", " what about", " about that", " then what",
+    " so what", " explain more", " tell me more", " explain", " kya hua",
+    " kya huva", " kaise",
+)
+
 # Role-scoped keyword & phrase map (English + Hindi + Hinglish + Gujarati + short queries)
 _KEYWORDS: dict[IntentType, tuple[str, ...]] = {
-    # Student intents (8)
+    # Student intents (10)
     "academic_performance": (
         "academic performance", "sgpa", "cgpa", "gpa", "percentage", "marks",
         "grade", "grades", "score", "scores", "performance", "result", "results",
@@ -123,6 +133,41 @@ _KEYWORDS: dict[IntentType, tuple[str, ...]] = {
         "mara percentage", "ketlu percentage", "mari grade", "mara grade",
         "ketla marks", "ketla number", "result kaiso", "result keto",
         "ketlu result", "kaif marks",
+        # Semester-level academic overview ("overall sem 7", "overall semester")
+        "overall sem", "overall semester", "semester overview",
+    ),
+    "student_profile": (
+        # Identity / own-profile (Student): "what is my name", "who am i".
+        # Routed to the verified profile tool so the name comes from the
+        # authoritative profile API - it never echoes a guess or a CGPA.
+        # Language-independent: English, Hindi/Hinglish, Gujarati (romanized)
+        # and Devanagari all converge on the SAME authenticated profile context.
+        "my name", "tell me my name", "what is my name", "who am i",
+        "my profile", "profile batao", "my details", "my account",
+        "tell me about me", "tell me about myself", "about me", "about myself",
+        "mera naam", "mara naam", "kaun hu", "mera profile", "mari profile",
+        "who i am", "mera parichay", "apna parichay do",
+        # Hinglish / romanized
+        "mera name kya", "mera name", "mera nam", "mara nam", "name kya",
+        "nam kya", "name kya he", "name kya hai", "name batao",
+        # Gujarati
+        "maru naam", "mara naam su", "naam su che", "naam su chhe",
+        "maru nam", "maro naam", "koy naam", "meru naam", "naam shu che",
+        "naam shu chhe", "nam shu che", "shu che maru naam", "meru nam",
+        # Devanagari (Hindi)
+        "मेरा नाम", "नाम क्या", "मैं कौन", "मेरा परिचय",
+    ),
+    "timetable": (
+        "timetable", "time table", "time-table", "timetable batao",
+        "class schedule", "class timings", "class timing", "class time", "schedule",
+        "today's classes", "aaj ke classes", "aaj ka timetable", "aaj ka schedule",
+        "kab class hai", "kab class", "kis time class", "kitne baje class",
+        "next class", "mera timetable", "mara timetable", "timetable dikhao",
+        "classes list", "weekly schedule", "monday class", "daily schedule",
+        "classtimes", "class timings batao", "class schedule kya hai",
+        # Gujarati
+        "timetable su chhe", "timetable keto", "aaje ke classes", "aaj ky class",
+        "class ketla vage", "class ketava vage",
     ),
     "attendance": (
         "attendance", "haziri", "hazri", "absent", "present days", "present",
@@ -163,6 +208,10 @@ _KEYWORDS: dict[IntentType, tuple[str, ...]] = {
         "which subjects weak", "which subject weak", "subject kaun sa weak",
         "subject kaunsa weak hai", "weak kaun sa hai", "weak konsa hai",
         "best subject kaunsa", "worst subject kaunsa", "subject ranking",
+        "weakest subject", "weakest subjects", "weakest", "my weakest subject",
+        # Hinglish weakest-subject ("mara sabse kam marks wala subject?")
+        "sabse kam marks wala subject", "sabse kam marks", "kam marks wala subject",
+        "lowest marks subject", "least marks subject", "kam marks subject",
         # Gujarati
         "mara subject", "mari subjects", "kayo subject weak", "su weak chhe",
         "kayo subject saro", "kayo subject naras", "subject ketla",
@@ -204,6 +253,20 @@ _KEYWORDS: dict[IntentType, tuple[str, ...]] = {
         "prediction samja", "samja prediction", "prediction samjhav",
         "at risk chhu", "risk ma chhu",
         "m1 prediction samja", "m2 prediction samja",
+        # Approximate / expected / estimated marks phrasings -> M1 prediction
+        "approximate marks", "approx marks", "expected marks", "estimated marks",
+        "predicted marks", "predicted end sem marks", "predicted end semester marks",
+        "end sem predicted marks", "end semester predicted marks",
+        "end sem prediction", "end semester prediction", "endsem prediction",
+        "kitne marks la sakta", "kitne marks la sakte", "kitne marks lak satka",
+        "kitne marks aa sakte", "kitne marks aa sakte hai", "kitne marks milege",
+        "kitne marks aayenge", "kitne number aa sakte", "kitne number milege",
+        "kitna score kar sakta", "how much can i score", "how much will i score",
+        "how many marks will i get", "how much can i get", "marks prediction",
+        "approximate", "expected score", "estimated score", "approx kitne",
+        "aa sakte hai", "la sakta hu", "lakh kar sakta",
+        # Gujarati
+        "ketla marks aavi sake", "ketla marks aave", "approx ketla marks",
     ),
     "career_readiness": (
         "career readiness", "readiness score", "how career ready", "career ready",
@@ -223,7 +286,12 @@ _KEYWORDS: dict[IntentType, tuple[str, ...]] = {
         "career advice", "career help", "career batao", "career guidance",
         "mera future", "future kya", "kya banu", "kya banu mujhe",
         "meri job", "mera job", "career option kya",
+        "career goal", "career goals", "my career goal", "mera career goal",
+        "meri career goal", "career goal kya", "goal chahiye", "goal kya hai",
+        "kya goal", "mera goal", "mara goal", "goal kya", "my goal",
+        "kaunsa career goal", "career goal kya hai",
         # Gujarati
+        "career goal su", "mara goal", "mari career goal",
         "mara career", "career mate su karu", "su karvu", "su karu",
         "kayu career", "kayo field", "kayo job", "job mate su karu",
         "career su karvu", "kayo domain", "career guidance su",
@@ -395,11 +463,18 @@ def _normalize_input(text: str) -> str:
     # "percentage" variants
     cleaned = re.sub(r"percen[ct]*a?g?[e]?", "percentage", cleaned)
 
-    # "career" variants
-    cleaned = re.sub(r"car[e]+r", "career", cleaned)
+    # "career" variants (career, carrer, carreer, carier, karrier)
+    cleaned = re.sub(
+        r"\bcareer\b|\bcarrer\b|\bcarreer\b|\bcarier\b|\bkarrier\b|\bcareer\b",
+        "career",
+        cleaned,
+    )
 
     # "guidance" variants
     cleaned = re.sub(r"gui?d?[ae]?n?c?[e]?", "guidance", cleaned)
+
+    # "goal" variants (gole, goel, goll)
+    cleaned = re.sub(r"\bgo[ae]+l\b|\bgoll\b", "goal", cleaned)
 
     return " ".join(cleaned.split())
 
@@ -521,6 +596,61 @@ class IntentRouter:
             if attendance_focused and not explicit_other:
                 in_role = {"attendance"}
 
+        # Disambiguate prediction-specific phrasings that also touch generic
+        # academic keywords (e.g. "average predicted marks", "end sem predicted
+        # marks"). When a strong prediction marker co-occurs with a weak
+        # academic keyword ("marks"/"result"/"score") and no explicit coupling
+        # to another topic, prefer prediction_explanation over academic.
+        if (
+            role == "Student"
+            and "prediction_explanation" in in_role
+            and "academic_performance" in in_role
+            and len(in_role) == 2
+        ):
+            prediction_marker = any(
+                re.search(rf"\b{re.escape(tok)}\b", cleaned)
+                or tok in cleaned
+                for tok in (
+                    "predicted", "prediction", "predict", "m1", "m2", "m3",
+                    "m4", "at risk", "risk", "atkt", "backlog", "fail", "pass",
+                    "approximate", "expected", "estimated", "approx",
+                    "la sakta", "aa sakte", "how much can i score",
+                    "forecast", "kitne marks la", "kitne marks aa",
+                )
+            )
+            explicit_other = any(
+                token in cleaned
+                for token in (" and ", " also ", " plus ", " & ", " , ")
+            )
+            if prediction_marker and not explicit_other:
+                in_role = {"prediction_explanation"}
+
+        # Disambiguate weakest / lowest-subject "marks" phrasings (Hinglish:
+        # "mara sabse kam marks wala subject konsa hai?") toward subject_analysis
+        # instead of a generic academic overview. A clear weakest/lower-subject
+        # marker co-occurring with "marks" is a per-subject question, so it must
+        # NOT stay ambiguous with academic_performance (which would otherwise
+        # answer only an overall percentage).
+        if (
+            role == "Student"
+            and "subject_analysis" in in_role
+            and "academic_performance" in in_role
+            and len(in_role) == 2
+        ):
+            weakest_marker = any(
+                token in cleaned
+                for token in (
+                    "sabse kam marks", "kam marks wala", "kam marks subject",
+                    "lowest marks", "least marks", "weakest",
+                )
+            )
+            explicit_other = any(
+                token in cleaned
+                for token in (" and ", " also ", " plus ", " & ", " , ")
+            )
+            if weakest_marker and not explicit_other:
+                in_role = {"subject_analysis"}
+
         # Disambiguate Faculty aggregate intents vs student-specific intents
         if role == "Faculty" and len(in_role) > 1:
             aggregate_markers = (
@@ -556,7 +686,11 @@ class IntentRouter:
         if out_role:
             return (_CLASS_UNAUTHORIZED, None)
 
-        # 7. Check contextual follow-up if bounded history exists
+        # 7. Check contextual follow-up if bounded history exists. A short reply
+        # ("why?", "how is that missing?", "then what?") that does not contain its
+        # own intent keywords is resolved onto the immediately prior intent. This
+        # preserves the previous intent for short follow-ups WITHOUT inventing
+        # data; a clear explicit intent (or explicit topic change) still wins.
         if conversation_history:
             recent_msgs = conversation_history[-3:]
             context_text = " ".join(_clean_text(m.content) for m in recent_msgs)
@@ -565,7 +699,9 @@ class IntentRouter:
                 for intent in role_intents
                 if any(_matches_pattern(context_text, pat) for pat in _KEYWORDS.get(intent, ()))
             }
-            if len(history_in_role) == 1 and len(cleaned.split()) <= 4:
+            short = len(cleaned.split()) <= 4
+            has_followup_marker = any(marker in cleaned for marker in _FOLLOWUP_MARKERS)
+            if len(history_in_role) == 1 and (short or has_followup_marker):
                 return (_CLASS_INTENT, history_in_role.pop())
 
         return (_CLASS_UNKNOWN, None)
@@ -583,6 +719,30 @@ class IntentRouter:
             # G2 must re-enforce scope via existing FacultyService checks.
             return request.target_student_id
         return None
+
+    def reroute_to_subject_analysis(self, decision: RouteDecision) -> RouteDecision:
+        """Re-route a routed decision to the subject-level analysis tool.
+
+        Used by the orchestrator when a verified subject mention is detected
+        in an otherwise academic intent, so per-subject marks (internal /
+        mid-sem / end-sem) are returned instead of an overall overview only.
+        The re-target stays within the SAME role scope (own_student) and only
+        switches the tool to the allowlisted ``subject_analysis`` intent.
+        """
+        tool = self._registry.tool_for_intent("subject_analysis", decision.role)
+        if tool is None:
+            return decision
+        return RouteDecision(
+            status="ROUTED" if tool.implemented else "TOOL_NOT_IMPLEMENTED",
+            intent="subject_analysis",
+            tool_name=tool.tool_name,
+            role=decision.role,
+            scope_requirements=ScopeRequirements(
+                scope=tool.scope,
+            ),
+            is_implemented=tool.implemented,
+            reason="Verified subject mention detected; routed to subject-level analysis",
+        )
 
     def route(self, request: IntentRequest) -> RouteDecision:
         role = request.role

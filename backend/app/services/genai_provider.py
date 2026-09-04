@@ -172,10 +172,13 @@ class OpenAICompatibleProvider(GenAIProvider):
         self._max_tokens = max_tokens
         self._max_retries = max_retries
         self._retry_backoff = retry_backoff_seconds
+        client_headers: dict[str, str] = {}
+        if api_key:
+            client_headers["Authorization"] = f"Bearer {api_key}"
         self._client = httpx.AsyncClient(
             base_url=base_url.strip().rstrip("/"),
             timeout=httpx.Timeout(timeout_seconds),
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=client_headers,
         )
 
     async def aclose(self) -> None:
@@ -368,4 +371,155 @@ class OpenAICompatibleProvider(GenAIProvider):
             raise GenAIRateLimitError("All GenAI models in fallback chain were rate-limited")
         raise GenAIProviderUnavailableError(
             f"GenAI provider unavailable across all {len(models_to_try)} models"
+        )
+
+
+class GroqProvider(OpenAICompatibleProvider):
+    """Groq chat-completions adapter.
+
+    Reuses the OpenAI-compatible transport. Groq exposes a compatible OpenAI
+    endpoint at ``https://api.groq.com/openai/v1``, so this is a small,
+    configuration-driven subclass: the ``GROQ_API_KEY`` is only ever injected
+    via configuration and is standardized/validated against the shared
+    OpenAI-compatible payload/error handling.
+    """
+
+    provider_name = "groq"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        base_url: str = "https://api.groq.com/openai/v1",
+        temperature: float = 0.2,
+        max_tokens: int = 1536,
+        timeout_seconds: float = 60.0,
+        max_retries: int = 1,
+        retry_backoff_seconds: float = 1.0,
+    ):
+        super().__init__(
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
+            retry_backoff_seconds=retry_backoff_seconds,
+        )
+
+
+class OllamaProvider(OpenAICompatibleProvider):
+    """Local Ollama chat-completions adapter (the default offline fallback).
+
+    Ollama at ``http://localhost:11434`` exposes an OpenAI-compatible endpoint,
+    so this reuses the shared transport. No API key is required for a local
+    install, so ``api_key`` may be empty (no Authorization header is sent).
+    """
+
+    provider_name = "ollama"
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str = "",
+        base_url: str = "http://localhost:11434/v1",
+        temperature: float = 0.2,
+        max_tokens: int = 1536,
+        timeout_seconds: float = 60.0,
+        max_retries: int = 1,
+        retry_backoff_seconds: float = 1.0,
+    ):
+        super().__init__(
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
+            retry_backoff_seconds=retry_backoff_seconds,
+        )
+
+
+# Transient provider failures that legitimately warrant trying the next
+# provider in the failover chain. Credential rejection (HTTP 401/403) and
+# invalid/malformed responses are NOT transient and must not be silently
+# masked by an unrelated fallback provider.
+_TRANSIENT_PROVIDER_ERRORS: tuple[type[GenAIProviderError], ...] = (
+    GenAITimeoutError,
+    GenAIProviderUnavailableError,
+    GenAIRateLimitError,
+)
+
+
+class FailoverProvider(GenAIProvider):
+    """Tries a list of providers in order, failing over on transient errors.
+
+    Primary provider first; on a transient failure (timeout, connection /
+    server unavailability, or rate-limit) the next provider in the chain is
+    attempted. Non-transient failures (credential rejection, invalid response)
+    propagate immediately without masking. Provider errors and keys are never
+    surfaced to callers - only the underlying classified exception.
+    """
+
+    def __init__(self, providers: list[GenAIProvider]):
+        if not providers:
+            raise GenAIConfigurationError("No GenAI providers supplied to the failover chain")
+        self._providers = providers
+        self._last_provider_name: str = providers[0].provider_name
+
+    @property
+    def provider_name(self) -> str:
+        """Name of the provider that last answered (or primary before any call)."""
+        return self._last_provider_name
+
+    @provider_name.setter
+    def provider_name(self, value: str) -> None:
+        raise AttributeError("FailoverProvider.provider_name is read-only")
+
+    @property
+    def provider_names(self) -> list[str]:
+        return [p.provider_name for p in self._providers]
+
+    async def complete(
+        self,
+        *,
+        system_instruction: str,
+        user_message: str,
+        conversation_history: list[dict[str, str]] | None = None,
+    ) -> ProviderCompletion:
+        last_error: GenAIProviderError | None = None
+        for provider in self._providers:
+            try:
+                result = await provider.complete(
+                    system_instruction=system_instruction,
+                    user_message=user_message,
+                    conversation_history=conversation_history,
+                )
+            except _TRANSIENT_PROVIDER_ERRORS as exc:
+                last_error = exc
+                logger.warning(
+                    "GenAI provider '%s' failed transiently (%s); trying next in chain: %s",
+                    provider.provider_name,
+                    type(exc).__name__,
+                    ", ".join(p.provider_name for p in self._providers[1:]),
+                )
+                continue
+            except GenAIError:
+                # Non-transient (auth/invalid config/error) - do not fall over.
+                raise
+            self._last_provider_name = provider.provider_name
+            logger.info(
+                "GenAI completion succeeded via provider '%s'",
+                provider.provider_name,
+            )
+            return result
+
+        if last_error is not None:
+            raise last_error
+        raise GenAIProviderUnavailableError(
+            "All GenAI providers in the failover chain failed"
         )
