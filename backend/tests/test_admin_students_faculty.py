@@ -17,6 +17,8 @@ import asyncio
 import unittest
 from decimal import Decimal
 
+from datetime import datetime, timezone
+from fastapi import HTTPException
 from app.schemas.admin_students_faculty import (
     AdminFacultyResponse,
     AdminStudentsResponse,
@@ -162,6 +164,66 @@ def _default_responses(overrides=None):
             {"semester_no": 1},
             {"semester_no": 7},
         ],
+        # ---- Student detail profile ----
+        ("fetchrow", "FROM students s WHERE s.student_id = $1"): {
+            "student_id": "STU000001",
+            "first_name": "Alice",
+            "last_name": "Shah",
+            "full_name": "Alice Shah",
+            "enrollment_no": 202301,
+            "admission_year": 2023,
+            "current_semester": 7,
+            "department_name": "CSE",
+            "current_academic_year": "2026-27",
+            "overall_cgpa": Decimal("8.10"),
+            "overall_percentage": Decimal("82.5"),
+            "total_credits_registered": 160,
+            "total_credits_earned": 140,
+            "total_backlogs": 0,
+            "academic_standing": "Good",
+            "latest_sgpa": Decimal("8.42"),
+            "overall_attendance_percentage": Decimal("91.3"),
+        },
+        ("fetch", "WHERE student_id = $1 ORDER BY semester_no ASC"): [
+            {
+                "semester": 1,
+                "sgpa": Decimal("8.20"),
+                "total_credits_earned": 20,
+                "attendance_percentage": Decimal("92.0"),
+                "active_backlogs": 0,
+                "academic_year": "2023-24",
+                "semester_percentage": Decimal("81.0"),
+                "academic_standing": "Good",
+            }
+        ],
+        ("fetch", "FROM student_subject_performance p"): [
+            {
+                "semester": 1,
+                "subject_code": "CS101",
+                "subject_name": "Intro to CS",
+                "total_marks": Decimal("85.0"),
+                "percentage": Decimal("85.0"),
+                "grade": "A",
+                "attendance_percentage": Decimal("90.0"),
+            }
+        ],
+        ("fetchrow", "FROM risk_predictions WHERE student_id = $1"): {
+            "prediction_status": "LOW",
+            "prediction_timestamp": 1234567.89,
+            "created_at": datetime(2026, 8, 1, 0, 0, tzinfo=timezone.utc),
+        },
+        ("fetchrow", "FROM ml_predictions WHERE student_id = $1 AND prediction_type = 'm4'"): {
+            "prediction_value": '{"career_readiness_score": 75.0, "positive_factors": "Strong coding skills", "risk_factors": "No internship"}',
+            "model_version": "1.0",
+            "generated_at": datetime(2026, 8, 1, 0, 0, tzinfo=timezone.utc),
+        },
+        ("fetchrow", "FROM career_preferences WHERE student_id = $1"): {
+            "preferred_domain": "Data Science",
+            "dream_job_role": "Data Scientist",
+            "placement_readiness_level": "High",
+            "internship_completed": "Yes",
+            "target_package_lpa": Decimal("8.5"),
+        },
     }
     if overrides:
         responses.update(overrides)
@@ -252,6 +314,34 @@ class AdminStudentsOverviewServiceTests(unittest.TestCase):
         args = [a for _, _, a in conn.executed if len(a) == 13][0]
         self.assertEqual(args[5], 50)
         self.assertEqual(args[6], 10)
+
+    def test_student_profile_success(self):
+        service, conn = _service()
+        response = run(service.get_student_profile("STU000001"))
+        self.assertIn("student", response)
+        self.assertIn("academic", response)
+        self.assertIn("semesters", response)
+        self.assertIn("performance", response)
+        self.assertIn("risk", response)
+        self.assertIn("career", response)
+
+        self.assertEqual(response["student"]["student_id"], "STU000001")
+        self.assertEqual(response["student"]["first_name"], "Alice")
+        self.assertEqual(response["student"]["last_name"], "Shah")
+        self.assertEqual(response["academic"]["overall_cgpa"], 8.10)
+        self.assertEqual(len(response["semesters"]), 1)
+        self.assertEqual(len(response["performance"]), 1)
+        self.assertEqual(response["risk"]["risk_level"], "Low")
+        self.assertEqual(response["career"]["score"], 75.0)
+
+    def test_student_profile_not_found(self):
+        overrides = {
+            ("fetchrow", "FROM students s WHERE s.student_id = $1"): None,
+        }
+        service, _ = _service(overrides)
+        with self.assertRaises(HTTPException) as ctx:
+            run(service.get_student_profile("NONEXISTENT"))
+        self.assertEqual(ctx.exception.status_code, 404)
 
 
 class AdminFacultyOverviewServiceTests(unittest.TestCase):

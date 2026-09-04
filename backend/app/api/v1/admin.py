@@ -200,6 +200,16 @@ async def get_admin_students(
     )
 
 
+@router.get("/students/{student_id}")
+async def get_admin_student_profile(
+    student_id: str,
+    user: dict = Depends(require_admin_role),
+    service: AdminService = Depends(get_admin_service),
+):
+    """Admin student detail profile — comprehensive view of a single student."""
+    return await service.get_student_profile(student_id)
+
+
 @router.get("/faculty", response_model=AdminFacultyResponse)
 async def get_admin_faculty(
     user: dict = Depends(require_admin_role),

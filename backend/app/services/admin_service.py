@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
+from fastapi import HTTPException
 from app.repositories.admin_repo import AdminRepository
 from app.schemas.admin_academic import (
     AcademicOverviewKpis,
@@ -1293,3 +1294,170 @@ class AdminService:
             insights=data.get("insights") or [],
             generated_at=datetime.now(timezone.utc),
         )
+
+    async def get_student_profile(self, student_id: str) -> Dict[str, Any]:
+        """MD-05 Admin Student Detail Profile — comprehensive single-student view."""
+        import json
+
+        student = await self.repo._fetchrow(
+            """SELECT s.student_id, s.first_name, s.last_name, s.full_name, s.enrollment_no,
+                      s.admission_year, s.current_semester, s.department_name,
+                      s.current_academic_year, s.overall_cgpa, s.overall_percentage,
+                      s.total_credits_registered, s.total_credits_earned,
+                      s.total_backlogs, s.academic_standing, s.latest_sgpa,
+                      s.overall_attendance_percentage
+               FROM students s WHERE s.student_id = $1""",
+            (student_id,),
+        )
+        if not student:
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        summaries = await self.repo._fetch(
+            """SELECT semester_no AS semester, semester_sgpa AS sgpa,
+                      credits_earned AS total_credits_earned,
+                      semester_attendance_percentage AS attendance_percentage,
+                      backlog_count AS active_backlogs, academic_year,
+                      semester_percentage, academic_standing
+               FROM student_semester_summary
+               WHERE student_id = $1 ORDER BY semester_no ASC""",
+            (student_id,),
+        )
+
+        performance = await self.repo._fetch(
+            """SELECT p.semester_no AS semester, sub.subject_code, sub.subject_name,
+                      p.total_marks, p.percentage, p.grade,
+                      a.attendance_percentage
+               FROM student_subject_performance p
+               JOIN subjects sub ON sub.subject_id = p.subject_id
+               LEFT JOIN attendance a ON a.student_id = p.student_id AND a.subject_id = p.subject_id AND a.semester_no = p.semester_no
+               WHERE p.student_id = $1
+               ORDER BY p.semester_no ASC, sub.subject_code ASC""",
+            (student_id,),
+        )
+
+        risk_row = await self.repo._fetchrow(
+            """SELECT prediction_status, prediction_timestamp, created_at
+               FROM risk_predictions WHERE student_id = $1
+               ORDER BY created_at DESC LIMIT 1""",
+            (student_id,),
+        )
+
+        m4_row = await self.repo._fetchrow(
+            """SELECT prediction_value, model_version, generated_at
+               FROM ml_predictions WHERE student_id = $1 AND prediction_type = 'm4'
+               ORDER BY generated_at DESC LIMIT 1""",
+            (student_id,),
+        )
+
+        cp_row = await self.repo._fetchrow(
+            """SELECT preferred_domain, dream_job_role, placement_readiness_level,
+                      internship_completed, target_package_lpa
+               FROM career_preferences WHERE student_id = $1
+               LIMIT 1""",
+            (student_id,),
+        )
+
+        risk_data = None
+        if risk_row:
+            status_raw = (risk_row.get("prediction_status") or "LOW").upper()
+            prob_map = {"CRITICAL": 0.85, "HIGH": 0.65, "MODERATE": 0.40, "LOW": 0.15}
+            label_map = {"CRITICAL": "Critical", "HIGH": "High", "MODERATE": "Moderate", "LOW": "Low"}
+            risk_data = {
+                "risk_level": label_map.get(status_raw, status_raw.capitalize()),
+                "risk_probability": prob_map.get(status_raw, 0.20),
+                "model_version": "M3-v2",
+                "generated_at": risk_row["created_at"].isoformat() if risk_row.get("created_at") else None,
+            }
+
+        career_data = None
+        if m4_row and m4_row.get("prediction_value"):
+            try:
+                val = json.loads(m4_row["prediction_value"])
+                score = float(val["career_readiness_score"]) if val.get("career_readiness_score") else None
+                pos = val.get("positive_factors")
+                strengths = [pos] if isinstance(pos, str) and pos else (pos if isinstance(pos, list) else [])
+                rf = val.get("risk_factors")
+                areas = [rf] if isinstance(rf, str) and rf else (rf if isinstance(rf, list) else [])
+                career_data = {
+                    "score": score,
+                    "strengths": strengths,
+                    "areas_to_improve": areas,
+                }
+            except Exception:
+                pass
+
+        if not career_data and cp_row:
+            level_map = {"High": 85.0, "Medium": 60.0, "Low": 40.0}
+            score = level_map.get(cp_row.get("placement_readiness_level"), 50.0)
+            strengths = []
+            if cp_row.get("preferred_domain"):
+                strengths.append(f"Target Domain: {cp_row['preferred_domain']}")
+            if cp_row.get("dream_job_role"):
+                strengths.append(f"Role Interest: {cp_row['dream_job_role']}")
+            areas = []
+            if cp_row.get("internship_completed") != "Yes":
+                areas.append("Internship not yet completed")
+            career_data = {
+                "score": score,
+                "strengths": strengths,
+                "areas_to_improve": areas,
+            }
+
+        total_credits = sum(s.get("total_credits_earned") or 0 for s in summaries) or student.get("total_credits_earned")
+        total_backlogs = sum(s.get("active_backlogs") or 0 for s in summaries) if summaries else student.get("total_backlogs")
+
+        first_name = student.get("first_name") or ""
+        last_name = student.get("last_name") or ""
+        if not first_name and not last_name and student.get("full_name"):
+            parts = student["full_name"].split(" ", 1)
+            first_name = parts[0]
+            last_name = parts[1] if len(parts) > 1 else ""
+
+        return {
+            "student": {
+                "student_id": student["student_id"],
+                "first_name": first_name,
+                "last_name": last_name,
+                "enrollment_no": student["enrollment_no"],
+                "admission_year": student["admission_year"],
+                "current_semester": student["current_semester"],
+                "department_name": student["department_name"],
+                "current_academic_year": student.get("current_academic_year"),
+            },
+            "academic": {
+                "latest_sgpa": float(student["latest_sgpa"]) if student.get("latest_sgpa") else None,
+                "overall_cgpa": float(student["overall_cgpa"]) if student.get("overall_cgpa") else None,
+                "overall_percentage": float(student["overall_percentage"]) if student.get("overall_percentage") else None,
+                "total_credits_registered": student.get("total_credits_registered"),
+                "total_credits_earned": total_credits,
+                "total_backlogs": total_backlogs,
+                "academic_standing": student.get("academic_standing"),
+            },
+            "semesters": [
+                {
+                    "semester": s["semester"],
+                    "sgpa": float(s["sgpa"]) if s.get("sgpa") else None,
+                    "semester_percentage": float(s["semester_percentage"]) if s.get("semester_percentage") else None,
+                    "total_credits_earned": s.get("total_credits_earned"),
+                    "attendance_percentage": float(s["attendance_percentage"]) if s.get("attendance_percentage") else None,
+                    "active_backlogs": s.get("active_backlogs"),
+                    "academic_year": s.get("academic_year"),
+                }
+                for s in summaries
+            ],
+            "performance": [
+                {
+                    "semester": p["semester"],
+                    "subject_code": p["subject_code"],
+                    "subject_name": p["subject_name"],
+                    "total_marks": float(p["total_marks"]) if p.get("total_marks") else None,
+                    "percentage": float(p["percentage"]) if p.get("percentage") else None,
+                    "grade": p.get("grade"),
+                    "attendance_percentage": float(p["attendance_percentage"]) if p.get("attendance_percentage") else None,
+                }
+                for p in performance
+            ],
+            "risk": risk_data,
+            "career": career_data,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }

@@ -648,6 +648,67 @@ export function getAdminStudents(
   })
 }
 
+export type AdminStudentProfileData = {
+  student: {
+    student_id: string
+    first_name: string
+    last_name: string
+    enrollment_no: number
+    admission_year: number
+    current_semester: number
+    department_name: string | null
+    current_academic_year: string | null
+  }
+  academic: {
+    latest_sgpa: number | null
+    overall_cgpa: number | null
+    overall_percentage: number | null
+    total_credits_registered: number | null
+    total_credits_earned: number | null
+    total_backlogs: number | null
+    academic_standing: string | null
+  }
+  semesters: Array<{
+    semester: number
+    sgpa: number | null
+    semester_percentage: number | null
+    total_credits_earned: number | null
+    attendance_percentage: number | null
+    active_backlogs: number | null
+    academic_year: string | null
+  }>
+  performance: Array<{
+    semester: number
+    subject_code: string
+    subject_name: string
+    total_marks: number | null
+    percentage: number | null
+    grade: string | null
+    attendance_percentage: number | null
+  }>
+  risk: {
+    risk_level: string | null
+    risk_probability: number | null
+    model_version: string | null
+    generated_at: string | null
+  } | null
+  career: {
+    score: number | null
+    strengths: string[]
+    areas_to_improve: string[]
+  } | null
+  generated_at: string
+}
+
+export function getAdminStudentProfile(
+  studentId: string,
+): Promise<BffResult<AdminStudentProfileData>> {
+  return callFastapi<AdminStudentProfileData>(
+    `students/${encodeURIComponent(studentId)}`,
+    BFF_TTL_MS,
+  )
+}
+
 export type AdminFacultyKpis = {
   total_faculty: number
   active_faculty: number

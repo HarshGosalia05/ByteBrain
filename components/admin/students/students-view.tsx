@@ -1,4 +1,8 @@
+"use client"
+
 import { GraduationCap, Users } from "lucide-react"
+import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 
 import type { AdminStudentRow, AdminStudentsData } from "@/lib/admin-api"
 
@@ -49,6 +53,9 @@ function StudentsTable({
   limit: number
   offset: number
 }) {
+  const searchParams = useSearchParams()
+  const queryString = searchParams?.toString() ? `?${searchParams.toString()}` : ""
+
   return (
     <ChartCard
       title="Students"
@@ -93,35 +100,75 @@ function StudentsTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.student_id} className="border-b last:border-0">
-                <td className="py-2.5 pr-4">
-                  <p className="max-w-52 truncate font-medium" title={row.student_name}>
-                    {row.student_name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{row.student_id}</p>
-                </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{row.enrollment_no}</td>
-                <td className="py-2.5 pr-4 text-xs">
-                  {row.department_name || "—"}
-                  <p className="text-xs text-muted-foreground">{row.academic_year ?? ""}</p>
-                </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{row.semester ?? "—"}</td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{toFixed(row.sgpa)}</td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{toFixed(row.cgpa)}</td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">
-                  {withSuffix(row.percentage, "%")}
-                </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">
-                  {withSuffix(row.attendance, "%")}
-                </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{row.backlogs ?? "—"}</td>
-                <td className="py-2.5 pr-4">
-                  <RiskBadge level={row.risk} />
-                </td>
-                <td className="py-2.5 text-right text-xs">{row.academic_standing ?? "—"}</td>
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const profileHref = `/admin/students/${encodeURIComponent(row.student_id)}${queryString}`
+              return (
+                <tr
+                  key={row.student_id}
+                  className="border-b last:border-0 cursor-pointer transition-colors hover:bg-muted/40"
+                >
+                  <td className="py-2.5 pr-4">
+                    <Link href={profileHref} className="block">
+                      <p className="max-w-52 truncate font-medium" title={row.student_name}>
+                        {row.student_name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{row.student_id}</p>
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums">
+                    <Link href={profileHref} className="block">
+                      {row.enrollment_no}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4 text-xs">
+                    <Link href={profileHref} className="block">
+                      {row.department_name || "—"}
+                      <p className="text-xs text-muted-foreground">{row.academic_year ?? ""}</p>
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums">
+                    <Link href={profileHref} className="block">
+                      {row.semester ?? "—"}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums">
+                    <Link href={profileHref} className="block">
+                      {toFixed(row.sgpa)}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums">
+                    <Link href={profileHref} className="block">
+                      {toFixed(row.cgpa)}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums">
+                    <Link href={profileHref} className="block">
+                      {withSuffix(row.percentage, "%")}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums">
+                    <Link href={profileHref} className="block">
+                      {withSuffix(row.attendance, "%")}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums">
+                    <Link href={profileHref} className="block">
+                      {row.backlogs ?? "—"}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4">
+                    <Link href={profileHref} className="block">
+                      <RiskBadge level={row.risk} />
+                    </Link>
+                  </td>
+                  <td className="py-2.5 text-right text-xs">
+                    <Link href={profileHref} className="block">
+                      {row.academic_standing ?? "—"}
+                    </Link>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

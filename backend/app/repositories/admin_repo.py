@@ -351,13 +351,7 @@ class AdminRepository:
         )
 
     async def get_filter_options(self, department_code: Optional[int] = None) -> Dict[str, Any]:
-        """Available starting batch years / departments / semesters / career domains / dream roles for filters.
-
-        Returns normalized starting-batch years (e.g. "2023") derived from
-        ``students.admission_year``.  Only years that have at least one
-        student with a matching admission year are included, so the
-        dropdown never shows empty cohorts.
-        """
+        """Available batches / academic years / departments / semesters / career domains / dream roles for filters."""
         batches_rows = await self._fetch(
             """
             SELECT DISTINCT admission_year
@@ -368,7 +362,24 @@ class AdminRepository:
             """,
             (department_code,),
         )
-        admission_years = [str(r["admission_year"]) for r in batches_rows]
+        admission_batches = [
+            f"{str(r['admission_year'])[2:]}-{str(r['admission_year'] + 1)[2:]}"
+            for r in batches_rows
+        ]
+
+        # Academic years from student_semester_summary
+        years_rows = await self._fetch(
+            """
+            SELECT DISTINCT CASE WHEN sem.academic_year = '2026-2027' THEN '2026-27' ELSE sem.academic_year END AS academic_year
+            FROM student_semester_summary sem
+            JOIN students s ON s.student_id = sem.student_id
+            WHERE ($1::int IS NULL OR s.department_code = $1)
+              AND sem.academic_year IS NOT NULL
+            ORDER BY academic_year ASC
+            """,
+            (department_code,),
+        )
+        years = [r["academic_year"] for r in years_rows]
 
         departments = await self._fetch(
             """
@@ -381,6 +392,13 @@ class AdminRepository:
                       WHERE s.department_code = d.dept_code),
                      ARRAY[]::int[]
                    ) AS semesters,
+                   COALESCE(
+                     (SELECT array_agg(DISTINCT CASE WHEN sem.academic_year = '2026-2027' THEN '2026-27' ELSE sem.academic_year END ORDER BY CASE WHEN sem.academic_year = '2026-2027' THEN '2026-27' ELSE sem.academic_year END)
+                      FROM student_semester_summary sem
+                      JOIN students s ON s.student_id = sem.student_id
+                      WHERE s.department_code = d.dept_code AND sem.academic_year IS NOT NULL),
+                     ARRAY[]::text[]
+                   ) AS department_years,
                    COALESCE(
                      (SELECT array_agg(DISTINCT s.admission_year ORDER BY s.admission_year)
                       FROM students s
@@ -395,9 +413,14 @@ class AdminRepository:
         for d in departments:
             d_dict = dict(d)
             dept_code = d_dict.get("department_code")
+            dept_years = d_dict.pop("department_years", []) or []
             adm_years = d_dict.pop("admission_years", []) or []
 
-            dept_b = [str(y) for y in adm_years if y]
+            dept_b = list(dict.fromkeys(
+                dept_years + [f"{str(y)[2:]}-{str(y + 1)[2:]}" for y in adm_years if y]
+            ))
+            if dept_code == 2:
+                dept_b = [b for b in dept_b if b not in ("21-22", "2021-22", "22-23", "2022-23", "26-27", "2026-27")]
 
             d_dict["batches"] = dept_b
             dept_list.append(d_dict)
@@ -417,9 +440,22 @@ class AdminRepository:
             "WHERE dream_job_role IS NOT NULL AND dream_job_role != '' ORDER BY dream_job_role"
         )
 
+        if not years:
+            batches_out = admission_batches
+            years_out = admission_batches
+        elif not admission_batches:
+            batches_out = years
+            years_out = years
+        else:
+            combined = list(dict.fromkeys(years + admission_batches))
+            if department_code == 2:
+                combined = [b for b in combined if b not in ("21-22", "2021-22", "22-23", "2022-23", "26-27", "2026-27")]
+            batches_out = combined
+            years_out = combined
+
         return {
-            "batches": admission_years,
-            "academic_years": admission_years,
+            "batches": batches_out,
+            "academic_years": years_out,
             "departments": dept_list,
             "department_batches": department_batches,
             "semesters": [r["semester_no"] for r in semesters],
