@@ -107,25 +107,27 @@ function AttendanceDistributionCard({
     Low: "var(--chart-3)",
     Critical: "var(--chart-5)",
   }
-  const chartData = data.map((item) => ({ status: item.status, count: item.count }))
+  const row: Record<string, string | number> = { label: "Status" }
+  for (const item of data) {
+    row[item.status] = item.count
+  }
+  const chartData = [row]
 
   return (
     <ChartCard
       title="Attendance Distribution"
       subtitle="Subject-level attendance status across the selected scope"
-      status={chartData.length > 0 ? "ready" : "empty"}
+      status={data.length > 0 ? "ready" : "empty"}
       emptyIcon={CalendarCheck}
       emptyTitle="No attendance data"
       emptyDescription="There is no attendance data in the current selection."
     >
       <SubjectBarChart
         data={chartData}
-        xKey="status"
-        dataKey="count"
-        color="var(--chart-1)"
+        xKey="label"
         height={240}
-        bars={chartData.map((item) => ({
-          dataKey: "count",
+        bars={data.map((item) => ({
+          dataKey: item.status,
           name: item.status,
           color: colors[item.status] ?? "var(--muted-foreground)",
         }))}
@@ -140,25 +142,27 @@ function ResultOverviewCard({ data }: { data: AdminDashboardData["result_overvie
     Fail: "var(--chart-5)",
     Pending: "var(--chart-3)",
   }
-  const chartData = data.map((item) => ({ status: item.status, count: item.count }))
+  const row: Record<string, string | number> = { label: "Status" }
+  for (const item of data) {
+    row[item.status] = item.count
+  }
+  const chartData = [row]
 
   return (
     <ChartCard
       title="Result Overview"
       subtitle="Subject results in the selected scope (Pending stays pending)"
-      status={chartData.length > 0 ? "ready" : "empty"}
+      status={data.length > 0 ? "ready" : "empty"}
       emptyIcon={GraduationCap}
       emptyTitle="No result data"
       emptyDescription="There are no subject performance results in the current selection."
     >
       <SubjectBarChart
         data={chartData}
-        xKey="status"
-        dataKey="count"
-        color="var(--chart-1)"
+        xKey="label"
         height={220}
-        bars={chartData.map((item) => ({
-          dataKey: "count",
+        bars={data.map((item) => ({
+          dataKey: item.status,
           name: item.status,
           color: colors[item.status] ?? "var(--muted-foreground)",
         }))}

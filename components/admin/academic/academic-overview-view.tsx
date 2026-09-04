@@ -70,28 +70,28 @@ function GradeDistributionCard({
 }: {
   data: AcademicOverviewData["grade_distribution"]
 }) {
-  const chartData = data.map((item) => ({
-    grade: item.grade,
-    count: item.count,
-  }))
-  const total = chartData.reduce((sum, item) => sum + item.count, 0)
+  const row: Record<string, string | number> = { label: "Grades" }
+  for (const item of data) {
+    row[item.grade] = item.count
+  }
+  const chartData = [row]
+  const total = data.reduce((sum, item) => sum + item.count, 0)
 
   return (
     <ChartCard
       title="Grade Distribution"
       subtitle="Subject grades in the selected scope (NULL grades stay Pending)"
-      status={chartData.length > 0 ? "ready" : "empty"}
+      status={data.length > 0 ? "ready" : "empty"}
       emptyIcon={Award}
       emptyTitle="No grade data"
       emptyDescription="There are no graded subjects in the current selection."
     >
       <SubjectBarChart
         data={chartData}
-        xKey="grade"
-        dataKey="count"
+        xKey="label"
         height={240}
-        bars={chartData.map((item) => ({
-          dataKey: "count",
+        bars={data.map((item) => ({
+          dataKey: item.grade,
           name: `${item.grade}${item.grade === "Pending" ? ` (${item.count})` : ""}`,
           color: GRADE_COLORS[item.grade] ?? "var(--muted-foreground)",
         }))}

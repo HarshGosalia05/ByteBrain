@@ -101,25 +101,28 @@ function AttendanceDistributionCard({
 }: {
   data: AttendanceIntelligenceData["distribution"]
 }) {
-  const chartData = data.map((item) => ({ status: item.status, count: item.count }))
-  const total = chartData.reduce((sum, item) => sum + item.count, 0)
+  const row: Record<string, string | number> = { label: "Status" }
+  for (const item of data) {
+    row[item.status] = item.count
+  }
+  const chartData = [row]
+  const total = data.reduce((sum, item) => sum + item.count, 0)
 
   return (
     <ChartCard
       title="Attendance Distribution"
       subtitle="Subject-level attendance status across the selected scope"
-      status={chartData.length > 0 ? "ready" : "empty"}
+      status={data.length > 0 ? "ready" : "empty"}
       emptyIcon={CalendarCheck}
       emptyTitle="No attendance data"
       emptyDescription="There is no attendance data in the current selection."
     >
       <SubjectBarChart
         data={chartData}
-        xKey="status"
-        dataKey="count"
+        xKey="label"
         height={240}
-        bars={chartData.map((item) => ({
-          dataKey: "count",
+        bars={data.map((item) => ({
+          dataKey: item.status,
           name: item.status,
           color: ATTENDANCE_COLORS[item.status] ?? "var(--muted-foreground)",
         }))}

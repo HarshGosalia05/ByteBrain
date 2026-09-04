@@ -819,7 +819,7 @@ class AdminRepository:
     ) -> Dict[str, Any]:
         """MD-04 subject-level attendance aggregation (canonical enrollment join)."""
         items = await self._fetch(
-            """
+            f"""
             SELECT
                 e.subject_code,
                 e.subject_name,
