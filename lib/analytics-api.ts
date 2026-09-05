@@ -351,7 +351,7 @@ export function getSubjectPerformance(subjectId: string, filters: AnalyticsFilte
 
 export function getSubjectAttendance(subjectId: string, filters: AnalyticsFilters = {}): Promise<BffResult<SubjectAttendanceSummary>> {
   return callAnalytics<SubjectAttendanceSummary>(`subjects/${encodeURIComponent(subjectId)}/attendance`, BFF_TTL_MS, {
-    ...filters,
+    semester_no: filters.semester_no,
     batch: filters.batch ?? filters.academic_year,
     academic_year: filters.academic_year ?? filters.batch,
   })
@@ -360,9 +360,9 @@ export function getSubjectAttendance(subjectId: string, filters: AnalyticsFilter
 export function getSubjectUnderperformers(subjectId: string, filters: AnalyticsFilters & { threshold?: number } = {}): Promise<BffResult<SubjectUnderperformers>> {
   const { threshold, ...rest } = filters
   return callAnalytics<SubjectUnderperformers>(`subjects/${encodeURIComponent(subjectId)}/underperformers`, BFF_TTL_MS, {
-    ...rest,
-    batch: filters.batch ?? filters.academic_year,
-    academic_year: filters.academic_year ?? filters.batch,
+    semester_no: rest.semester_no,
+    batch: rest.batch ?? rest.academic_year,
+    academic_year: rest.academic_year ?? rest.batch,
     threshold,
   })
 }

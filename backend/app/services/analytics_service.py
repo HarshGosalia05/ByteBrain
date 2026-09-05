@@ -270,12 +270,13 @@ class AnalyticsService:
         subject_id: str,
         *,
         semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
     ) -> Optional[SubjectAttendanceSummary]:
         """Aggregate attendance metrics for a subject."""
         subject_id = _validate_subject_id(subject_id)
         _validate_semester(semester_no)
         row = await self.repo.get_subject_attendance_summary(
-            subject_id, semester_no=semester_no,
+            subject_id, semester_no=semester_no, academic_year=academic_year,
         )
         if row is None:
             return None
@@ -299,6 +300,7 @@ class AnalyticsService:
         subject_id: str,
         *,
         semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
         threshold: float = 40.0,
     ) -> SubjectUnderperformers:
         """Students below a percentage threshold in a subject."""
@@ -306,7 +308,7 @@ class AnalyticsService:
         _validate_semester(semester_no)
         _validate_threshold(threshold)
         data = await self.repo.get_subject_underperformers(
-            subject_id, semester_no=semester_no, threshold=threshold,
+            subject_id, semester_no=semester_no, academic_year=academic_year, threshold=threshold,
         )
         students = [
             UnderperformerItem(

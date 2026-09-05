@@ -93,6 +93,9 @@ async def get_student_semester_history(
     semester_no: Optional[int] = Query(
         None, ge=1, le=8, description="Filter by semester (1-8)",
     ),
+    batch: Optional[str] = Query(
+        None, description="Filter by starting batch year (e.g. 2023)",
+    ),
     academic_year: Optional[str] = Query(
         None, description="Filter by academic year (e.g. 2026-27)",
     ),
@@ -103,7 +106,7 @@ async def get_student_semester_history(
             student_id,
             department_code=department_code,
             semester_no=semester_no,
-            academic_year=academic_year,
+            academic_year=batch or academic_year,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -208,6 +211,12 @@ async def get_subject_attendance_summary(
     semester_no: Optional[int] = Query(
         None, ge=1, le=8, description="Filter by semester (1-8)",
     ),
+    batch: Optional[str] = Query(
+        None, description="Filter by starting batch year (e.g. 2023)",
+    ),
+    academic_year: Optional[str] = Query(
+        None, description="Filter by academic year (e.g. 2026-27)",
+    ),
 ):
     """Aggregate attendance metrics for a subject.
 
@@ -215,7 +224,7 @@ async def get_subject_attendance_summary(
     """
     try:
         result = await service.get_subject_attendance_summary(
-            subject_id, semester_no=semester_no,
+            subject_id, semester_no=semester_no, academic_year=batch or academic_year,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -240,6 +249,12 @@ async def get_subject_underperformers(
     semester_no: Optional[int] = Query(
         None, ge=1, le=8, description="Filter by semester (1-8)",
     ),
+    batch: Optional[str] = Query(
+        None, description="Filter by starting batch year (e.g. 2023)",
+    ),
+    academic_year: Optional[str] = Query(
+        None, description="Filter by academic year (e.g. 2026-27)",
+    ),
     threshold: float = Query(
         40.0, ge=0, le=100, description="Percentage threshold (default 40)",
     ),
@@ -247,7 +262,7 @@ async def get_subject_underperformers(
     """Students below a percentage threshold in a subject."""
     try:
         return await service.get_subject_underperformers(
-            subject_id, semester_no=semester_no, threshold=threshold,
+            subject_id, semester_no=semester_no, academic_year=batch or academic_year, threshold=threshold,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -438,6 +453,9 @@ async def get_students_below_attendance_threshold(
     semester_no: Optional[int] = Query(
         None, ge=1, le=8, description="Filter by semester (1-8)",
     ),
+    batch: Optional[str] = Query(
+        None, description="Filter by starting batch year (e.g. 2023)",
+    ),
     academic_year: Optional[str] = Query(
         None, description="Filter by academic year (e.g. 2026-27)",
     ),
@@ -450,7 +468,7 @@ async def get_students_below_attendance_threshold(
         return await service.get_students_below_attendance_threshold(
             department_code=department_code,
             semester_no=semester_no,
-            academic_year=academic_year,
+            academic_year=batch or academic_year,
             threshold=threshold,
         )
     except ValueError as exc:
@@ -472,6 +490,9 @@ async def get_subjects_needing_attention(
     semester_no: Optional[int] = Query(
         None, ge=1, le=8, description="Filter by semester (1-8)",
     ),
+    batch: Optional[str] = Query(
+        None, description="Filter by starting batch year (e.g. 2023)",
+    ),
     academic_year: Optional[str] = Query(
         None, description="Filter by academic year (e.g. 2026-27)",
     ),
@@ -479,7 +500,7 @@ async def get_subjects_needing_attention(
     """Subjects flagged for concerning metrics."""
     try:
         return await service.get_subjects_needing_attention(
-            department_code=department_code, semester_no=semester_no, academic_year=academic_year,
+            department_code=department_code, semester_no=semester_no, academic_year=batch or academic_year,
         )
     except ValueError as exc:
         raise HTTPException(

@@ -17,11 +17,19 @@ export default async function SubjectAnalyticsPage(props: {
 
   const { subjectId } = await props.params
   const searchParams = await props.searchParams
+  const batchParam =
+    typeof searchParams.batch === "string"
+      ? searchParams.batch
+      : typeof searchParams.academic_year === "string"
+        ? searchParams.academic_year
+        : null
   const filters: AnalyticsFilters = {
     semester_no:
       typeof searchParams.semester_no === "string" && searchParams.semester_no
         ? parseInt(searchParams.semester_no, 10) || null
         : null,
+    batch: batchParam,
+    academic_year: batchParam,
   }
 
   const [perfRes, attRes, underRes] = await Promise.all([

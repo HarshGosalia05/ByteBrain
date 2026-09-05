@@ -70,12 +70,12 @@ export function getDepartmentBatches(
         ? filters.batches
         : filters?.academic_years && filters.academic_years.length > 0
           ? filters.academic_years
-          : ["2023", "2024", "2025"]
+          : []
 
     const valid = normalizeList(candidateBatches).filter(
       (y) => !zeroStudentYears.includes(y)
     )
-    return valid.length > 0 ? valid : ["2023", "2024", "2025"]
+    return valid
   }
 
   // For CSE or All Departments: ALL starting years are returned
@@ -92,7 +92,7 @@ export function getDepartmentBatches(
       ? filters.batches
       : filters?.academic_years && filters.academic_years.length > 0
         ? filters.academic_years
-        : ["2021", "2022", "2023", "2024", "2025", "2026"]
+        : []
 
   return normalizeList(source)
 }
