@@ -311,13 +311,15 @@ class AnalyticsRepository:
         subject_id: str,
         *,
         semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Aggregate attendance for a subject.
 
         Grain: one row per subject.
         """
+        batch_cond = self._batch_sql("$3", "s") if academic_year else "TRUE"
         result = await self._fetchrow(
-            """
+            f"""
             SELECT
                 a.subject_id,
                 sub.subject_code,
@@ -336,12 +338,15 @@ class AnalyticsRepository:
                     AS shortage_count
             FROM attendance a
             LEFT JOIN subjects sub ON sub.subject_id = a.subject_id
+            JOIN students s ON s.student_id = a.student_id
             WHERE a.subject_id = $1
               AND ($2::int IS NULL OR a.semester_no = $2)
+              AND {batch_cond}
             GROUP BY a.subject_id, sub.subject_code, sub.subject_name
             """,
             subject_id,
             semester_no,
+            academic_year,
         )
         return dict(result) if result else None
 
@@ -350,14 +355,16 @@ class AnalyticsRepository:
         subject_id: str,
         *,
         semester_no: Optional[int] = None,
+        academic_year: Optional[str] = None,
         threshold: float = 40.0,
     ) -> Dict[str, Any]:
         """Students below a percentage threshold in a subject.
 
         Grain: one row per underperforming student.
         """
+        batch_cond = self._batch_sql("$4", "s") if academic_year else "TRUE"
         students = await self._fetch(
-            """
+            f"""
             SELECT
                 p.student_id,
                 s.full_name,
@@ -373,11 +380,13 @@ class AnalyticsRepository:
             WHERE p.subject_id = $1
               AND ($2::int IS NULL OR p.semester_no = $2)
               AND p.percentage < $3
+              AND {batch_cond}
             ORDER BY p.percentage
             """,
             subject_id,
             semester_no,
             threshold,
+            academic_year,
         )
         return {
             "subject_id": subject_id,

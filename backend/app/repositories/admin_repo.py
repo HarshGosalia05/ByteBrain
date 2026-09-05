@@ -416,13 +416,12 @@ class AdminRepository:
             dept_years = d_dict.pop("department_years", []) or []
             adm_years = d_dict.pop("admission_years", []) or []
 
-            dept_b = list(dict.fromkeys(
-                dept_years + [f"{str(y)[2:]}-{str(y + 1)[2:]}" for y in adm_years if y]
-            ))
+            dept_b = [f"{str(y)[2:]}-{str(y + 1)[2:]}" for y in adm_years if y]
             if dept_code == 2:
-                dept_b = [b for b in dept_b if b not in ("21-22", "2021-22", "22-23", "2022-23", "26-27", "2026-27")]
+                dept_b = [b for b in dept_b if b not in ("21-22", "2021-22", "22-23", "2022-23")]
 
             d_dict["batches"] = dept_b
+            d_dict["academic_years"] = dept_years
             dept_list.append(d_dict)
             if dept_code is not None:
                 department_batches[str(dept_code)] = dept_b
@@ -440,18 +439,12 @@ class AdminRepository:
             "WHERE dream_job_role IS NOT NULL AND dream_job_role != '' ORDER BY dream_job_role"
         )
 
-        if not years:
-            batches_out = admission_batches
-            years_out = admission_batches
-        elif not admission_batches:
+        if not admission_batches:
             batches_out = years
             years_out = years
         else:
-            combined = list(dict.fromkeys(years + admission_batches))
-            if department_code == 2:
-                combined = [b for b in combined if b not in ("21-22", "2021-22", "22-23", "2022-23", "26-27", "2026-27")]
-            batches_out = combined
-            years_out = combined
+            batches_out = admission_batches
+            years_out = list(dict.fromkeys(years + admission_batches)) if years else admission_batches
 
         return {
             "batches": batches_out,
