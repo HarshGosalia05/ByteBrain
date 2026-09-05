@@ -1,3 +1,5 @@
+"use client"
+
 import {
   Building2,
   BriefcaseBusiness,
@@ -5,6 +7,8 @@ import {
   UserCog,
   Users,
 } from "lucide-react"
+import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 
 import type {
   AdminFacultyData,
@@ -91,10 +95,13 @@ function FacultyByDesignationCard({
 }
 
 function FacultyTable({ rows }: { rows: AdminFacultyRow[] }) {
+  const searchParams = useSearchParams()
+  const queryString = searchParams?.toString() ? `?${searchParams.toString()}` : ""
+
   return (
     <ChartCard
       title="Faculty"
-      subtitle="Faculty allocation and weekly workload from existing teaching data"
+      subtitle="Faculty allocation and weekly workload from existing teaching data. Click any faculty to view profile."
       status={rows.length > 0 ? "ready" : "empty"}
       emptyIcon={Users}
       emptyTitle="No faculty"
@@ -125,25 +132,51 @@ function FacultyTable({ rows }: { rows: AdminFacultyRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.faculty_id} className="border-b last:border-0">
-                <td className="py-2.5 pr-4">
-                  <p className="max-w-52 truncate font-medium" title={row.full_name}>
-                    {row.full_name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {row.faculty_code || row.faculty_id}
-                  </p>
-                </td>
-                <td className="py-2.5 pr-4 text-xs">{row.department_name || "—"}</td>
-                <td className="py-2.5 pr-4 text-xs">{row.designation || "—"}</td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{row.subject_count}</td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{row.student_count}</td>
-                <td className="py-2.5 text-right tabular-nums">
-                  {row.workload_hours === null ? "—" : `${toFixed(row.workload_hours)} h/wk`}
-                </td>
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const profileHref = `/admin/faculty/${encodeURIComponent(row.faculty_id)}${queryString}`
+              return (
+                <tr
+                  key={row.faculty_id}
+                  className="border-b last:border-0 cursor-pointer transition-colors hover:bg-muted/40"
+                >
+                  <td className="py-2.5 pr-4">
+                    <Link href={profileHref} className="block">
+                      <p className="max-w-52 truncate font-medium text-foreground transition-colors hover:text-primary" title={row.full_name}>
+                        {row.full_name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {row.faculty_code || row.faculty_id}
+                      </p>
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4 text-xs">
+                    <Link href={profileHref} className="block">
+                      {row.department_name || "—"}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4 text-xs">
+                    <Link href={profileHref} className="block">
+                      {row.designation || "—"}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums">
+                    <Link href={profileHref} className="block">
+                      {row.subject_count}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums">
+                    <Link href={profileHref} className="block">
+                      {row.student_count}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 text-right tabular-nums">
+                    <Link href={profileHref} className="block">
+                      {row.workload_hours === null ? "—" : `${toFixed(row.workload_hours)} h/wk`}
+                    </Link>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

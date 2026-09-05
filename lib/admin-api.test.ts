@@ -1,4 +1,4 @@
-﻿// Frontend tests for the MD-05 admin BFF layer (lib/admin-api.ts).
+// Frontend tests for the MD-05 admin BFF layer (lib/admin-api.ts).
 //
 // Runs with Node's built-in test runner + TypeScript type stripping:
 //   node --experimental-test-module-mocks --test lib/admin-api.test.ts
@@ -212,6 +212,106 @@ test("getAdminFaculty fetches the faculty overview contract", async () => {
   assert.equal(result.data.by_designation.length, 2)
   assert.equal(result.data.faculty[0].workload_hours, 10.5)
   assert.equal(getCalls("faculty")[0].url, `${baseUrl}/faculty`)
+})
+
+test("getAdminFacultyProfile fetches single faculty profile contract", async () => {
+  const profileBody = {
+    faculty: {
+      faculty_id: "FAC001",
+      faculty_code: "CSEF001",
+      full_name: "Rahul Patel",
+      gender: "Male",
+      department_code: 1,
+      department_name: "Computer Science and Engineering",
+      designation: "Assistant Professor",
+      qualification: "M.Tech",
+      specialization: "Cloud Computing",
+      experience_years: 8,
+      email: "rahul.patel@glsuniversity.ac.in",
+      phone_number: "9810012345",
+      joining_date: "2018-06-15",
+      employment_type: "Full Time",
+      status: "Active",
+    },
+    teaching_overview: {
+      total_subjects: 5,
+      total_semesters: 4,
+      active_students: 120,
+      total_students_handled: 120,
+      workload_hours: 18.0,
+      assigned_departments: ["CSE"],
+      assigned_semesters: [1, 3, 5, 7],
+    },
+    subjects: [
+      {
+        subject_id: "SUB001",
+        subject_code: "CSE101",
+        subject_name: "Introduction to Programming",
+        department_name: "CSE",
+        semester_no: 1,
+        academic_year: "2026-27",
+        student_count: 60,
+        total_classes: 45,
+        avg_attendance: 85.5,
+        avg_marks_pct: 74.0,
+        at_risk_count: 3,
+      },
+    ],
+    insights: {
+      overall_avg_marks: 74.0,
+      overall_avg_attendance: 85.5,
+      total_at_risk_count: 3,
+      total_evaluated_records: 60,
+      grade_distribution: [{ grade: "A", count: 40 }],
+    },
+    generated_at: "2026-08-12T00:00:00Z",
+  }
+  route("faculty/FAC001", 200, profileBody)
+
+  const result = await adminApi.getAdminFacultyProfile("FAC001")
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.faculty.faculty_id, "FAC001")
+  assert.equal(result.data.faculty.full_name, "Rahul Patel")
+  assert.equal(result.data.teaching_overview.total_subjects, 5)
+  assert.equal(result.data.insights.overall_avg_marks, 74.0)
+  assert.equal(getCalls("faculty/FAC001")[0].url, `${baseUrl}/faculty/FAC001`)
+})
+
+test("getAdminFacultyProfile URL-encodes faculty ID and caches within TTL", async () => {
+  const profileBody = {
+    faculty: { faculty_id: "FAC A/1", full_name: "Dr. Test" },
+    teaching_overview: {},
+    subjects: [],
+    insights: {},
+    generated_at: "2026-08-12T00:00:00Z",
+  }
+  route("faculty/FAC%20A%2F1", 200, profileBody)
+
+  const result = await adminApi.getAdminFacultyProfile("FAC A/1")
+  assert.equal(result.ok, true)
+  assert.equal(getCalls("faculty/FAC%20A%2F1").length, 1)
+
+  // Second read should be served from cache
+  await adminApi.getAdminFacultyProfile("FAC A/1")
+  assert.equal(getCalls("faculty/FAC%20A%2F1").length, 1)
+})
+
+test("getAdminFacultyProfile maps 404 / 503 and gates non-admin", async () => {
+  route("faculty/FAC-MISSING", 404, { detail: "Faculty not found" })
+  const missing = await adminApi.getAdminFacultyProfile("FAC-MISSING")
+  assert.equal(missing.ok, false)
+  if (!missing.ok) {
+    assert.equal(missing.error.code, "server_error") // default mapping for 404 in toBffError
+  }
+
+  activeSession = null
+  const anon = await adminApi.getAdminFacultyProfile("FAC001")
+  assert.equal(anon.ok, false)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Student" }
+  const wrongRole = await adminApi.getAdminFacultyProfile("FAC001")
+  assert.equal(wrongRole.ok, false)
 })
 
 // ---------------------------------------------------------------------------

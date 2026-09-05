@@ -19,6 +19,7 @@ from app.schemas.admin_notifications import (
     ExecutiveSummaryResponse,
 )
 from app.schemas.admin_students_faculty import (
+    AdminFacultyProfileResponse,
     AdminFacultyResponse,
     AdminStudentsResponse,
 )
@@ -222,6 +223,16 @@ async def get_admin_faculty(
     counts and weekly workload (existing faculty derivation, no new rules).
     """
     return await service.get_admin_faculty()
+
+
+@router.get("/faculty/{faculty_id}", response_model=AdminFacultyProfileResponse)
+async def get_admin_faculty_profile(
+    faculty_id: str,
+    user: dict = Depends(require_admin_role),
+    service: AdminService = Depends(get_admin_service),
+):
+    """Admin faculty detail profile — comprehensive view of a single faculty member."""
+    return await service.get_faculty_profile(faculty_id)
 
 
 @router.post("/announcements", response_model=CreateAnnouncementResponse, status_code=status.HTTP_201_CREATED)
