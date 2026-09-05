@@ -7,17 +7,17 @@ api_router = APIRouter()
 
 @api_router.get("/health", tags=["system"])
 async def health_check(pool: asyncpg.Pool = Depends(get_db_pool)):
-    # Verify DB connectivity
+    # Verify DB connectivity without leaking internal details.
     try:
         async with pool.acquire() as conn:
             await conn.execute("SELECT 1")
         db_status = "connected"
-    except Exception as e:
-        db_status = f"error: {str(e)}"
-        
+    except Exception:
+        db_status = "unavailable"
+
     return {
-        "status": "healthy",
-        "database": db_status
+        "status": "healthy" if db_status == "connected" else "degraded",
+        "database": db_status,
     }
 
 @api_router.get("/", tags=["system"])

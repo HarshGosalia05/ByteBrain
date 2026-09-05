@@ -1,8 +1,26 @@
 import { readFileSync, readdirSync } from "fs"
 import { join } from "path"
 import { query } from "@/lib/db"
+import { getSessionUser } from "@/lib/student-session"
 
 export async function GET() {
+  // Seed endpoint is only available in development mode.
+  if (process.env.NODE_ENV !== "development") {
+    return Response.json(
+      { error: "Seed endpoint is only available in development mode" },
+      { status: 403 },
+    )
+  }
+
+  // Require authenticated admin user.
+  const user = await getSessionUser()
+  if (!user || user.role !== "Admin") {
+    return Response.json(
+      { error: "Unauthorized — admin access required" },
+      { status: 401 },
+    )
+  }
+
   const results: Record<string, unknown>[] = []
 
   const migrationsDir = join(process.cwd(), "migrations")

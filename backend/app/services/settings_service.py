@@ -2,6 +2,8 @@ import copy
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+import bcrypt
+
 from app.core.config import settings
 from app.repositories.settings_repo import SettingsRepository
 
@@ -566,17 +568,33 @@ class SettingsService:
         )
         if not row:
             raise KeyError(f"User {user_id} not found")
-        if row["password"] != current_password:
+
+        stored_hash = row["password"]
+        is_bcrypt = stored_hash.startswith(("$2a$", "$2b$", "$2y$"))
+
+        if is_bcrypt:
+            password_valid = bcrypt.checkpw(
+                current_password.encode("utf-8"),
+                stored_hash.encode("utf-8"),
+            )
+        else:
+            password_valid = current_password == stored_hash
+
+        if not password_valid:
             raise PreferenceValidationError("Current password is incorrect.")
         if not new_password or len(new_password) < 6:
             raise PreferenceValidationError("New password must be at least 6 characters.")
         if new_password == current_password:
             raise PreferenceValidationError("New password cannot be the same as the current password.")
 
+        new_hash = bcrypt.hashpw(
+            new_password.encode("utf-8"), bcrypt.gensalt()
+        ).decode("utf-8")
+
         now = self._now()
         await self.repo.pool.execute(
             "UPDATE users SET password = $1 WHERE user_id = $2",
-            new_password,
+            new_hash,
             user_id,
         )
         doc = await self.get_document(user_id)
@@ -623,6 +641,11 @@ class SettingsService:
 
     async def sign_out_all_devices(self, user_id: str) -> Dict[str, Any]:
         now = self._now()
+        # Increment token_version to invalidate all existing JWTs for this user.
+        await self.repo.pool.execute(
+            "UPDATE users SET token_version = token_version + 1 WHERE user_id = $1",
+            user_id,
+        )
         doc = await self.get_document(user_id)
         doc["namespaces"]["security"]["sessions"] = []
         doc["namespaces"]["security"]["last_sign_out_all"] = now

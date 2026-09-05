@@ -192,13 +192,14 @@ class MLPredictionRepository:
         """Return the most recent prediction for a student/model type.
 
         None when no prediction has been persisted for that pair.
+        Uses prediction_id as a deterministic tiebreaker for near-simultaneous writes.
         """
         self._validate_type(prediction_type)
         query = f"""
             SELECT {_PREDICTION_COLUMNS}
             FROM ml_predictions
             WHERE student_id = $1 AND prediction_type = $2
-            ORDER BY generated_at DESC
+            ORDER BY generated_at DESC, prediction_id DESC
             LIMIT 1
         """
         async with self.pool.acquire() as conn:
@@ -233,7 +234,7 @@ class MLPredictionRepository:
             SELECT {_PREDICTION_COLUMNS}
             FROM ml_predictions
             WHERE student_id = $1{type_filter if prediction_type is not None else ""}
-            ORDER BY generated_at DESC
+            ORDER BY generated_at DESC, prediction_id DESC
             LIMIT ${len(params) - 1} OFFSET ${len(params)}
         """
         async with self.pool.acquire() as conn:

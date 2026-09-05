@@ -6,7 +6,13 @@ const pool =
   globalForPg.pgPool ??
   new Pool({
     connectionString: `postgresql://${process.env.DB_USER}:${encodeURIComponent(process.env.DB_PASSWORD!)}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
-    ssl: { rejectUnauthorized: false },
+    ssl:
+      process.env.DB_SSL_REJECT_UNAUTHORIZED === "false"
+        ? { rejectUnauthorized: false }
+        : process.env.DB_HOST?.includes("supabase") ||
+            process.env.DB_PORT === "6543"
+          ? { rejectUnauthorized: false }
+          : undefined,
     connectionTimeoutMillis: 10000,
     max: 5,
     idleTimeoutMillis: 30000,

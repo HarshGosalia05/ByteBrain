@@ -962,6 +962,8 @@ export type FilterDepartmentOption = {
   department_code: number
   department_name: string
   student_count: number
+  department_short_name?: string | null
+  batches?: string[]
 }
 
 export type FilterSemesterOption = {
@@ -972,6 +974,9 @@ export type FilterSemesterOption = {
 export type AdminMlIntelligenceFilterOptions = {
   departments: FilterDepartmentOption[]
   semesters: FilterSemesterOption[]
+  batches?: string[]
+  academic_years?: string[]
+  department_batches?: Record<string, string[]>
 }
 
 export type AdminMlIntelligenceData = {

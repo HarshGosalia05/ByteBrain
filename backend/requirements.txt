@@ -4,6 +4,7 @@ asyncpg>=0.29.0
 pydantic>=2.6.1
 pydantic-settings>=2.2.1
 PyJWT>=2.8.0
+bcrypt>=4.2.0
 
 # GenAI (G0): outbound provider calls go through the provider adapter only.
 httpx>=0.27.0

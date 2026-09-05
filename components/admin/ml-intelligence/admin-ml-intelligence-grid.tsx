@@ -37,7 +37,7 @@ export function AdminMlIntelligenceGrid({ data }: { data: AdminMlIntelligenceDat
     } else if (key === "department_code") {
       if (value) {
         params.set("department_code", value)
-        const targetBatches = getDepartmentBatches(value, data.filter_options as any)
+        const targetBatches = getDepartmentBatches(value, data.filter_options)
         const curBatch = params.get("batch") || params.get("academic_year")
         if (curBatch && !targetBatches.includes(curBatch)) {
           params.delete("batch")
@@ -62,7 +62,7 @@ export function AdminMlIntelligenceGrid({ data }: { data: AdminMlIntelligenceDat
 
   const activeFiltersCount = (batch ? 1 : 0) + (departmentCode ? 1 : 0) + (semester ? 1 : 0)
 
-  const availableBatches = getDepartmentBatches(departmentCode, data.filter_options as any)
+  const availableBatches = getDepartmentBatches(departmentCode, data.filter_options)
 
   const hasM3Data =
     data.future_risk.future_at_risk_count + data.future_risk.future_low_risk_count > 0

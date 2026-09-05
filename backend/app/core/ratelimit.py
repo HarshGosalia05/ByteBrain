@@ -42,11 +42,29 @@ class RateLimiter:
         )
         self._buckets: dict[str, _Bucket] = {}
         self._lock = threading.Lock()
+        self._last_cleanup = time.time()
+        self._cleanup_interval = window_seconds * 10
+
+    def _maybe_cleanup(self) -> None:
+        """Evict stale buckets to prevent unbounded memory growth."""
+        now = time.time()
+        if now - self._last_cleanup < self._cleanup_interval:
+            return
+        self._last_cleanup = now
+        stale_cutoff = now - self._window_seconds * 3
+        stale_keys = [
+            key for key, bucket in self._buckets.items()
+            if bucket.window_start < stale_cutoff
+        ]
+        for key in stale_keys:
+            del self._buckets[key]
 
     def allow(self, key: str) -> tuple[bool, int]:
         """Return (allowed, retry_after_seconds) for a request keyed by ``key``."""
         now = time.time()
         with self._lock:
+            self._maybe_cleanup()
+
             bucket = self._buckets.get(key)
             if bucket is None or (now - bucket.window_start) >= self._window_seconds:
                 bucket = _Bucket(window_start=now, count=0)

@@ -190,7 +190,35 @@ class M1V2Predictor:
         self._scaler = self._artifact.get("scaler")
         self._feature_names = self._artifact["feature_names"]
         self._metadata = self._artifact["metadata"]
+        self._validate_artifact()
         self._loaded = True
+
+    def _validate_artifact(self) -> None:
+        """Validate that the loaded artifact has expected structure and version."""
+        required_keys = ("model", "preprocessor", "feature_names", "metadata")
+        for key in required_keys:
+            if key not in self._artifact:
+                raise ValueError(
+                    f"M1 v2 artifact is missing required key '{key}'. "
+                    "The artifact may be corrupted or from an incompatible version."
+                )
+        metadata = self._metadata
+        if not isinstance(metadata, dict):
+            raise ValueError(
+                "M1 v2 artifact metadata is not a dict. "
+                "The artifact may be corrupted or from an incompatible version."
+            )
+        version = metadata.get("model_version")
+        if version is not None:
+            try:
+                major = int(str(version).split(".")[0])
+                if major < 2:
+                    raise ValueError(
+                        f"M1 v2 artifact version {version} is incompatible "
+                        "(expected major version >= 2). Retrain with the current pipeline."
+                    )
+            except (ValueError, IndexError):
+                pass  # Non-standard version format; allow with warning logged elsewhere.
 
     @property
     def is_loaded(self) -> bool:

@@ -1,4 +1,4 @@
-﻿import type { DashboardFilterOptions } from "./admin-api.ts"
+﻿import type { DashboardFilterOptions, AdminMlIntelligenceFilterOptions } from "./admin-api.ts"
 
 /**
  * Normalize a batch or year value to a plain starting year string (e.g. "2023").
@@ -27,7 +27,7 @@ function normalizeToYear(val: string): string | null {
  */
 export function getDepartmentBatches(
   departmentCode?: string | number | null,
-  filters?: DashboardFilterOptions | null
+  filters?: DashboardFilterOptions | AdminMlIntelligenceFilterOptions | null
 ): string[] {
   const deptStr = departmentCode ? departmentCode.toString() : ""
   const selectedDept = (filters?.departments || []).find(

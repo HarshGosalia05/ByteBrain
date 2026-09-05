@@ -4,6 +4,11 @@ import { query } from "@/lib/db"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { signSession, type SessionUser } from "@/lib/auth-jwt"
+import bcrypt from "bcryptjs"
+import { checkRateLimit, resetRateLimit } from "@/lib/rate-limit"
+
+const LOGIN_RATE_LIMIT = 10 // attempts per minute
+const LOGIN_WINDOW_MS = 60_000
 
 export async function login(
   prevState: { error?: string } | undefined,
@@ -16,12 +21,22 @@ export async function login(
     return { error: "Username and password are required" }
   }
 
+  // Rate limit by username to prevent brute-force.
+  const rateKey = `login:${username.toLowerCase()}`
+  const { allowed, retryAfterMs } = checkRateLimit(rateKey, LOGIN_RATE_LIMIT, LOGIN_WINDOW_MS)
+  if (!allowed) {
+    const retrySeconds = Math.ceil(retryAfterMs / 1000)
+    return {
+      error: `Too many login attempts. Please try again in ${retrySeconds} seconds.`,
+    }
+  }
+
   let user: { role: string } | undefined
 
   try {
     const result = await query(
-      "SELECT user_id, username, role, department, student_id, faculty_id FROM users WHERE username = $1 AND password = $2 AND is_active = TRUE",
-      [username, password],
+      "SELECT user_id, username, password, role, department, student_id, faculty_id, token_version FROM users WHERE username = $1 AND is_active = TRUE",
+      [username],
     )
 
     if (result.rows.length === 0) {
@@ -29,6 +44,36 @@ export async function login(
     }
 
     const userRow = result.rows[0]
+    const storedHash = userRow.password as string
+
+    // Support both bcrypt hashes and legacy plaintext passwords.
+    // Legacy passwords start with a non-$ character; bcrypt hashes always
+    // start with "$2a$", "$2b$", or "$2y$".
+    const isBcryptHash =
+      storedHash.startsWith("$2a$") ||
+      storedHash.startsWith("$2b$") ||
+      storedHash.startsWith("$2y$")
+
+    const passwordValid = isBcryptHash
+      ? await bcrypt.compare(password, storedHash)
+      : password === storedHash
+
+    if (!passwordValid) {
+      return { error: "Invalid username or password" }
+    }
+
+    // Successful login — reset rate limit for this user.
+    resetRateLimit(rateKey)
+
+    // Migrate legacy plaintext to bcrypt on successful login.
+    if (!isBcryptHash) {
+      const newHash = await bcrypt.hash(password, 12)
+      await query("UPDATE users SET password = $1 WHERE user_id = $2", [
+        newHash,
+        userRow.user_id,
+      ])
+    }
+
     user = userRow
 
     // Sign a verifiable JWT before storing so the backend can trust the
@@ -40,6 +85,7 @@ export async function login(
       department: userRow.department,
       student_id: userRow.student_id,
       faculty_id: userRow.faculty_id,
+      token_version: userRow.token_version ?? 1,
     } as unknown as SessionUser)
 
     const cookieStore = await cookies()
@@ -51,7 +97,9 @@ export async function login(
       path: "/",
     })
   } catch (e) {
-    return { error: `Error: ${e instanceof Error ? e.message : String(e)}` }
+    // Log the full error server-side; return a safe generic message.
+    console.error("[login] Authentication error:", e)
+    return { error: "An unexpected error occurred. Please try again." }
   }
 
   const roleDashboards: Record<string, string> = {

@@ -46,7 +46,7 @@ export default async function AdminCareerPage(props: {
       target_package,
     },
     search,
-    limit: 100,
+    limit: 200,
     offset: 0,
   })
   if (!res.ok) {

@@ -56,7 +56,8 @@ class ChatRequest(BaseModel):
     )
     conversation_history: list[ConversationMessage] = Field(
         default_factory=list,
-        description="Prior conversation history for context (non-authoritative)",
+        max_length=20,
+        description="Prior conversation history for context (non-authoritative, max 20 messages)",
     )
 
     model_config = ConfigDict(extra="forbid")

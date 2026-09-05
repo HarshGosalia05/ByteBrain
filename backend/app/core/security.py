@@ -81,6 +81,47 @@ def decode_access_token(token: str) -> dict[str, Any]:
     return payload
 
 
+async def _verify_token_version(payload: dict[str, Any]) -> None:
+    """Verify that the JWT's token_version matches the current value in DB.
+
+    When sign-out-all is called, token_version is incremented in the DB,
+    invalidating all previously issued JWTs for that user.
+    """
+    from app.core.database import db
+
+    token_version = payload.get("token_version")
+    if token_version is None:
+        # Tokens without a version claim are legacy; allow them.
+        return
+
+    user_id = payload.get("user_id")
+    if not user_id:
+        return
+
+    if not db.pool:
+        # DB not connected — fail open for token_version check only.
+        return
+
+    try:
+        async with db.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT token_version FROM users WHERE user_id = $1",
+                user_id,
+            )
+            if row and row["token_version"] != token_version:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Session has been revoked. Please log in again.",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+    except HTTPException:
+        raise
+    except Exception:
+        # DB errors during version check should not block auth;
+        # the JWT signature + expiry are still valid.
+        pass
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Security(security_scheme),
 ) -> dict:
@@ -118,5 +159,43 @@ def get_current_user(
             detail="Invalid role in authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    return payload
+
+
+async def get_current_user_verified(
+    credentials: HTTPAuthorizationCredentials = Security(security_scheme),
+) -> dict:
+    """Async version that also verifies token_version against the database.
+
+    Use this for endpoints where session revocation must be enforced
+    (e.g. admin endpoints, settings changes).
+    """
+    token = credentials.credentials
+    payload = decode_access_token(token)
+
+    if not payload or not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    role = payload.get("role")
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token is missing the role claim",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if role not in ("Student", "Faculty", "Admin"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid role in authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    await _verify_token_version(payload)
 
     return payload

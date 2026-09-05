@@ -7,6 +7,7 @@ export type SessionUser = {
   department?: string | null
   student_id?: string | null
   faculty_id?: string | null
+  token_version?: number
 }
 
 // Standard HS256 JWT helper (base64url). No external dependency.

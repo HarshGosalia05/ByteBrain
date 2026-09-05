@@ -67,8 +67,12 @@ export default async function FacultyStudentMlInsightsPage(props: {
       : null
   const m1v3NoData =
     m1v3Data !== null &&
-    (m1v3Data as any).readiness_status === "NO_DATA" &&
-    (m1v3Data as any).subjects?.length === 0
+    typeof m1v3Data === "object" &&
+    "readiness_status" in m1v3Data &&
+    (m1v3Data as { readiness_status: string }).readiness_status === "NO_DATA" &&
+    "subjects" in m1v3Data &&
+    Array.isArray((m1v3Data as { subjects: unknown[] }).subjects) &&
+    (m1v3Data as { subjects: unknown[] }).subjects.length === 0
 
   return (
     <div className="flex flex-col gap-6">

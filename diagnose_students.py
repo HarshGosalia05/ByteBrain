@@ -1,12 +1,18 @@
 import asyncio
 import asyncpg
+import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "backend"))
+from db_env import db_config
+
+cfg = db_config()
 CONN = {
-    "host": "aws-1-ap-south-1.pooler.supabase.com",
-    "port": 5432,
-    "database": "postgres",
-    "user": "postgres.rtaqkxqdejelxsamnesm",
-    "password": "KenexAI@*195",
+    "host": cfg.host,
+    "port": cfg.port,
+    "database": cfg.name,
+    "user": cfg.user,
+    "password": cfg.password,
 }
 
 TARGET_TABLES = [

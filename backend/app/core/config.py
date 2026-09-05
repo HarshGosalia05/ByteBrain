@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import List
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -21,7 +22,7 @@ class Settings(BaseSettings):
     DB_PORT: int = 5432
     DB_NAME: str = "postgres"
     DB_USER: str = "postgres"
-    DB_PASSWORD: str = "password"
+    DB_PASSWORD: str = ""
 
     # GenAI configuration (G0 foundation; provider-agnostic, plan §15).
     # GENAI_API_KEY and GENAI_MODEL are intentionally empty by default so
@@ -216,6 +217,15 @@ class Settings(BaseSettings):
     CAREER_ALIGNMENT_DEVELOPING_MIN: float = 40.0
 
     model_config = SettingsConfigDict(env_file=_ENV_FILES, env_file_encoding="utf-8", extra="ignore")
+
+    @model_validator(mode="after")
+    def _fail_closed_defaults(self) -> "Settings":
+        if not self.DB_PASSWORD:
+            raise ValueError(
+                "DB_PASSWORD is not set. Provide it via the environment or "
+                ".env.local/.env so the application does not run with no database credentials."
+            )
+        return self
 
     @property
     def database_url(self) -> str:

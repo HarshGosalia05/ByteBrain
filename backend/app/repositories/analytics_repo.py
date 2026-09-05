@@ -802,6 +802,40 @@ class AnalyticsRepository:
             )
 
         flagged: List[Dict[str, Any]] = []
+
+        # Batch-fetch semester-specific issues to avoid N+1 queries.
+        low_att_map: Dict[str, int] = {}
+        failed_map: Dict[str, int] = {}
+        if semester_no is not None and students:
+            student_ids = [stu["student_id"] for stu in students]
+            id_list_sql = ",".join(f"'{sid}'" for sid in student_ids)
+
+            low_att_rows = await self._fetch(
+                f"""
+                SELECT student_id, count(*)::int AS low_att_count
+                FROM attendance
+                WHERE student_id IN ({id_list_sql})
+                  AND semester_no = $1
+                  AND attendance_status IN ('Low', 'Critical')
+                GROUP BY student_id
+                """,
+                semester_no,
+            )
+            low_att_map = {r["student_id"]: r["low_att_count"] for r in low_att_rows}
+
+            failed_rows = await self._fetch(
+                f"""
+                SELECT student_id, count(*)::int AS failed_count
+                FROM student_subject_performance
+                WHERE student_id IN ({id_list_sql})
+                  AND semester_no = $1
+                  AND grade = 'F'
+                GROUP BY student_id
+                """,
+                semester_no,
+            )
+            failed_map = {r["student_id"]: r["failed_count"] for r in failed_rows}
+
         for stu in students:
             reasons: List[str] = []
             att = stu["overall_attendance_percentage"]
@@ -821,33 +855,16 @@ class AnalyticsRepository:
                     f"SGPA {sgpa} below threshold {sgpa_thresh}"
                 )
 
-            # Semester-specific checks (optional)
+            # Semester-specific checks (from pre-fetched batch data)
             if semester_no is not None:
-                low_att = await self._fetchval(
-                    """
-                    SELECT count(*)::int FROM attendance
-                    WHERE student_id = $1
-                      AND semester_no = $2
-                      AND attendance_status IN ('Low', 'Critical')
-                    """,
-                    stu["student_id"],
-                    semester_no,
-                )
+                sid = stu["student_id"]
+                low_att = low_att_map.get(sid, 0)
                 if low_att:
                     reasons.append(
                         f"{low_att} subject(s) with Low/Critical attendance "
                         f"in semester {semester_no}"
                     )
-                failed = await self._fetchval(
-                    """
-                    SELECT count(*)::int FROM student_subject_performance
-                    WHERE student_id = $1
-                      AND semester_no = $2
-                      AND grade = 'F'
-                    """,
-                    stu["student_id"],
-                    semester_no,
-                )
+                failed = failed_map.get(sid, 0)
                 if failed:
                     reasons.append(
                         f"{failed} failed subject(s) in semester {semester_no}"
@@ -957,21 +974,24 @@ class AnalyticsRepository:
                         sum(CASE WHEN p.grade = 'F' THEN 1 ELSE 0 END)::numeric
                         / count(*)::numeric * 100, 2
                     ) AS fail_rate,
-                    (SELECT round(avg(a.attendance_percentage)::numeric, 2)
-                     FROM attendance a
-                     WHERE a.subject_id = p.subject_id
-                       AND a.semester_no = p.semester_no
-                    ) AS average_attendance
+                    att_stats.average_attendance
                 FROM student_subject_performance p
                 JOIN students s ON s.student_id = p.student_id
                 LEFT JOIN subjects sub ON sub.subject_id = p.subject_id
                 JOIN student_semester_summary sem ON sem.student_id = p.student_id
                     AND sem.semester_no = p.semester_no
+                LEFT JOIN (
+                    SELECT subject_id, semester_no,
+                           round(avg(attendance_percentage)::numeric, 2) AS average_attendance
+                    FROM attendance
+                    GROUP BY subject_id, semester_no
+                ) att_stats ON att_stats.subject_id = p.subject_id
+                    AND att_stats.semester_no = p.semester_no
                 WHERE ($1::int IS NULL OR s.department_code = $1)
                   AND ($2::int IS NULL OR p.semester_no = $2)
                   AND {self._batch_sql("$3", "s")}
                 GROUP BY p.subject_id, sub.subject_code, sub.subject_name,
-                         p.semester_no
+                         p.semester_no, att_stats.average_attendance
                 """,
                 department_code,
                 semester_no,
@@ -991,18 +1011,21 @@ class AnalyticsRepository:
                         sum(CASE WHEN p.grade = 'F' THEN 1 ELSE 0 END)::numeric
                         / count(*)::numeric * 100, 2
                     ) AS fail_rate,
-                    (SELECT round(avg(a.attendance_percentage)::numeric, 2)
-                     FROM attendance a
-                     WHERE a.subject_id = p.subject_id
-                       AND a.semester_no = p.semester_no
-                    ) AS average_attendance
+                    att_stats.average_attendance
                 FROM student_subject_performance p
                 JOIN students s ON s.student_id = p.student_id
                 LEFT JOIN subjects sub ON sub.subject_id = p.subject_id
+                LEFT JOIN (
+                    SELECT subject_id, semester_no,
+                           round(avg(attendance_percentage)::numeric, 2) AS average_attendance
+                    FROM attendance
+                    GROUP BY subject_id, semester_no
+                ) att_stats ON att_stats.subject_id = p.subject_id
+                    AND att_stats.semester_no = p.semester_no
                 WHERE ($1::int IS NULL OR s.department_code = $1)
                   AND ($2::int IS NULL OR p.semester_no = $2)
                 GROUP BY p.subject_id, sub.subject_code, sub.subject_name,
-                         p.semester_no
+                         p.semester_no, att_stats.average_attendance
                 """,
                 department_code,
                 semester_no,

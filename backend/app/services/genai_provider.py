@@ -111,7 +111,7 @@ class GenAIInvalidResponseError(GenAIProviderError):
 class ProviderCompletion:
     """Normalized, minimal provider output (no raw payload escaping)."""
 
-    __slots__ = ("content", "model", "prompt_tokens", "completion_tokens")
+    __slots__ = ("content", "model", "prompt_tokens", "completion_tokens", "degraded")
 
     def __init__(
         self,
@@ -119,11 +119,13 @@ class ProviderCompletion:
         model: str | None = None,
         prompt_tokens: int | None = None,
         completion_tokens: int | None = None,
+        degraded: bool = False,
     ):
         self.content = content
         self.model = model
         self.prompt_tokens = prompt_tokens
         self.completion_tokens = completion_tokens
+        self.degraded = degraded
 
 
 class GenAIProvider(ABC):
@@ -194,7 +196,13 @@ class OpenAICompatibleProvider(GenAIProvider):
         messages: list[dict[str, str]] = [
             {"role": "system", "content": system_instruction}
         ]
-        for message in conversation_history or []:
+        # Cap conversation history to prevent unbounded context growth.
+        # Keep the most recent messages (FIFO from the end).
+        history = conversation_history or []
+        max_history = 20
+        if len(history) > max_history:
+            history = history[-max_history:]
+        for message in history:
             if message.get("role") in ("user", "assistant"):
                 messages.append({"role": message["role"], "content": message["content"]})
         messages.append({"role": "user", "content": user_message})
@@ -492,7 +500,8 @@ class FailoverProvider(GenAIProvider):
         conversation_history: list[dict[str, str]] | None = None,
     ) -> ProviderCompletion:
         last_error: GenAIProviderError | None = None
-        for provider in self._providers:
+        primary_name = self._providers[0].provider_name if self._providers else "unknown"
+        for idx, provider in enumerate(self._providers):
             try:
                 result = await provider.complete(
                     system_instruction=system_instruction,
@@ -512,10 +521,19 @@ class FailoverProvider(GenAIProvider):
                 # Non-transient (auth/invalid config/error) - do not fall over.
                 raise
             self._last_provider_name = provider.provider_name
-            logger.info(
-                "GenAI completion succeeded via provider '%s'",
-                provider.provider_name,
-            )
+            # Mark as degraded if a fallback provider was used.
+            if idx > 0:
+                result.degraded = True
+                logger.warning(
+                    "GenAI request served by fallback provider '%s' (primary '%s' failed)",
+                    provider.provider_name,
+                    primary_name,
+                )
+            else:
+                logger.info(
+                    "GenAI completion succeeded via provider '%s'",
+                    provider.provider_name,
+                )
             return result
 
         if last_error is not None:

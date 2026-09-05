@@ -402,11 +402,15 @@ async def predict_m3(
     (read-only), calls the contract, and returns a readiness-aware result with
     ``readiness_status=BLOCKED`` and ``prediction_available=False``. No real
     at-risk prediction is returned.
+
+    Route-level enforcement: if the contract ever returns a non-BLOCKED
+    status for M3, this endpoint will reject it to prevent accidental
+    production exposure.
     """
     await authorize_prediction_access(user, student_id, faculty_service)
 
     try:
-        return await contract_service.predict_m3(student_id)
+        result = await contract_service.predict_m3(student_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -414,6 +418,15 @@ async def predict_m3(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Prediction failed: {str(e)}",
         )
+
+    # Route-level BLOCKED enforcement: M3 must never return a live prediction.
+    readiness = result.get("readiness_status")
+    if readiness and readiness != "BLOCKED":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="M3 prediction is currently blocked and not available for production use.",
+        )
+    return result
 
 
 @router.get(
