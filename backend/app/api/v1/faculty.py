@@ -252,7 +252,7 @@ async def get_my_classes(
     semester: Optional[int] = Query(None),
     academic_year: Optional[str] = Query(None),
     subject_id: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=100),
     attendance_range: Optional[str] = Query(None),
     sgpa_range: Optional[str] = Query(None),
     grade: Optional[str] = Query(None),
@@ -276,7 +276,7 @@ async def get_my_classes(
 async def get_my_mentees(
     semester: Optional[int] = Query(None),
     standing: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=100),
     flagged_only: bool = Query(False),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
@@ -391,7 +391,7 @@ async def get_my_subjects(
     semester: Optional[str] = Query(None),
     academic_year: Optional[str] = Query(None),
     batch: Optional[str] = Query(None, description="Student admission batch, e.g. 2021-22"),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=100),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
     sort: str = Query("name"),
@@ -515,7 +515,7 @@ async def get_performance_students(
     semester: Optional[int] = Query(None),
     academic_year: Optional[str] = Query(None),
     subject_id: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=100),
     gap_status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
@@ -547,7 +547,7 @@ async def export_performance(
     semester: Optional[int] = Query(None),
     academic_year: Optional[str] = Query(None),
     subject_id: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=100),
     student_ids: Optional[str] = Query(None),
     user: dict = Depends(require_faculty_role),
     service: FacultyService = Depends(get_faculty_service)
@@ -586,7 +586,7 @@ async def export_performance(
         ))
     return Response(
         content="\r\n".join(lines),
-        media_type="text/csv",
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="faculty_performance.csv"'},
     )
 
@@ -668,7 +668,7 @@ async def get_attendance_students(
     semester: Optional[int] = Query(None),
     academic_year: Optional[str] = Query(None),
     subject_id: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=100),
     attendance_range: Optional[str] = Query(None),
     attendance_status: Optional[str] = Query(None),
     defaulter_status: Optional[str] = Query(None),
@@ -716,7 +716,7 @@ async def export_attendance(
     semester: Optional[int] = Query(None),
     academic_year: Optional[str] = Query(None),
     subject_id: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=100),
     student_ids: Optional[str] = Query(None),
     user: dict = Depends(require_faculty_role),
     service: FacultyService = Depends(get_faculty_service)
@@ -759,7 +759,7 @@ async def export_attendance(
         ))
     return Response(
         content="\r\n".join(lines),
-        media_type="text/csv",
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="faculty_attendance.csv"'},
     )
 
@@ -895,7 +895,7 @@ async def get_workload_students(
     hours_max: Optional[float] = Query(None),
     students_min: Optional[int] = Query(None),
     students_max: Optional[int] = Query(None),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=100),
     workload_status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
@@ -937,7 +937,7 @@ async def export_workload(
     students_min: Optional[int] = Query(None),
     students_max: Optional[int] = Query(None),
     workload_status: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=100),
     student_ids: Optional[str] = Query(None),
     user: dict = Depends(require_faculty_role),
     service: FacultyService = Depends(get_faculty_service)
@@ -1018,7 +1018,7 @@ async def export_workload(
         filename = "faculty_workload_summary.csv"
     return Response(
         content="\r\n".join(lines),
-        media_type="text/csv",
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

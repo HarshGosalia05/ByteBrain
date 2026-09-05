@@ -1588,7 +1588,9 @@ class AdminRepository:
         priority = priority or "Normal"
 
         inserted_count = 0
-        event_id = f"announcement:{int(datetime.now().timestamp())}:{abs(hash((title, target_audience)))}"
+        import hashlib
+        content_hash = hashlib.sha256(f"{title}:{target_audience}".encode("utf-8")).hexdigest()[:12]
+        event_id = f"announcement:{int(datetime.now().timestamp())}:{content_hash}"
 
         async with self.pool.acquire() as conn:
             async with conn.transaction():

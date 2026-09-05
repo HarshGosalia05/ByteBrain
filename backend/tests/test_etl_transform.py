@@ -13,6 +13,7 @@ import unittest
 from etl import EtlRunner
 from etl.config import etl_config
 from etl.context import RunContext
+from etl.exceptions import EtlTransformError
 from etl.stages import STAGE_TRANSFORM
 from etl.stages.extract import ExtractStage
 from etl.stages.stage import StageStage
@@ -331,6 +332,37 @@ class TestTransformAttendance(unittest.TestCase):
         )
         result = self.stage._transform_attendance(stitched, {})
         self.assertEqual(result["day_name"], "Tuesday")
+
+    def test_attendance_status_case_insensitive_and_words(self):
+        for status_val, expected_status, expected_present, expected_text in [
+            ("p", "P", True, "Present"),
+            ("P", "P", True, "Present"),
+            ("PRESENT", "P", True, "Present"),
+            ("Present", "P", True, "Present"),
+            ("a", "A", False, "Absent"),
+            ("A", "A", False, "Absent"),
+            ("ABSENT", "A", False, "Absent"),
+            ("Absent", "A", False, "Absent"),
+        ]:
+            stitched = make_stitched(
+                "daily_attendance",
+                attendance_row(attendance_status=status_val),
+                enrollment_record_id="ENR000001",
+            )
+            res = self.stage._transform_attendance(stitched, {})
+            self.assertEqual(res["attendance_status"], expected_status)
+            self.assertEqual(res["is_present"], expected_present)
+            self.assertEqual(res["attendance_status_text"], expected_text)
+
+    def test_invalid_attendance_status_raises_etl_transform_error(self):
+        for bad_status in ["X", "Invalid", "1", "", None, "   ", "SELECT * FROM attendance"]:
+            stitched = make_stitched(
+                "daily_attendance",
+                attendance_row(attendance_status=bad_status),
+                enrollment_record_id="ENR000001",
+            )
+            with self.assertRaises(EtlTransformError):
+                self.stage._transform_attendance(stitched, {})
 
 
 # ---------------------------------------------------------------------------

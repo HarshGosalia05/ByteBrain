@@ -22,10 +22,12 @@ from typing import Any, Dict, List, Optional, Sequence
 import asyncpg
 
 from etl.config import etl_config
+from etl.exceptions import EtlTransformError
 from etl.keys import LECTURE_SESSION_KEY_FIELDS
 from etl.result import StageResult
 from etl.stages import STAGE_TRANSFORM, Stage
 from etl.stages.stitch import StitchedRecord
+from etl.validation import parse_attendance_status
 
 VALID_DAYS = frozenset({"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"})
 VALID_ATTENDANCE_STATUS_TEXT = frozenset({"Present", "Absent"})
@@ -140,7 +142,13 @@ class TransformStage(Stage):
         lecture_number = row.get("lecture_number", "")
 
         lecture_date = self._parse_date(raw_date)
-        is_present = raw_status.strip().upper() == "P"
+        try:
+            parsed_status = parse_attendance_status(raw_status)
+        except ValueError as exc:
+            raise EtlTransformError(
+                f"Invalid attendance status '{raw_status}' at row {record.row_index}: {exc}"
+            ) from exc
+        is_present = parsed_status == "P"
         attendance_status_text = "Present" if is_present else "Absent"
         day_name = self._normalize_day_name(raw_day)
         subject_name = subject_map.get(
@@ -170,7 +178,7 @@ class TransformStage(Stage):
             "department_code": row.get("department_code", ""),
             "semester_no": row.get("semester_no", ""),
             "academic_year": row.get("academic_year", ""),
-            "attendance_status": raw_status.strip().upper(),
+            "attendance_status": parsed_status,
             "attendance_status_text": attendance_status_text,
             "is_present": is_present,
             "lecture_session_key": lecture_session_key,

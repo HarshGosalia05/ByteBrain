@@ -83,7 +83,7 @@ PROFILE_ROW = {
     "admission_year": 2023,
     "current_semester": 7,
     "department_name": "Computer Science",
-    "department_code": "CSE",
+    "department_code": 1,
     "current_academic_year": "2026-27",
     "latest_sgpa": 8.4,
     "overall_cgpa": 8.1,
@@ -592,7 +592,7 @@ class StudentAnalyticsServiceTests(unittest.TestCase):
         self.assertIn("sse.department_code = $1", benchmark_query)
         self.assertIn("sp.student_id <> $2", benchmark_query)
         self.assertIn("sse.subject_id = ANY($3::text[])", benchmark_query)
-        self.assertEqual(benchmark_args[0], "CSE")
+        self.assertEqual(benchmark_args[0], 1)
         self.assertEqual(benchmark_args[1], "STU-A")
         self.assertEqual(benchmark_args[2], ["SUBJ-4"])
 

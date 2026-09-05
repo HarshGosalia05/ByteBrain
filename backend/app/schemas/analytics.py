@@ -159,6 +159,11 @@ class SubjectUnderperformers(BaseModel):
     subject_id: str
     semester_no: Optional[int] = None
     threshold: float
+    total_flagged: int = 0
+    total: int = 0
+    page: int = 1
+    limit: int = 50
+    total_pages: int = 1
     students: List[UnderperformerItem] = []
 
 
@@ -257,6 +262,10 @@ class AtRiskStudentsResult(BaseModel):
     department_code: Optional[int] = None
     semester_no: Optional[int] = None
     total_flagged: int = 0
+    total: int = 0
+    page: int = 1
+    limit: int = 50
+    total_pages: int = 1
     students: List[AtRiskStudent] = []
 
 
@@ -279,6 +288,10 @@ class BelowThresholdResult(BaseModel):
     threshold: float
     semester_no: Optional[int] = None
     total_flagged: int = 0
+    total: int = 0
+    page: int = 1
+    limit: int = 50
+    total_pages: int = 1
     students: List[BelowThresholdStudent] = []
 
 
@@ -302,4 +315,8 @@ class SubjectsNeedingAttentionResult(BaseModel):
     department_code: Optional[int] = None
     semester_no: Optional[int] = None
     total_flagged: int = 0
+    total: int = 0
+    page: int = 1
+    limit: int = 50
+    total_pages: int = 1
     subjects: List[SubjectNeedingAttention] = []

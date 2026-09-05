@@ -8,13 +8,13 @@ writes only to approved derived targets: ``attendance``,
 Transaction strategy (plan `03` §5.2):
 
 - ONE transaction for the complete derive.
-- DELETE + INSERT recompute for ``attendance`` and ``student_semester_summary``.
-- UPDATE for ``students.overall_attendance_percentage`` and ``students.full_name``.
+- Idempotent upsert (INSERT ... ON CONFLICT DO UPDATE) for attendance and student_semester_summary, with cleanup of orphaned records.
+- UPDATE for students.overall_attendance_percentage and students.full_name.
 - Commit only on full success; rollback on any failure.
 
 Idempotency (P3):
 
-- Full recompute: DELETE then INSERT for aggregate tables.
+- Idempotent upsert: INSERT ... ON CONFLICT DO UPDATE with cleanup of orphaned records.
 - Running twice produces the same state.
 - Deterministic — same input always yields same output.
 
@@ -170,14 +170,16 @@ class DeriveStage(Stage):
         if not agg_rows:
             return
 
-        # Phase 1: DELETE existing aggregate rows for this batch.
+        # Clean up orphaned attendance records whose enrollments no longer exist in this semester
         await conn.execute(
             f"DELETE FROM {TABLE_ATTENDANCE} "
-            "WHERE enrollment_record_id = ANY($1::text[])",
-            list(enrolled_ids),
+            "WHERE semester_no = $1::int AND enrollment_record_id NOT IN ("
+            "    SELECT enrollment_record_id FROM student_subject_enrollment WHERE semester_no = $1::int"
+            ")",
+            semester_no,
         )
 
-        # Phase 2: INSERT re-computed aggregates.
+        # INSERT re-computed aggregates with ON CONFLICT DO UPDATE for idempotency.
         att_band = TransformStage.attendance_band
         values_parts: List[str] = []
         params: List[Any] = []
@@ -214,7 +216,18 @@ class DeriveStage(Stage):
             "student_id, subject_id, semester_no, total_classes, "
             "attended_classes, attendance_percentage, "
             "attendance_status, eligibility_status, shortage_flag) "
-            "VALUES " + ", ".join(values_parts),
+            "VALUES " + ", ".join(values_parts) + " "
+            "ON CONFLICT (enrollment_record_id) DO UPDATE SET "
+            "enrollment_no = EXCLUDED.enrollment_no, "
+            "student_id = EXCLUDED.student_id, "
+            "subject_id = EXCLUDED.subject_id, "
+            "semester_no = EXCLUDED.semester_no, "
+            "total_classes = EXCLUDED.total_classes, "
+            "attended_classes = EXCLUDED.attended_classes, "
+            "attendance_percentage = EXCLUDED.attendance_percentage, "
+            "attendance_status = EXCLUDED.attendance_status, "
+            "eligibility_status = EXCLUDED.eligibility_status, "
+            "shortage_flag = EXCLUDED.shortage_flag",
             *params,
         )
 
@@ -251,10 +264,14 @@ class DeriveStage(Stage):
 
         student_ids = [r["student_id"] for r in sem_rows]
 
+        # Clean up orphaned semester summaries for students no longer enrolled in this semester
         await conn.execute(
             f"DELETE FROM {TABLE_SEMESTER_SUMMARY} "
-            "WHERE student_id = ANY($1::text[]) AND semester_no = $2::int",
-            student_ids, semester_no,
+            "WHERE semester_no = $1::int AND academic_year = $2 "
+            "  AND student_id NOT IN ("
+            "      SELECT student_id FROM student_subject_enrollment WHERE semester_no = $1::int"
+            ")",
+            semester_no, academic_year,
         )
 
         # Compute subjects_registered and credits_registered per student
@@ -310,7 +327,13 @@ class DeriveStage(Stage):
             "semester_percentage, semester_sgpa, semester_grade, "
             "semester_attendance_percentage, backlog_count, "
             "semester_result, academic_standing) "
-            "VALUES " + ", ".join(values_parts),
+            "VALUES " + ", ".join(values_parts) + " "
+            "ON CONFLICT (student_id, semester_no, academic_year) DO UPDATE SET "
+            "enrollment_no = EXCLUDED.enrollment_no, "
+            "subjects_registered = EXCLUDED.subjects_registered, "
+            "credits_registered = EXCLUDED.credits_registered, "
+            "credits_earned = EXCLUDED.credits_earned, "
+            "semester_attendance_percentage = EXCLUDED.semester_attendance_percentage",
             *params,
         )
 

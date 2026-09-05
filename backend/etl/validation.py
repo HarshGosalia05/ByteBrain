@@ -90,6 +90,35 @@ TIMETABLE_REQUIRED_COLUMNS = (
 )
 
 VALID_ATTENDANCE_STATUSES = frozenset({"P", "A"})
+
+
+def parse_attendance_status(raw: Any) -> str:
+    """Strictly parse and validate an attendance status value.
+
+    Accepts:
+        - "P", "PRESENT" (case/whitespace-insensitive) -> returns "P"
+        - "A", "ABSENT" (case/whitespace-insensitive) -> returns "A"
+
+    Rejects:
+        - None, empty string, or whitespace-only
+        - Command tags, SQL snippets, integers, floats, or any other strings
+
+    Raises:
+        ValueError on invalid, missing, or malformed status.
+    """
+    if raw is None:
+        raise ValueError("Attendance status cannot be null or None")
+    s = str(raw).strip()
+    if not s:
+        raise ValueError("Attendance status cannot be empty or whitespace-only")
+    upper = s.upper()
+    if upper in ("P", "PRESENT"):
+        return "P"
+    if upper in ("A", "ABSENT"):
+        return "A"
+    raise ValueError(f"Invalid attendance status: '{raw}'. Expected 'P' or 'A'.")
+
+
 VALID_DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
 VALID_SLOTS = frozenset({"1", "2", "3"})
 VALID_LECTURE_TYPES = frozenset({"Theory", "Lab"})
@@ -413,6 +442,7 @@ def _check_attendance_row(
         ("lecture_date", date_s),
         ("lecture_number", lec),
         ("day_name", day),
+        ("attendance_status", status),
     ):
         if value == "":
             fail(REASON_NULL_REQUIRED, f"required key {name} is null", {name: row.get(name)})
@@ -475,12 +505,15 @@ def _check_attendance_row(
                 f"lecture_number '{lec}' must be a positive integer",
                 {"lecture_number": row.get("lecture_number")},
             )
-    if status and status not in VALID_ATTENDANCE_STATUSES:
-        fail(
-            REASON_INVALID_STATUS,
-            f"attendance_status '{status}' must be one of P, A",
-            {"attendance_status": row.get("attendance_status")},
-        )
+    if status:
+        try:
+            parse_attendance_status(status)
+        except ValueError:
+            fail(
+                REASON_INVALID_STATUS,
+                f"attendance_status '{status}' must be one of P, A",
+                {"attendance_status": row.get("attendance_status")},
+            )
     if day:
         if day not in VALID_DAYS:
             fail(

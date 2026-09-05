@@ -13,6 +13,7 @@ Covers:
 import asyncio
 import json
 import unittest
+import bcrypt
 
 from app.services.settings_service import (
     PreferenceValidationError,
@@ -181,7 +182,12 @@ class TestStudentSettings(unittest.TestCase):
         )
         self.assertEqual(result["status"], "success")
         self.assertIn("Password updated", result["message"])
-        self.assertEqual(self.conn.users["USR001"]["password"], "new_secret_456")
+        self.assertTrue(
+            bcrypt.checkpw(
+                b"new_secret_456",
+                self.conn.users["USR001"]["password"].encode("utf-8"),
+            )
+        )
 
         # Verify password_updated_at was set
         doc = run(self.service.get_document("USR001"))

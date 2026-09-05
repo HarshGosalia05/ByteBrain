@@ -1,6 +1,6 @@
 import asyncpg
 from datetime import date
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 
 
 async def insert_student_messages(
@@ -199,7 +199,7 @@ class StudentRepository:
 
     async def get_class_benchmark_averages(
         self,
-        department_code: str,
+        department_code: Union[int, str],
         exclude_student_id: str,
         subject_ids: List[str],
     ) -> List[Dict[str, Any]]:
@@ -210,6 +210,17 @@ class StudentRepository:
         the benchmark stays a classmate average. Only aggregate statistics are
         returned — no peer identity ever crosses this boundary.
         """
+        dept_code_int = 1
+        if isinstance(department_code, int):
+            dept_code_int = department_code
+        elif isinstance(department_code, str):
+            cleaned = department_code.strip()
+            if cleaned.isdigit():
+                dept_code_int = int(cleaned)
+            elif cleaned.upper() == "CSE":
+                dept_code_int = 1
+            elif cleaned.upper() == "BBA":
+                dept_code_int = 2
         query = """
             SELECT
                 sse.subject_id,
@@ -220,7 +231,7 @@ class StudentRepository:
             FROM student_subject_enrollment sse
             JOIN student_subject_performance sp
                 ON sp.enrollment_record_id = sse.enrollment_record_id
-            WHERE sse.department_code = $1
+            WHERE sse.department_code = $1::int
               AND sp.student_id <> $2
               AND sp.percentage IS NOT NULL
               AND sse.subject_id = ANY($3::text[])
@@ -228,7 +239,7 @@ class StudentRepository:
             ORDER BY sse.semester_no ASC, sse.subject_id ASC
         """
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch(query, department_code, exclude_student_id, subject_ids)
+            rows = await conn.fetch(query, dept_code_int, exclude_student_id, subject_ids)
             return [dict(row) for row in rows]
 
     async def get_student_profile(self, student_id: str) -> Optional[Dict[str, Any]]:

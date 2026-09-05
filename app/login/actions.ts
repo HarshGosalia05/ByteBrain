@@ -34,17 +34,44 @@ export async function login(
   let user: { role: string } | undefined
 
   try {
-    const result = await query(
-      "SELECT user_id, username, password, role, department, student_id, faculty_id, token_version FROM users WHERE username = $1 AND is_active = TRUE",
-      [username],
-    )
-
-    if (result.rows.length === 0) {
-      return { error: "Invalid username or password" }
+    let userRow: {
+      user_id: string
+      username: string
+      password: string
+      role: string
+      department?: string | null
+      student_id?: string | null
+      faculty_id?: string | null
+      token_version?: number
     }
 
-    const userRow = result.rows[0]
-    const storedHash = userRow.password as string
+    try {
+      const result = await query(
+        "SELECT user_id, username, password, role, department, student_id, faculty_id, token_version FROM users WHERE username = $1 AND is_active = TRUE",
+        [username],
+      )
+      if (result.rows.length === 0) {
+        return { error: "Invalid username or password" }
+      }
+      userRow = result.rows[0] as typeof userRow
+    } catch (queryErr: unknown) {
+      const errMsg = queryErr instanceof Error ? queryErr.message : String(queryErr)
+      if (errMsg.includes("token_version")) {
+        // Fallback for database instances where token_version column migration has not been applied yet
+        const result = await query(
+          "SELECT user_id, username, password, role, department, student_id, faculty_id FROM users WHERE username = $1 AND is_active = TRUE",
+          [username],
+        )
+        if (result.rows.length === 0) {
+          return { error: "Invalid username or password" }
+        }
+        userRow = { ...result.rows[0], token_version: 1 } as typeof userRow
+      } else {
+        throw queryErr
+      }
+    }
+
+    const storedHash = (userRow.password as string) || ""
 
     // Support both bcrypt hashes and legacy plaintext passwords.
     // Legacy passwords start with a non-$ character; bcrypt hashes always
@@ -108,5 +135,13 @@ export async function login(
     Admin: "/admin/dashboard",
   }
 
-  redirect(roleDashboards[user?.role ?? ""] ?? "/login")
+  const normalizedRole = user?.role
+    ? user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()
+    : ""
+
+  redirect(
+    roleDashboards[user?.role ?? ""] ??
+      roleDashboards[normalizedRole] ??
+      "/login",
+  )
 }

@@ -271,12 +271,18 @@ class AnalyticsService:
         *,
         semester_no: Optional[int] = None,
         academic_year: Optional[str] = None,
+        batch: Optional[str] = None,
     ) -> Optional[SubjectAttendanceSummary]:
         """Aggregate attendance metrics for a subject."""
         subject_id = _validate_subject_id(subject_id)
         _validate_semester(semester_no)
+        repo_kwargs: Dict[str, Any] = {"semester_no": semester_no}
+        if academic_year is not None:
+            repo_kwargs["academic_year"] = academic_year
+        if batch is not None:
+            repo_kwargs["batch"] = batch
         row = await self.repo.get_subject_attendance_summary(
-            subject_id, semester_no=semester_no, academic_year=academic_year,
+            subject_id, **repo_kwargs
         )
         if row is None:
             return None
@@ -301,14 +307,25 @@ class AnalyticsService:
         *,
         semester_no: Optional[int] = None,
         academic_year: Optional[str] = None,
+        batch: Optional[str] = None,
         threshold: float = 40.0,
+        page: int = 1,
+        limit: int = 50,
     ) -> SubjectUnderperformers:
         """Students below a percentage threshold in a subject."""
         subject_id = _validate_subject_id(subject_id)
         _validate_semester(semester_no)
         _validate_threshold(threshold)
+        repo_kwargs: Dict[str, Any] = {"semester_no": semester_no, "threshold": threshold}
+        if academic_year is not None:
+            repo_kwargs["academic_year"] = academic_year
+        if batch is not None:
+            repo_kwargs["batch"] = batch
+        if page != 1 or limit != 50:
+            repo_kwargs["page"] = page
+            repo_kwargs["limit"] = limit
         data = await self.repo.get_subject_underperformers(
-            subject_id, semester_no=semester_no, academic_year=academic_year, threshold=threshold,
+            subject_id, **repo_kwargs
         )
         students = [
             UnderperformerItem(
@@ -324,6 +341,11 @@ class AnalyticsService:
             subject_id=data.get("subject_id", subject_id),
             semester_no=data.get("semester_no"),
             threshold=float(data.get("threshold", threshold)),
+            total_flagged=int(data.get("total_flagged", data.get("total", len(students)))),
+            total=int(data.get("total", data.get("total_flagged", len(students)))),
+            page=int(data.get("page", page)),
+            limit=int(data.get("limit", limit)),
+            total_pages=int(data.get("total_pages", 1)),
             students=students,
         )
 
@@ -337,15 +359,19 @@ class AnalyticsService:
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
         academic_year: Optional[str] = None,
+        batch: Optional[str] = None,
     ) -> DepartmentOverview:
         """High-level department stats for a semester."""
         _validate_department_code(department_code)
         _validate_semester(semester_no)
-        data = await self.repo.get_department_overview(
-            department_code=department_code,
-            semester_no=semester_no,
-            academic_year=academic_year,
-        )
+        repo_kwargs: Dict[str, Any] = {
+            "department_code": department_code,
+            "semester_no": semester_no,
+            "academic_year": academic_year,
+        }
+        if batch is not None:
+            repo_kwargs["batch"] = batch
+        data = await self.repo.get_department_overview(**repo_kwargs)
         return DepartmentOverview(
             department_code=data.get("department_code"),
             department_name=data.get("department_name"),
@@ -367,15 +393,19 @@ class AnalyticsService:
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
         academic_year: Optional[str] = None,
+        batch: Optional[str] = None,
     ) -> SemesterPerformanceDistribution:
         """Distribution of students across performance bands."""
         _validate_department_code(department_code)
         _validate_semester(semester_no)
-        data = await self.repo.get_semester_performance_distribution(
-            department_code=department_code,
-            semester_no=semester_no,
-            academic_year=academic_year,
-        )
+        repo_kwargs: Dict[str, Any] = {
+            "department_code": department_code,
+            "semester_no": semester_no,
+            "academic_year": academic_year,
+        }
+        if batch is not None:
+            repo_kwargs["batch"] = batch
+        data = await self.repo.get_semester_performance_distribution(**repo_kwargs)
         buckets = [
             PerformanceDistributionBucket(
                 label=b["label"],
@@ -398,6 +428,7 @@ class AnalyticsService:
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
         academic_year: Optional[str] = None,
+        batch: Optional[str] = None,
     ) -> "AttendanceDistribution":
         """Distribution of students across attendance bands."""
         from app.schemas.analytics import (
@@ -407,9 +438,14 @@ class AnalyticsService:
 
         _validate_department_code(department_code)
         _validate_semester(semester_no)
-        data = await self.repo.get_attendance_distribution(
-            department_code=department_code, semester_no=semester_no, academic_year=academic_year,
-        )
+        repo_kwargs: Dict[str, Any] = {
+            "department_code": department_code,
+            "semester_no": semester_no,
+            "academic_year": academic_year,
+        }
+        if batch is not None:
+            repo_kwargs["batch"] = batch
+        data = await self.repo.get_attendance_distribution(**repo_kwargs)
         buckets = [
             AttendanceDistributionBucket(
                 band=b["band"],
@@ -426,7 +462,11 @@ class AnalyticsService:
         )
 
     async def get_backlog_distribution(
-        self, *, department_code: Optional[int] = None, academic_year: Optional[str] = None,
+        self,
+        *,
+        department_code: Optional[int] = None,
+        academic_year: Optional[str] = None,
+        batch: Optional[str] = None,
     ) -> BacklogDistribution:
         """Distribution of backlogs across the student population."""
         from app.schemas.analytics import (
@@ -434,9 +474,13 @@ class AnalyticsService:
         )
 
         _validate_department_code(department_code)
-        data = await self.repo.get_backlog_distribution(
-            department_code=department_code, academic_year=academic_year,
-        )
+        repo_kwargs: Dict[str, Any] = {
+            "department_code": department_code,
+            "academic_year": academic_year,
+        }
+        if batch is not None:
+            repo_kwargs["batch"] = batch
+        data = await self.repo.get_backlog_distribution(**repo_kwargs)
         buckets = [
             BacklogDistributionBucket(
                 backlog_range=b["backlog_range"],
@@ -462,13 +506,25 @@ class AnalyticsService:
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
         academic_year: Optional[str] = None,
+        batch: Optional[str] = None,
+        page: int = 1,
+        limit: int = 50,
     ) -> AtRiskStudentsResult:
         """Students identified as at-risk by deterministic rules."""
         _validate_department_code(department_code)
         _validate_semester(semester_no)
-        data = await self.repo.get_at_risk_students(
-            department_code=department_code, semester_no=semester_no, academic_year=academic_year,
-        )
+        repo_kwargs: Dict[str, Any] = {
+            "department_code": department_code,
+            "semester_no": semester_no,
+        }
+        if academic_year is not None:
+            repo_kwargs["academic_year"] = academic_year
+        if batch is not None:
+            repo_kwargs["batch"] = batch
+        if page != 1 or limit != 50:
+            repo_kwargs["page"] = page
+            repo_kwargs["limit"] = limit
+        data = await self.repo.get_at_risk_students(**repo_kwargs)
         students = [
             AtRiskStudent(
                 student_id=s["student_id"],
@@ -488,7 +544,11 @@ class AnalyticsService:
         return AtRiskStudentsResult(
             department_code=data.get("department_code"),
             semester_no=data.get("semester_no"),
-            total_flagged=int(data.get("total_flagged") or 0),
+            total_flagged=int(data.get("total_flagged", data.get("total", len(students)))),
+            total=int(data.get("total", data.get("total_flagged", len(students)))),
+            page=int(data.get("page", page)),
+            limit=int(data.get("limit", limit)),
+            total_pages=int(data.get("total_pages", 1)),
             students=students,
         )
 
@@ -498,18 +558,28 @@ class AnalyticsService:
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
         academic_year: Optional[str] = None,
+        batch: Optional[str] = None,
         threshold: float = 75.0,
+        page: int = 1,
+        limit: int = 50,
     ) -> BelowThresholdResult:
         """Students below an attendance threshold in individual subjects."""
         _validate_department_code(department_code)
         _validate_semester(semester_no)
         _validate_threshold(threshold)
-        data = await self.repo.get_students_below_attendance_threshold(
-            department_code=department_code,
-            semester_no=semester_no,
-            academic_year=academic_year,
-            threshold=threshold,
-        )
+        repo_kwargs: Dict[str, Any] = {
+            "department_code": department_code,
+            "semester_no": semester_no,
+            "threshold": threshold,
+        }
+        if academic_year is not None:
+            repo_kwargs["academic_year"] = academic_year
+        if batch is not None:
+            repo_kwargs["batch"] = batch
+        if page != 1 or limit != 50:
+            repo_kwargs["page"] = page
+            repo_kwargs["limit"] = limit
+        data = await self.repo.get_students_below_attendance_threshold(**repo_kwargs)
         students = [
             BelowThresholdStudent(
                 student_id=s["student_id"],
@@ -526,7 +596,11 @@ class AnalyticsService:
         return BelowThresholdResult(
             threshold=float(data.get("threshold", threshold)),
             semester_no=data.get("semester_no"),
-            total_flagged=int(data.get("total_flagged") or 0),
+            total_flagged=int(data.get("total_flagged", data.get("total", len(students)))),
+            total=int(data.get("total", data.get("total_flagged", len(students)))),
+            page=int(data.get("page", page)),
+            limit=int(data.get("limit", limit)),
+            total_pages=int(data.get("total_pages", 1)),
             students=students,
         )
 
@@ -536,13 +610,25 @@ class AnalyticsService:
         department_code: Optional[int] = None,
         semester_no: Optional[int] = None,
         academic_year: Optional[str] = None,
+        batch: Optional[str] = None,
+        page: int = 1,
+        limit: int = 50,
     ) -> SubjectsNeedingAttentionResult:
         """Subjects flagged for concerning metrics."""
         _validate_department_code(department_code)
         _validate_semester(semester_no)
-        data = await self.repo.get_subjects_needing_attention(
-            department_code=department_code, semester_no=semester_no, academic_year=academic_year,
-        )
+        repo_kwargs: Dict[str, Any] = {
+            "department_code": department_code,
+            "semester_no": semester_no,
+        }
+        if academic_year is not None:
+            repo_kwargs["academic_year"] = academic_year
+        if batch is not None:
+            repo_kwargs["batch"] = batch
+        if page != 1 or limit != 50:
+            repo_kwargs["page"] = page
+            repo_kwargs["limit"] = limit
+        data = await self.repo.get_subjects_needing_attention(**repo_kwargs)
         subjects = [
             SubjectNeedingAttention(
                 subject_id=s["subject_id"],
@@ -560,6 +646,10 @@ class AnalyticsService:
         return SubjectsNeedingAttentionResult(
             department_code=data.get("department_code"),
             semester_no=data.get("semester_no"),
-            total_flagged=int(data.get("total_flagged") or 0),
+            total_flagged=int(data.get("total_flagged", data.get("total", len(subjects)))),
+            total=int(data.get("total", data.get("total_flagged", len(subjects)))),
+            page=int(data.get("page", page)),
+            limit=int(data.get("limit", limit)),
+            total_pages=int(data.get("total_pages", 1)),
             subjects=subjects,
         )

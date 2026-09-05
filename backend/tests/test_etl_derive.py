@@ -209,6 +209,7 @@ class TestAttendanceDerivation(unittest.TestCase):
         all_sql = " ".join(str(c) for c in conn.execute.call_args_list)
         self.assertIn("DELETE FROM attendance", all_sql)
         self.assertIn("INSERT INTO attendance", all_sql)
+        self.assertIn("ON CONFLICT (enrollment_record_id) DO UPDATE SET", all_sql)
 
     @patch("etl.stages.derive.transaction")
     def test_attendance_aggregation_query(self, mock_txn):
@@ -285,6 +286,7 @@ class TestSemesterSummaryDerivation(unittest.TestCase):
         all_sql = " ".join(str(c) for c in conn.execute.call_args_list)
         self.assertIn("DELETE FROM student_semester_summary", all_sql)
         self.assertIn("INSERT INTO student_semester_summary", all_sql)
+        self.assertIn("ON CONFLICT (student_id, semester_no, academic_year) DO UPDATE SET", all_sql)
 
     @patch("etl.stages.derive.transaction")
     def test_semester_summary_uses_attendance_table(self, mock_txn):

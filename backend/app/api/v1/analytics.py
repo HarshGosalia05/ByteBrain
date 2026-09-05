@@ -224,7 +224,7 @@ async def get_subject_attendance_summary(
     """
     try:
         result = await service.get_subject_attendance_summary(
-            subject_id, semester_no=semester_no, academic_year=batch or academic_year,
+            subject_id, semester_no=semester_no, academic_year=academic_year, batch=batch,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -258,11 +258,23 @@ async def get_subject_underperformers(
     threshold: float = Query(
         40.0, ge=0, le=100, description="Percentage threshold (default 40)",
     ),
+    page: int = Query(
+        1, ge=1, description="Page number (1-indexed)",
+    ),
+    limit: int = Query(
+        50, ge=1, le=100, description="Page size (1-100)",
+    ),
 ):
     """Students below a percentage threshold in a subject."""
     try:
         return await service.get_subject_underperformers(
-            subject_id, semester_no=semester_no, academic_year=batch or academic_year, threshold=threshold,
+            subject_id,
+            semester_no=semester_no,
+            academic_year=academic_year,
+            batch=batch,
+            threshold=threshold,
+            page=page,
+            limit=limit,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -300,7 +312,8 @@ async def get_department_overview(
         return await service.get_department_overview(
             department_code=department_code,
             semester_no=semester_no,
-            academic_year=batch or academic_year,
+            academic_year=academic_year,
+            batch=batch,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -333,7 +346,8 @@ async def get_semester_performance_distribution(
         return await service.get_semester_performance_distribution(
             department_code=department_code,
             semester_no=semester_no,
-            academic_year=batch or academic_year,
+            academic_year=academic_year,
+            batch=batch,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -365,7 +379,8 @@ async def get_attendance_distribution(
         return await service.get_attendance_distribution(
             department_code=department_code,
             semester_no=semester_no,
-            academic_year=batch or academic_year,
+            academic_year=academic_year,
+            batch=batch,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -394,7 +409,8 @@ async def get_backlog_distribution(
     try:
         return await service.get_backlog_distribution(
             department_code=department_code,
-            academic_year=batch or academic_year,
+            academic_year=academic_year,
+            batch=batch,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -426,13 +442,22 @@ async def get_at_risk_students(
     academic_year: Optional[str] = Query(
         None, description="Filter by academic year (e.g. 2026-27)",
     ),
+    page: int = Query(
+        1, ge=1, description="Page number (1-indexed)",
+    ),
+    limit: int = Query(
+        50, ge=1, le=100, description="Page size (1-100)",
+    ),
 ):
     """Students identified as at-risk by deterministic rules."""
     try:
         return await service.get_at_risk_students(
             department_code=department_code,
             semester_no=semester_no,
-            academic_year=batch or academic_year,
+            academic_year=academic_year,
+            batch=batch,
+            page=page,
+            limit=limit,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -462,14 +487,23 @@ async def get_students_below_attendance_threshold(
     threshold: float = Query(
         75.0, ge=0, le=100, description="Attendance threshold (default 75)",
     ),
+    page: int = Query(
+        1, ge=1, description="Page number (1-indexed)",
+    ),
+    limit: int = Query(
+        50, ge=1, le=100, description="Page size (1-100)",
+    ),
 ):
     """Students below an attendance threshold in individual subjects."""
     try:
         return await service.get_students_below_attendance_threshold(
             department_code=department_code,
             semester_no=semester_no,
-            academic_year=batch or academic_year,
+            academic_year=academic_year,
+            batch=batch,
             threshold=threshold,
+            page=page,
+            limit=limit,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -496,11 +530,22 @@ async def get_subjects_needing_attention(
     academic_year: Optional[str] = Query(
         None, description="Filter by academic year (e.g. 2026-27)",
     ),
+    page: int = Query(
+        1, ge=1, description="Page number (1-indexed)",
+    ),
+    limit: int = Query(
+        50, ge=1, le=100, description="Page size (1-100)",
+    ),
 ):
     """Subjects flagged for concerning metrics."""
     try:
         return await service.get_subjects_needing_attention(
-            department_code=department_code, semester_no=semester_no, academic_year=batch or academic_year,
+            department_code=department_code,
+            semester_no=semester_no,
+            academic_year=academic_year,
+            batch=batch,
+            page=page,
+            limit=limit,
         )
     except ValueError as exc:
         raise HTTPException(

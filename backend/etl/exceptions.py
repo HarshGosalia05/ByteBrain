@@ -43,6 +43,10 @@ class EtlDryRunError(EtlError):
     """A stage attempted a write while the run was in dry-run mode."""
 
 
+class EtlTransformError(EtlError):
+    """A transform stage failure (data type or mapping error)."""
+
+
 class EtlUnexpectedError(EtlError):
     """An unexpected, internal failure."""
 
@@ -65,7 +69,7 @@ def to_exit_code(error: BaseException) -> int:
         return EXIT_STITCH_AMBIGUITY
     if isinstance(
         error,
-        (EtlDatabaseError, EtlLoadDeriveError, EtlStageError, EtlDryRunError),
+        (EtlDatabaseError, EtlLoadDeriveError, EtlStageError, EtlDryRunError, EtlTransformError),
     ):
         return EXIT_LOAD_DERIVE_FAILURE
     return EXIT_UNEXPECTED_ERROR

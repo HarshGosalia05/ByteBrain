@@ -7,7 +7,7 @@ READ-ONLY: Uses existing repositories via Dependency Injection, no INSERT/UPDATE
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import Any
 import asyncpg
 
@@ -34,6 +34,11 @@ from app.schemas import m3v2 as m3v2_schemas
 router = APIRouter(prefix="/predict", tags=["predictions"])
 
 _ALLOWED_PREDICTION_TYPES = ("m1", "m2", "m3", "m4")
+_ALLOWED_PREDICTION_TYPE_SET = set(_ALLOWED_PREDICTION_TYPES)
+
+_HISTORY_LIMIT_MIN = 1
+_HISTORY_LIMIT_MAX = 100
+_HISTORY_OFFSET_MIN = 0
 
 
 def get_prediction_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> PredictionService:
@@ -150,12 +155,15 @@ async def predict_m1(
 
     try:
         return await contract_service.predict_m1(student_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found or insufficient data for prediction",
+        )
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction failed: {str(e)}",
+            detail="Prediction service temporarily unavailable",
         )
 
 
@@ -186,20 +194,20 @@ async def predict_m1_v2(
 
     try:
         result = await service.predict(student_id)
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"M1 V2 artifact unavailable: {e}",
+            detail="M1 V2 model artifact is not available",
         )
-    except (ConnectionError, RuntimeError) as e:
+    except (ConnectionError, RuntimeError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(e),
+            detail="M1 V2 service is temporarily unavailable",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"M1 V2 prediction failed: {str(e)}",
+            detail="Prediction service temporarily unavailable",
         )
     return result
 
@@ -234,20 +242,20 @@ async def predict_m1_v3(
 
     try:
         result = await service.predict(student_id)
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"M1 V3 artifact unavailable: {e}",
+            detail="M1 V3 model artifact is not available",
         )
-    except (ConnectionError, RuntimeError) as e:
+    except (ConnectionError, RuntimeError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(e),
+            detail="M1 V3 service is temporarily unavailable",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"M1 V3 prediction failed: {str(e)}",
+            detail="Prediction service temporarily unavailable",
         )
     return result
 
@@ -285,22 +293,25 @@ async def predict_m2_v2(
 
     try:
         result = await service.predict(student_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except FileNotFoundError as e:
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found or no upcoming semester available",
+        )
+    except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"M2 V2 artifact unavailable: {e}",
+            detail="M2 V2 model artifact is not available",
         )
-    except (ConnectionError, RuntimeError) as e:
+    except (ConnectionError, RuntimeError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(e),
+            detail="M2 V2 service is temporarily unavailable",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"M2 V2 prediction failed: {str(e)}",
+            detail="Prediction service temporarily unavailable",
         )
     return result
 
@@ -338,22 +349,25 @@ async def predict_m3_v2(
 
     try:
         result = await service.predict(student_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except FileNotFoundError as e:
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found or no upcoming semester available",
+        )
+    except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"M3 V2 artifact unavailable: {e}",
+            detail="M3 V2 model artifact is not available",
         )
-    except (ConnectionError, RuntimeError) as e:
+    except (ConnectionError, RuntimeError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(e),
+            detail="M3 V2 service is temporarily unavailable",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"M3 V2 prediction failed: {str(e)}",
+            detail="Prediction service temporarily unavailable",
         )
     return result
 
@@ -377,12 +391,15 @@ async def predict_m2(
 
     try:
         return await contract_service.predict_m2(student_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found or insufficient data for prediction",
+        )
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction failed: {str(e)}",
+            detail="Prediction service temporarily unavailable",
         )
 
 
@@ -411,12 +428,15 @@ async def predict_m3(
 
     try:
         result = await contract_service.predict_m3(student_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found or insufficient data for prediction",
+        )
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction failed: {str(e)}",
+            detail="Prediction service temporarily unavailable",
         )
 
     # Route-level BLOCKED enforcement: M3 must never return a live prediction.
@@ -450,12 +470,15 @@ async def predict_m4(
     try:
         result = await service.predict_m4_for_student(student_id)
         return result
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found or insufficient data for prediction",
+        )
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction failed: {str(e)}",
+            detail="Prediction service temporarily unavailable",
         )
 
 
@@ -489,12 +512,15 @@ async def student_insights(
     await authorize_prediction_access(user, student_id, faculty_service)
     try:
         return await service.get_student_insights(student_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found or insufficient data for insights",
+        )
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Insights failed: {str(e)}",
+            detail="Insights service temporarily unavailable",
         )
 
 
@@ -529,14 +555,22 @@ async def persist_prediction(
     validation fails.
     """
     await authorize_prediction_access(user, student_id, faculty_service)
+    if prediction_type not in _ALLOWED_PREDICTION_TYPE_SET:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid prediction type. Allowed: {', '.join(sorted(_ALLOWED_PREDICTION_TYPES))}",
+        )
     try:
         return await service.generate_and_persist(prediction_type, student_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid input or insufficient data for prediction",
+        )
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction generation/persistence failed: {str(e)}",
+            detail="Prediction generation service temporarily unavailable",
         )
 
 
@@ -553,10 +587,18 @@ async def latest_prediction(
 ) -> dict:
     """Return the latest stored prediction for a student/model type."""
     await authorize_prediction_access(user, student_id, faculty_service)
+    if prediction_type not in _ALLOWED_PREDICTION_TYPE_SET:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid prediction type. Allowed: {', '.join(sorted(_ALLOWED_PREDICTION_TYPES))}",
+        )
     try:
         row = await service.get_latest(student_id, prediction_type)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid input for prediction lookup",
+        )
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -572,18 +614,28 @@ async def latest_prediction(
 async def persisted_history(
     student_id: str,
     prediction_type: str | None = None,
-    limit: int = 20,
-    offset: int = 0,
+    limit: int = Query(20, ge=1, le=100, description="Page size (1-100)"),
+    offset: int = Query(0, ge=0, description="Page offset"),
     service: PredictionGenerationService = Depends(get_generation_service),
     faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
 ) -> dict:
     """Return newest-first persisted prediction history for a student."""
     await authorize_prediction_access(user, student_id, faculty_service)
+    limit = max(_HISTORY_LIMIT_MIN, min(limit, _HISTORY_LIMIT_MAX))
+    offset = max(_HISTORY_OFFSET_MIN, offset)
+    if prediction_type is not None and prediction_type not in _ALLOWED_PREDICTION_TYPE_SET:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid prediction type. Allowed: {', '.join(sorted(_ALLOWED_PREDICTION_TYPES))}",
+        )
     try:
         rows = await service.get_history(
             student_id, prediction_type, limit=limit, offset=offset
         )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid input for prediction history lookup",
+        )
     return {"student_id": student_id, "count": len(rows), "predictions": rows}

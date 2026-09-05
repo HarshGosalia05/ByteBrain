@@ -16,7 +16,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.core.config import settings
 
-security_scheme = HTTPBearer()
+security_scheme = HTTPBearer(auto_error=False)
 
 
 def create_access_token(payload: dict[str, Any]) -> str:
@@ -123,7 +123,7 @@ async def _verify_token_version(payload: dict[str, Any]) -> None:
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Security(security_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Security(security_scheme),
 ) -> dict:
     """Extract and verify the authenticated user from a signed JWT Bearer token.
 
@@ -135,6 +135,12 @@ def get_current_user(
     The returned dict is the authoritative user identity; all downstream
     RBAC checks use this value exclusively — never client body fields.
     """
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     token = credentials.credentials
     payload = decode_access_token(token)
 

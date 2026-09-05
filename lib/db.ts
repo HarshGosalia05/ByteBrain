@@ -5,7 +5,11 @@ const globalForPg = globalThis as unknown as { pgPool?: Pool }
 const pool =
   globalForPg.pgPool ??
   new Pool({
-    connectionString: `postgresql://${process.env.DB_USER}:${encodeURIComponent(process.env.DB_PASSWORD!)}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
+    connectionString:
+      process.env.DATABASE_URL ||
+      (process.env.DB_USER
+        ? `postgresql://${process.env.DB_USER}:${encodeURIComponent(process.env.DB_PASSWORD || "")}@${process.env.DB_HOST || "localhost"}:${process.env.DB_PORT || "5432"}/${process.env.DB_NAME || ""}`
+        : undefined),
     ssl:
       process.env.DB_SSL_REJECT_UNAUTHORIZED === "false"
         ? { rejectUnauthorized: false }

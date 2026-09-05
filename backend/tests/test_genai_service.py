@@ -95,17 +95,19 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(fresh.GENAI_TIMEOUT_SECONDS, 60.0)
 
     def test_missing_configuration_fails_closed(self):
-        with mock.patch.object(settings, "GENAI_API_KEY", ""), mock.patch.object(
-            settings, "GENAI_MODEL", ""
-        ):
+        with mock.patch.object(settings, "GENAI_PRIMARY_PROVIDER", ""), mock.patch.object(
+            settings, "GENAI_API_KEY", ""
+        ), mock.patch.object(settings, "GENAI_MODEL", ""):
             service = GenAIService()
             with self.assertRaises(GenAIConfigurationError):
                 run(service.generate(_request()))
 
     def test_unsupported_provider_raises(self):
-        with mock.patch.object(settings, "GENAI_API_KEY", "k"), mock.patch.object(
-            settings, "GENAI_MODEL", "m"
-        ), mock.patch.object(settings, "GENAI_PROVIDER", "bogus"):
+        with mock.patch.object(settings, "GENAI_PRIMARY_PROVIDER", ""), mock.patch.object(
+            settings, "GENAI_API_KEY", "k"
+        ), mock.patch.object(settings, "GENAI_MODEL", "m"), mock.patch.object(
+            settings, "GENAI_PROVIDER", "bogus"
+        ):
             service = GenAIService()
             with self.assertRaises(GenAIConfigurationError):
                 run(service.generate(_request()))

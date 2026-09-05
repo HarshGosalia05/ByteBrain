@@ -194,6 +194,11 @@ export type SubjectUnderperformers = {
   subject_id: string
   semester_no: number | null
   threshold: number
+  total_flagged?: number
+  total?: number
+  page?: number
+  limit?: number
+  total_pages?: number
   students: UnderperformerItem[]
 }
 
@@ -266,6 +271,10 @@ export type AtRiskStudentsResult = {
   department_code: number | null
   semester_no: number | null
   total_flagged: number
+  total?: number
+  page?: number
+  limit?: number
+  total_pages?: number
   students: AtRiskStudent[]
 }
 
@@ -284,6 +293,10 @@ export type BelowThresholdResult = {
   threshold: number
   semester_no: number | null
   total_flagged: number
+  total?: number
+  page?: number
+  limit?: number
+  total_pages?: number
   students: BelowThresholdStudent[]
 }
 
@@ -303,6 +316,10 @@ export type SubjectsNeedingAttentionResult = {
   department_code: number | null
   semester_no: number | null
   total_flagged: number
+  total?: number
+  page?: number
+  limit?: number
+  total_pages?: number
   subjects: SubjectNeedingAttention[]
 }
 
@@ -315,6 +332,8 @@ export type AnalyticsFilters = {
   semester_no?: number | null
   batch?: string | null
   academic_year?: string | null
+  page?: number | null
+  limit?: number | null
 }
 
 export function getStudentAcademicProfile(studentId: string): Promise<BffResult<StudentAcademicProfile>> {
@@ -323,17 +342,19 @@ export function getStudentAcademicProfile(studentId: string): Promise<BffResult<
 
 export function getStudentSemesterHistory(studentId: string, filters: AnalyticsFilters = {}): Promise<BffResult<StudentSemesterHistory>> {
   return callAnalytics<StudentSemesterHistory>(`students/${encodeURIComponent(studentId)}/semester-history`, BFF_TTL_MS, {
-    ...filters,
-    batch: filters.batch ?? filters.academic_year,
-    academic_year: filters.academic_year ?? filters.batch,
+    department_code: filters.department_code,
+    semester_no: filters.semester_no,
+    batch: filters.batch,
+    academic_year: filters.academic_year,
   })
 }
 
 export function getStudentAttendanceSummary(studentId: string, filters: AnalyticsFilters = {}): Promise<BffResult<StudentAttendanceSummary>> {
   return callAnalytics<StudentAttendanceSummary>(`students/${encodeURIComponent(studentId)}/attendance-summary`, BFF_TTL_MS, {
-    ...filters,
-    batch: filters.batch ?? filters.academic_year,
-    academic_year: filters.academic_year ?? filters.batch,
+    department_code: filters.department_code,
+    semester_no: filters.semester_no,
+    batch: filters.batch,
+    academic_year: filters.academic_year,
   })
 }
 
@@ -343,17 +364,18 @@ export function getStudentBacklogSummary(studentId: string): Promise<BffResult<S
 
 export function getSubjectPerformance(subjectId: string, filters: AnalyticsFilters = {}): Promise<BffResult<SubjectPerformanceSummary>> {
   return callAnalytics<SubjectPerformanceSummary>(`subjects/${encodeURIComponent(subjectId)}/performance`, BFF_TTL_MS, {
-    ...filters,
-    batch: filters.batch ?? filters.academic_year,
-    academic_year: filters.academic_year ?? filters.batch,
+    department_code: filters.department_code,
+    semester_no: filters.semester_no,
+    batch: filters.batch,
+    academic_year: filters.academic_year,
   })
 }
 
 export function getSubjectAttendance(subjectId: string, filters: AnalyticsFilters = {}): Promise<BffResult<SubjectAttendanceSummary>> {
   return callAnalytics<SubjectAttendanceSummary>(`subjects/${encodeURIComponent(subjectId)}/attendance`, BFF_TTL_MS, {
     semester_no: filters.semester_no,
-    batch: filters.batch ?? filters.academic_year,
-    academic_year: filters.academic_year ?? filters.batch,
+    batch: filters.batch,
+    academic_year: filters.academic_year,
   })
 }
 
@@ -361,25 +383,29 @@ export function getSubjectUnderperformers(subjectId: string, filters: AnalyticsF
   const { threshold, ...rest } = filters
   return callAnalytics<SubjectUnderperformers>(`subjects/${encodeURIComponent(subjectId)}/underperformers`, BFF_TTL_MS, {
     semester_no: rest.semester_no,
-    batch: rest.batch ?? rest.academic_year,
-    academic_year: rest.academic_year ?? rest.batch,
+    batch: rest.batch,
+    academic_year: rest.academic_year,
     threshold,
+    page: rest.page,
+    limit: rest.limit,
   })
 }
 
 export function getDepartmentOverview(filters: AnalyticsFilters = {}): Promise<BffResult<DepartmentOverview>> {
   return callAnalytics<DepartmentOverview>("departments/overview", BFF_TTL_MS, {
-    ...filters,
-    batch: filters.batch ?? filters.academic_year,
-    academic_year: filters.academic_year ?? filters.batch,
+    department_code: filters.department_code,
+    semester_no: filters.semester_no,
+    batch: filters.batch,
+    academic_year: filters.academic_year,
   })
 }
 
 export function getPerformanceDistribution(filters: AnalyticsFilters = {}): Promise<BffResult<SemesterPerformanceDistribution>> {
   return callAnalytics<SemesterPerformanceDistribution>("departments/performance-distribution", BFF_TTL_MS, {
-    ...filters,
-    batch: filters.batch ?? filters.academic_year,
-    academic_year: filters.academic_year ?? filters.batch,
+    department_code: filters.department_code,
+    semester_no: filters.semester_no,
+    batch: filters.batch,
+    academic_year: filters.academic_year,
   })
 }
 
@@ -387,16 +413,16 @@ export function getAttendanceDistribution(filters: AnalyticsFilters = {}): Promi
   return callAnalytics<AttendanceDistribution>("departments/attendance-distribution", BFF_TTL_MS, {
     department_code: filters.department_code,
     semester_no: filters.semester_no,
-    batch: filters.batch ?? filters.academic_year,
-    academic_year: filters.academic_year ?? filters.batch,
+    batch: filters.batch,
+    academic_year: filters.academic_year,
   })
 }
 
 export function getBacklogDistribution(filters: AnalyticsFilters = {}): Promise<BffResult<BacklogDistribution>> {
   return callAnalytics<BacklogDistribution>("departments/backlog-distribution", BFF_TTL_MS, {
     department_code: filters.department_code,
-    batch: filters.batch ?? filters.academic_year,
-    academic_year: filters.academic_year ?? filters.batch,
+    batch: filters.batch,
+    academic_year: filters.academic_year,
   })
 }
 
@@ -404,18 +430,23 @@ export function getAtRiskStudents(filters: AnalyticsFilters = {}): Promise<BffRe
   return callAnalytics<AtRiskStudentsResult>("at-risk/students", BFF_TTL_MS, {
     department_code: filters.department_code,
     semester_no: filters.semester_no,
-    batch: filters.batch ?? filters.academic_year,
-    academic_year: filters.academic_year ?? filters.batch,
+    batch: filters.batch,
+    academic_year: filters.academic_year,
+    page: filters.page,
+    limit: filters.limit,
   })
 }
 
 export function getBelowAttendanceThreshold(filters: AnalyticsFilters & { threshold?: number } = {}): Promise<BffResult<BelowThresholdResult>> {
   const { threshold, ...rest } = filters
   return callAnalytics<BelowThresholdResult>("at-risk/below-attendance-threshold", BFF_TTL_MS, {
-    ...rest,
-    batch: filters.batch ?? filters.academic_year,
-    academic_year: filters.academic_year ?? filters.batch,
+    department_code: rest.department_code,
+    semester_no: rest.semester_no,
+    batch: rest.batch,
+    academic_year: rest.academic_year,
     threshold,
+    page: rest.page,
+    limit: rest.limit,
   })
 }
 
@@ -423,7 +454,9 @@ export function getSubjectsNeedingAttention(filters: AnalyticsFilters = {}): Pro
   return callAnalytics<SubjectsNeedingAttentionResult>("at-risk/subjects-needing-attention", BFF_TTL_MS, {
     department_code: filters.department_code,
     semester_no: filters.semester_no,
-    batch: filters.batch ?? filters.academic_year,
-    academic_year: filters.academic_year ?? filters.batch,
+    batch: filters.batch,
+    academic_year: filters.academic_year,
+    page: filters.page,
+    limit: filters.limit,
   })
 }
