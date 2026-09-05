@@ -171,7 +171,10 @@ class StudentAcademicTool:
         elif trend.overall_direction == "declining":
             attention.append("Declining academic trend across semesters")
 
-        completed = [metric for metric in semester_metrics if metric.percentage is not None]
+        completed = [
+            metric for metric in semester_metrics
+            if metric.percentage is not None and float(metric.percentage) > 0
+        ]
         if completed:
             best = max(completed, key=lambda metric: metric.percentage)
             strong.append(

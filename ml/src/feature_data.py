@@ -341,14 +341,23 @@ def build_m3_dataset_from_db(conn) -> MLDataset:
 # ---------------------------------------------------------------------------
 
 def _build_academic_aggregates(conn) -> pd.DataFrame:
-    """Compute per-student academic aggregates from student_semester_summary."""
+    """Compute per-student academic aggregates from student_semester_summary.
+
+    Only COMPLETED semesters with a published result (sgpa > 0 AND percentage
+    > 0) are included. Placeholder rows for in-progress semesters store
+    sgpa/percentage = 0 and must not dilute the averages.
+    """
     sql = """
         SELECT
             student_id,
-            AVG(semester_percentage) AS avg_prior_percentage,
-            AVG(semester_sgpa) AS avg_prior_sgpa,
-            AVG(semester_attendance_percentage) AS avg_prior_attendance,
-            SUM(backlog_count) AS total_prior_backlogs
+            AVG(semester_percentage) FILTER (WHERE semester_sgpa > 0 AND semester_percentage > 0)
+                AS avg_prior_percentage,
+            AVG(semester_sgpa) FILTER (WHERE semester_sgpa > 0 AND semester_percentage > 0)
+                AS avg_prior_sgpa,
+            AVG(semester_attendance_percentage) FILTER (WHERE semester_sgpa > 0 AND semester_percentage > 0)
+                AS avg_prior_attendance,
+            SUM(backlog_count) FILTER (WHERE semester_sgpa > 0 AND semester_percentage > 0)
+                AS total_prior_backlogs
         FROM student_semester_summary
         GROUP BY student_id
     """

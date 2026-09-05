@@ -1183,6 +1183,13 @@ class AdminRepository:
         "attendance": "s.overall_attendance_percentage",
         "backlogs": "s.total_backlogs",
     }
+    STUDENT_SEMESTER_SORT_COLUMNS: Dict[str, str] = {
+        "name": "s.full_name",
+        "sgpa": "semf.semester_sgpa",
+        "percentage": "semf.semester_percentage",
+        "attendance": "semf.semester_attendance_percentage",
+        "backlogs": "semf.backlog_count",
+    }
     STUDENT_RISK_SEVERITY_SQL = (
         "CASE UPPER(sr.risk)"
         " WHEN 'CRITICAL' THEN 4 WHEN 'HIGH' THEN 3 WHEN 'MODERATE' THEN 2"
@@ -1216,10 +1223,14 @@ class AdminRepository:
         preferred domain, dream role (ILIKE).
         """
         direction = "DESC" if sort_dir == "desc" else "ASC"
+        semester_scoped = semester is not None
+        sort_columns = (
+            self.STUDENT_SEMESTER_SORT_COLUMNS if semester_scoped else self.STUDENT_SORT_COLUMNS
+        )
         if sort_by == "risk":
             order_expr = f"{self.STUDENT_RISK_SEVERITY_SQL} {direction}"
         else:
-            column = self.STUDENT_SORT_COLUMNS.get(sort_by, self.STUDENT_SORT_COLUMNS["name"])
+            column = sort_columns.get(sort_by, sort_columns["name"])
             order_expr = f"{column} {direction} NULLS LAST"
 
         args = (
@@ -1246,13 +1257,13 @@ class AdminRepository:
                 s.email,
                 s.department_code,
                 COALESCE(d.department_name, s.department_name) AS department_name,
-                s.current_semester AS semester,
-                s.current_academic_year AS academic_year,
-                s.latest_sgpa AS sgpa,
+                CASE WHEN semf.semester_no IS NULL THEN s.current_semester ELSE semf.semester_no END AS semester,
+                CASE WHEN semf.semester_no IS NULL THEN s.current_academic_year ELSE semf.academic_year END AS academic_year,
+                CASE WHEN semf.semester_no IS NULL THEN s.latest_sgpa ELSE semf.semester_sgpa END AS sgpa,
                 s.overall_cgpa AS cgpa,
-                s.overall_percentage AS percentage,
-                s.overall_attendance_percentage AS attendance,
-                s.total_backlogs AS backlogs,
+                CASE WHEN semf.semester_no IS NULL THEN s.overall_percentage ELSE semf.semester_percentage END AS percentage,
+                CASE WHEN semf.semester_no IS NULL THEN s.overall_attendance_percentage ELSE semf.semester_attendance_percentage END AS attendance,
+                CASE WHEN semf.semester_no IS NULL THEN s.total_backlogs ELSE semf.backlog_count END AS backlogs,
                 s.academic_standing,
                 sr.risk,
                 cp.preferred_domain,
@@ -1318,8 +1329,17 @@ class AdminRepository:
                 ORDER BY ls.survey_date DESC NULLS LAST
                 LIMIT 1
             ) ls ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT ss2.semester_no, ss2.academic_year, ss2.semester_sgpa,
+                       ss2.semester_percentage, ss2.semester_attendance_percentage,
+                       ss2.backlog_count
+                FROM student_semester_summary ss2
+                WHERE ss2.student_id = s.student_id
+                  AND ss2.semester_no = $2
+                LIMIT 1
+            ) semf ON TRUE
             WHERE ($1::int IS NULL OR s.department_code = $1)
-              AND ($2::int IS NULL OR s.current_semester = $2)
+              AND ($2::int IS NULL OR semf.semester_no IS NOT NULL)
               AND {self._batch_sql("$3", "s")}
               AND ($4::text IS NULL OR UPPER(sr.risk) = $4)
               AND ($5::text IS NULL OR s.full_name ILIKE '%' || $5 || '%'
@@ -1369,7 +1389,10 @@ class AdminRepository:
                 LIMIT 1
             ) cp ON TRUE
             WHERE ($1::int IS NULL OR s.department_code = $1)
-              AND ($2::int IS NULL OR s.current_semester = $2)
+              AND ($2::int IS NULL OR EXISTS (
+                    SELECT 1 FROM student_semester_summary semf
+                    WHERE semf.student_id = s.student_id AND semf.semester_no = $2
+              ))
               AND {self._batch_sql("$3", "s")}
               AND ($4::text IS NULL OR UPPER(sr.risk) = $4)
               AND ($5::text IS NULL OR s.full_name ILIKE '%' || $5 || '%'

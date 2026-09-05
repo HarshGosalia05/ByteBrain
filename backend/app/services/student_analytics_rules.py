@@ -181,6 +181,7 @@ def compute_trends(summaries: List[Dict[str, Any]]) -> Dict[str, Any]:
             "standing": row.get("academic_standing"),
         }
         for row in ordered
+        if _is_completed_semester(row)
     ]
     movements = {
         metric: _compute_movement(ordered, key)

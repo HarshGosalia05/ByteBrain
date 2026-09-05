@@ -17,6 +17,8 @@ Covers:
 """
 from __future__ import annotations
 
+import asyncio
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -386,6 +388,146 @@ class TestPredictor:
         p = M2V2Predictor()
         with pytest.raises(RuntimeError, match="not loaded"):
             p.predict_from_features(select_features(mini_fact))
+
+    # To make the observation-semester selection testable without a live DB,
+    # stub the asyncpg connection with a tiny dispatcher and monkeypatch
+    # predict_from_features (the artifact itself is not needed here).
+
+    def _fake_loaded_predictor(self):
+        from v2.m2_next_semester_prediction.inference.predictor import M2V2Predictor
+        p = M2V2Predictor()
+        p._metadata = {}
+        p._loaded = True
+        return p
+
+    def _story_summary(self, n_completed: int, placeholder_sem: int):
+        """Semesters 1..n_completed finalized (sgpa/pct > 0), then one
+        in-progress placeholder semester with sgpa=0 / percentage=0."""
+        rows = []
+        for sem in range(1, n_completed + 1):
+            rows.append({
+                "semester_no": sem,
+                "subjects_registered": 7,
+                "credits_registered": 28,
+                "credits_earned": 27,
+                "semester_total_marks": 620.0 + sem,
+                "semester_percentage": 88.0 + sem,
+                "semester_sgpa": 9.0,
+                "semester_attendance_percentage": 90.0,
+                "backlog_count": 0,
+                "previous_sem_sgpa": None if sem == 1 else 9.0,
+                "sgpa_drift": None if sem == 1 else 0.0,
+                "sgpa_rolling_mean_3": 9.0,
+                "previous_sem_backlog_count": None if sem == 1 else 0,
+                "backlog_change": 0,
+                "cumulative_backlog_events": 0,
+                "attendance_aggregate_pct": 90.0,
+            })
+        rows.append({
+            "semester_no": placeholder_sem,
+            "subjects_registered": 7,
+            "credits_registered": 28,
+            "credits_earned": 0,
+            "semester_total_marks": 0,
+            "semester_percentage": 0.0,
+            "semester_sgpa": 0.0,
+            "semester_attendance_percentage": 0.0,
+            "backlog_count": 0,
+            "previous_sem_sgpa": 9.0,
+            "sgpa_drift": 0.0,
+            "sgpa_rolling_mean_3": 9.0,
+            "previous_sem_backlog_count": 0,
+            "backlog_change": 0,
+            "cumulative_backlog_events": 0,
+            "attendance_aggregate_pct": 0.0,
+        })
+        return rows
+
+    class _FakeConn:
+        def __init__(self, profile, summaries):
+            self._profile = profile
+            self._summaries = summaries
+
+        async def fetchrow(self, query, *args):
+            if "FROM students" in query:
+                return self._profile
+            return None
+
+        async def fetch(self, query, *args):
+            if "FROM student_semester_summary" in query:
+                return self._summaries
+            return []
+
+    def _predict_ready(self, predictor, conn, student_id):
+        captured = {}
+
+        def fake_predict(X):
+            captured["T"] = int(X["semester_no"].iloc[0])
+            return {"next_semester_sgpa": 9.6, "next_semester_percentage": 96.0}
+
+        predictor.predict_from_features = fake_predict
+        result = asyncio.run(
+            predictor.predict_for_student(student_id, conn)
+        )
+        return result, captured
+
+    def test_observation_uses_last_completed_not_placeholder_current(self):
+        from v2.m2_next_semester_prediction.inference.predictor import M2V2Predictor
+        profile = {
+            "student_id": "STU-X",
+            "gender": "Male",
+            "current_semester": 7,
+            "department_code": "CSE",
+            "department_name": "Computer Science",
+            "total_semesters": 8,
+        }
+        summaries = self._story_summary(n_completed=6, placeholder_sem=7)
+        p = self._fake_loaded_predictor()
+        result, captured = self._predict_ready(
+            p, self._FakeConn(profile, summaries), "STU-X"
+        )
+        assert result["readiness_status"] == "READY"
+        assert captured["T"] == 6
+        assert result["observation_semester"] == 6
+        assert result["prediction_takes_effect_semester"] == 8
+
+    def test_observation_uses_current_when_finalized(self):
+        from v2.m2_next_semester_prediction.inference.predictor import M2V2Predictor
+        profile = {
+            "student_id": "STU-Y",
+            "gender": "Female",
+            "current_semester": 6,
+            "department_code": "CSE",
+            "department_name": "Computer Science",
+            "total_semesters": 8,
+        }
+        summaries = self._story_summary(n_completed=6, placeholder_sem=7)
+        p = self._fake_loaded_predictor()
+        result, captured = self._predict_ready(
+            p, self._FakeConn(profile, summaries), "STU-Y"
+        )
+        assert result["readiness_status"] == "READY"
+        assert captured["T"] == 6
+        assert result["observation_semester"] == 6
+        assert result["prediction_takes_effect_semester"] == 7
+
+    def test_no_completed_semester_yields_no_data(self):
+        from v2.m2_next_semester_prediction.inference.predictor import M2V2Predictor
+        profile = {
+            "student_id": "STU-Z",
+            "gender": "Male",
+            "current_semester": 1,
+            "department_code": "CSE",
+            "department_name": "Computer Science",
+            "total_semesters": 8,
+        }
+        placeholder = self._story_summary(n_completed=0, placeholder_sem=1)
+        p = self._fake_loaded_predictor()
+        result = asyncio.run(
+            p.predict_for_student("STU-Z", self._FakeConn(profile, placeholder))
+        )
+        assert result["readiness_status"] == "NO_DATA"
+        assert "no completed semester" in result["reason"].lower()
 
 
 class TestFitFinalModel:

@@ -280,11 +280,15 @@ class AdminStudentsOverviewServiceTests(unittest.TestCase):
         total = next(q for q in queries if "SELECT COUNT(*) AS total" in q)
         for q in (items, total):
             self.assertIn("($1::int IS NULL OR s.department_code = $1)", q)
-            self.assertIn("($2::int IS NULL OR s.current_semester = $2)", q)
+            self.assertIn("student_semester_summary", q)
+            self.assertIn("semester_no = $2", q)
             self.assertIn("$3::text IS NULL", q)
             self.assertIn("s.admission_year", q)
             self.assertIn("($4::text IS NULL OR UPPER(sr.risk) = $4)", q)
             self.assertIn("ILIKE '%' || $5 || '%'", q)
+        # Semester-scoped items query surfaces that semester's snapshot columns.
+        self.assertIn("semf.semester_no IS NOT NULL", items)
+        self.assertIn("CASE WHEN semf.semester_no IS NULL THEN s.latest_sgpa ELSE semf.semester_sgpa END", items)
         # The risk band is forwarded uppercased so it matches stored bands.
         item_args = [a for _, _, a in conn.executed if len(a) == 13][0]
         self.assertEqual(item_args[3], "HIGH")

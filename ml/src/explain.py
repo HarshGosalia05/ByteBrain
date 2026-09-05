@@ -657,7 +657,15 @@ def _explain_m4(
     if semester is not None and len(semester) > 0:
         try:
             if "semester_percentage" in semester.columns:
-                avg_pct = round(float(semester["semester_percentage"].mean()), 2)
+                completed_pct = pd.to_numeric(
+                    semester["semester_percentage"], errors="coerce"
+                )
+                completed_pct = completed_pct[completed_pct > 0]
+                avg_pct = (
+                    round(float(completed_pct.mean()), 2)
+                    if len(completed_pct) > 0
+                    else None
+                )
             if "backlog_count" in semester.columns:
                 total_back = int(semester["backlog_count"].sum())
         except (TypeError, ValueError):  # pragma: no cover - defensive

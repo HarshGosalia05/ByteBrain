@@ -276,16 +276,32 @@ class M2V2Predictor:
 
         target_semester = effective_current + 1
 
-        # Determine observation semester T: use effective_current if present in summary records,
-        # or the most recent available semester <= effective_current.
-        available_sems = [s for s in semester_no.unique() if s <= effective_current]
-        if not available_sems:
+        # Determine observation semester T: the most recent COMPLETED semester
+        # (result published) at or before the student's current stage. Placeholder
+        # rows for an in-progress semester (sgpa=0 AND percentage=0) are NOT
+        # completed, so their zero marks never skew the model input. This keeps
+        # M2 honest per its contract: "predicts T+1 from the most recent completed
+        # semester T".
+        sgpa_n = pd.to_numeric(ss["semester_sgpa"], errors="coerce")
+        pct_n = pd.to_numeric(ss["semester_percentage"], errors="coerce")
+        finalized_rows = ss[(sgpa_n > 0) & (pct_n > 0)]
+        finalized_sems = (
+            pd.to_numeric(finalized_rows["semester_no"], errors="coerce")
+            .dropna()
+            .astype(int)
+            .unique()
+        )
+        finalized_sems = [s for s in finalized_sems if s <= effective_current]
+        if not finalized_sems:
             return {
                 **base,
                 "readiness_status": "NO_DATA",
-                "reason": f"Student {student_id} has insufficient historical academic data for prediction.",
+                "reason": (
+                    f"Student {student_id} has no completed semester with a published "
+                    f"result yet, so a next-semester performance forecast is not possible."
+                ),
             }
-        T = effective_current if effective_current in available_sems else max(available_sems)
+        T = max(finalized_sems)
 
         row = ss[ss["semester_no"] == T].iloc[0]
 

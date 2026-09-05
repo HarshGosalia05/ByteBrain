@@ -57,16 +57,24 @@ export default async function ProfilePage() {
     .sort()
     .pop()
 
+  const completedSummaries = summaries.filter(
+    (item) =>
+      item.semester_percentage !== null &&
+      item.semester_percentage > 0 &&
+      item.sgpa > 0,
+  )
+
   const latestSummary =
-    summaries.length > 0
-      ? summaries.reduce((max, item) => (item.semester > max.semester ? item : max))
+    completedSummaries.length > 0
+      ? completedSummaries.reduce((max, item) => (item.semester > max.semester ? item : max))
       : null
-  const totalCredits = summaries.reduce((sum, item) => sum + item.total_credits_earned, 0)
+  const totalCredits = completedSummaries.reduce((sum, item) => sum + item.total_credits_earned, 0)
   const averageAttendance =
-    summaries.length > 0
-      ? summaries.reduce((sum, item) => sum + item.attendance_percentage, 0) / summaries.length
+    completedSummaries.length > 0
+      ? completedSummaries.reduce((sum, item) => sum + item.attendance_percentage, 0) /
+        completedSummaries.length
       : null
-  const totalBacklogs = summaries.reduce((sum, item) => sum + item.active_backlogs, 0)
+  const totalBacklogs = completedSummaries.reduce((sum, item) => sum + item.active_backlogs, 0)
 
   const fullName = `${profile.first_name} ${profile.last_name}`.trim()
 
@@ -105,9 +113,9 @@ export default async function ProfilePage() {
         />
         <StatCard
           label="Total credits"
-          value={summaries.length > 0 ? String(totalCredits) : "—"}
+          value={completedSummaries.length > 0 ? String(totalCredits) : "—"}
           icon={ListChecks}
-          hint={`Across ${summaries.length} semester${summaries.length === 1 ? "" : "s"}`}
+          hint={`Across ${completedSummaries.length} semester${completedSummaries.length === 1 ? "" : "s"}`}
           tone="success"
         />
         <StatCard
@@ -118,7 +126,7 @@ export default async function ProfilePage() {
         />
         <StatCard
           label="Total backlogs"
-          value={summaries.length > 0 ? String(totalBacklogs) : "—"}
+          value={completedSummaries.length > 0 ? String(totalBacklogs) : "—"}
           icon={TriangleAlert}
           hint="Cumulative"
           tone={totalBacklogs > 0 ? "warning" : "success"}
@@ -147,7 +155,7 @@ export default async function ProfilePage() {
             />
             <DetailRow
               label="Credits earned"
-              value={summaries.length > 0 ? String(totalCredits) : "—"}
+              value={completedSummaries.length > 0 ? String(totalCredits) : "—"}
             />
             <DetailRow
               label="Average attendance"
@@ -160,7 +168,7 @@ export default async function ProfilePage() {
       <section className="grid gap-4 lg:grid-cols-2" aria-label="Academic summary">
         <div className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
           <h3 className="mb-1 text-sm font-semibold">SGPA by semester</h3>          <p className="mb-4 text-xs text-muted-foreground">Grade point average per semester</p>
-          {summaries.length === 0 ? (
+          {completedSummaries.length === 0 ? (
             <EmptyState
               icon={GraduationCap}
               title="No semester summaries yet"
@@ -168,7 +176,7 @@ export default async function ProfilePage() {
             />
           ) : (
             <TrendChart
-              data={summaries.map((item) => ({
+              data={completedSummaries.map((item) => ({
                 semester: `Sem ${item.semester}`,
                 sgpa: item.sgpa,
               }))}
@@ -186,7 +194,7 @@ export default async function ProfilePage() {
               ? "Semester averages and subject-level attendance"
               : "Semester average attendance"}
           </p>
-          {summaries.length === 0 ? (
+          {completedSummaries.length === 0 ? (
             <EmptyState
               icon={CalendarCheck}
               title="No attendance records yet"
@@ -194,7 +202,7 @@ export default async function ProfilePage() {
             />
           ) : (
             <TrendChart
-              data={summaries.map((item) => ({
+              data={completedSummaries.map((item) => ({
                 semester: `Sem ${item.semester}`,
                 attendance: item.attendance_percentage,
               }))}

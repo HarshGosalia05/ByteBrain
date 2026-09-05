@@ -92,7 +92,11 @@ export function SemesterTrendChart({
   const actualPoints = history
     .filter(
       (p) =>
-        (p.semester_sgpa !== null || p.semester_percentage !== null) &&
+        // Only completed semesters (published result) are charted. Placeholder
+        // rows for an in-progress semester carry sgpa=0 / percentage=0 and
+        // would draw a misleading zero bar.
+        ((p.semester_sgpa !== null && p.semester_sgpa > 0) ||
+          (p.semester_percentage !== null && p.semester_percentage > 0)) &&
         (currentSemNo === null || p.semester_no !== currentSemNo),
     )
     .map((p) => ({
