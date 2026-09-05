@@ -431,12 +431,30 @@ class AdminRepository:
             "WHERE semester_no IS NOT NULL ORDER BY semester_no"
         )
         domains = await self._fetch(
-            "SELECT DISTINCT preferred_domain FROM career_preferences "
-            "WHERE preferred_domain IS NOT NULL AND preferred_domain != '' ORDER BY preferred_domain"
+            """
+            SELECT DISTINCT domain
+            FROM (
+                SELECT preferred_domain AS domain FROM career_preferences
+                WHERE preferred_domain IS NOT NULL AND preferred_domain != ''
+                UNION
+                SELECT primary_interest_domain AS domain FROM career_preferences_v2
+                WHERE primary_interest_domain IS NOT NULL AND primary_interest_domain != ''
+            ) cd
+            ORDER BY domain ASC
+            """
         )
         roles = await self._fetch(
-            "SELECT DISTINCT dream_job_role FROM career_preferences "
-            "WHERE dream_job_role IS NOT NULL AND dream_job_role != '' ORDER BY dream_job_role"
+            """
+            SELECT DISTINCT role
+            FROM (
+                SELECT dream_job_role AS role FROM career_preferences
+                WHERE dream_job_role IS NOT NULL AND dream_job_role != ''
+                UNION
+                SELECT preferred_role AS role FROM career_preferences_v2
+                WHERE preferred_role IS NOT NULL AND preferred_role != ''
+            ) cr
+            ORDER BY role ASC
+            """
         )
 
         if not admission_batches:
@@ -452,8 +470,8 @@ class AdminRepository:
             "departments": dept_list,
             "department_batches": department_batches,
             "semesters": [r["semester_no"] for r in semesters],
-            "preferred_domains": [r["preferred_domain"] for r in domains],
-            "dream_roles": [r["dream_job_role"] for r in roles],
+            "preferred_domains": [r["domain"] for r in domains],
+            "dream_roles": [r["role"] for r in roles],
         }
 
     # --- MD-03 Academic / Department / Subject intelligence ------------------
@@ -1176,6 +1194,13 @@ class AdminRepository:
         "attendance": "s.overall_attendance_percentage",
         "backlogs": "s.total_backlogs",
     }
+    STUDENT_SEMESTER_SORT_COLUMNS: Dict[str, str] = {
+        "name": "s.full_name",
+        "sgpa": "semf.semester_sgpa",
+        "percentage": "semf.semester_percentage",
+        "attendance": "semf.semester_attendance_percentage",
+        "backlogs": "semf.backlog_count",
+    }
     STUDENT_RISK_SEVERITY_SQL = (
         "CASE UPPER(sr.risk)"
         " WHEN 'CRITICAL' THEN 4 WHEN 'HIGH' THEN 3 WHEN 'MODERATE' THEN 2"
@@ -1209,10 +1234,14 @@ class AdminRepository:
         preferred domain, dream role (ILIKE).
         """
         direction = "DESC" if sort_dir == "desc" else "ASC"
+        semester_scoped = semester is not None
+        sort_columns = (
+            self.STUDENT_SEMESTER_SORT_COLUMNS if semester_scoped else self.STUDENT_SORT_COLUMNS
+        )
         if sort_by == "risk":
             order_expr = f"{self.STUDENT_RISK_SEVERITY_SQL} {direction}"
         else:
-            column = self.STUDENT_SORT_COLUMNS.get(sort_by, self.STUDENT_SORT_COLUMNS["name"])
+            column = sort_columns.get(sort_by, sort_columns["name"])
             order_expr = f"{column} {direction} NULLS LAST"
 
         args = (
@@ -1239,21 +1268,21 @@ class AdminRepository:
                 s.email,
                 s.department_code,
                 COALESCE(d.department_name, s.department_name) AS department_name,
-                s.current_semester AS semester,
-                s.current_academic_year AS academic_year,
-                s.latest_sgpa AS sgpa,
+                CASE WHEN semf.semester_no IS NULL THEN s.current_semester ELSE semf.semester_no END AS semester,
+                CASE WHEN semf.semester_no IS NULL THEN s.current_academic_year ELSE semf.academic_year END AS academic_year,
+                CASE WHEN semf.semester_no IS NULL THEN s.latest_sgpa ELSE semf.semester_sgpa END AS sgpa,
                 s.overall_cgpa AS cgpa,
-                s.overall_percentage AS percentage,
-                s.overall_attendance_percentage AS attendance,
-                s.total_backlogs AS backlogs,
+                CASE WHEN semf.semester_no IS NULL THEN s.overall_percentage ELSE semf.semester_percentage END AS percentage,
+                CASE WHEN semf.semester_no IS NULL THEN s.overall_attendance_percentage ELSE semf.semester_attendance_percentage END AS attendance,
+                CASE WHEN semf.semester_no IS NULL THEN s.total_backlogs ELSE semf.backlog_count END AS backlogs,
                 s.academic_standing,
                 sr.risk,
-                cp.preferred_domain,
-                cp.dream_job_role,
+                COALESCE(cp.preferred_domain, cv.primary_interest_domain) AS preferred_domain,
+                COALESCE(cp.dream_job_role, cv.preferred_role) AS dream_job_role,
                 cp.preferred_industry,
-                cp.preferred_work_mode,
-                cp.target_package_lpa,
-                cp.higher_studies_interest,
+                COALESCE(cp.preferred_work_mode, cv.preferred_work_mode) AS preferred_work_mode,
+                COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) AS target_package_lpa,
+                COALESCE(cp.higher_studies_interest, cv.higher_studies_intent) AS higher_studies_interest,
                 cp.entrepreneurship_interest,
                 cp.certification_interest,
                 cp.internship_completed,
@@ -1296,6 +1325,18 @@ class AdminRepository:
             ) cp ON TRUE
             LEFT JOIN LATERAL (
                 SELECT
+                    cv.primary_interest_domain,
+                    cv.preferred_role,
+                    cv.preferred_work_mode,
+                    cv.desired_salary_lpa,
+                    cv.higher_studies_intent,
+                    cv.career_role_category
+                FROM career_preferences_v2 cv
+                WHERE cv.student_id = s.student_id
+                LIMIT 1
+            ) cv ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT
                     ls.average_sleep_hours,
                     ls.daily_study_hours,
                     ls.screen_time_hours,
@@ -1311,8 +1352,17 @@ class AdminRepository:
                 ORDER BY ls.survey_date DESC NULLS LAST
                 LIMIT 1
             ) ls ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT ss2.semester_no, ss2.academic_year, ss2.semester_sgpa,
+                       ss2.semester_percentage, ss2.semester_attendance_percentage,
+                       ss2.backlog_count
+                FROM student_semester_summary ss2
+                WHERE ss2.student_id = s.student_id
+                  AND ss2.semester_no = $2
+                LIMIT 1
+            ) semf ON TRUE
             WHERE ($1::int IS NULL OR s.department_code = $1)
-              AND ($2::int IS NULL OR s.current_semester = $2)
+              AND ($2::int IS NULL OR semf.semester_no IS NOT NULL)
               AND {self._batch_sql("$3", "s")}
               AND ($4::text IS NULL OR UPPER(sr.risk) = $4)
               AND ($5::text IS NULL OR s.full_name ILIKE '%' || $5 || '%'
@@ -1320,20 +1370,20 @@ class AdminRepository:
                    OR s.email ILIKE '%' || $5 || '%'
                    OR s.student_id ILIKE '%' || $5 || '%'
                    OR COALESCE(d.department_name, s.department_name) ILIKE '%' || $5 || '%'
-                   OR cp.preferred_domain ILIKE '%' || $5 || '%'
-                   OR cp.dream_job_role ILIKE '%' || $5 || '%')
-              AND ($8::text IS NULL OR cp.preferred_domain = $8)
-              AND ($9::text IS NULL OR cp.dream_job_role = $9)
+                   OR COALESCE(cp.preferred_domain, cv.primary_interest_domain) ILIKE '%' || $5 || '%'
+                   OR COALESCE(cp.dream_job_role, cv.preferred_role) ILIKE '%' || $5 || '%')
+              AND ($8::text IS NULL OR COALESCE(cp.preferred_domain, cv.primary_interest_domain) = $8)
+              AND ($9::text IS NULL OR COALESCE(cp.dream_job_role, cv.preferred_role) = $9)
               AND ($10::text IS NULL OR cp.internship_completed = $10)
               AND ($11::text IS NULL OR cp.placement_readiness_level = $11)
               AND ($12::text IS NULL OR
                    ($12 = 'At Risk' AND (s.academic_standing = 'At Risk' OR UPPER(sr.risk) IN ('HIGH', 'CRITICAL'))) OR
                    ($12 = 'Ready' AND (s.academic_standing IS NULL OR s.academic_standing != 'At Risk')))
               AND ($13::text IS NULL OR
-                   ($13 = 'below_5' AND cp.target_package_lpa < 5.0) OR
-                   ($13 = '5_7' AND cp.target_package_lpa >= 5.0 AND cp.target_package_lpa <= 7.0) OR
-                   ($13 = '7_10' AND cp.target_package_lpa > 7.0 AND cp.target_package_lpa <= 10.0) OR
-                   ($13 = 'above_10' AND cp.target_package_lpa > 10.0))
+                   ($13 = 'below_5' AND COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) < 5.0) OR
+                   ($13 = '5_7' AND COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) >= 5.0 AND COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) <= 7.0) OR
+                   ($13 = '7_10' AND COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) > 7.0 AND COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) <= 10.0) OR
+                   ($13 = 'above_10' AND COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) > 10.0))
             ORDER BY {order_expr}, s.student_id ASC
             LIMIT $6::int OFFSET $7::int
         """
@@ -1361,8 +1411,20 @@ class AdminRepository:
                 ORDER BY cp.survey_date DESC NULLS LAST
                 LIMIT 1
             ) cp ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT
+                    cv.primary_interest_domain,
+                    cv.preferred_role,
+                    cv.desired_salary_lpa
+                FROM career_preferences_v2 cv
+                WHERE cv.student_id = s.student_id
+                LIMIT 1
+            ) cv ON TRUE
             WHERE ($1::int IS NULL OR s.department_code = $1)
-              AND ($2::int IS NULL OR s.current_semester = $2)
+              AND ($2::int IS NULL OR EXISTS (
+                    SELECT 1 FROM student_semester_summary semf
+                    WHERE semf.student_id = s.student_id AND semf.semester_no = $2
+              ))
               AND {self._batch_sql("$3", "s")}
               AND ($4::text IS NULL OR UPPER(sr.risk) = $4)
               AND ($5::text IS NULL OR s.full_name ILIKE '%' || $5 || '%'
@@ -1370,20 +1432,20 @@ class AdminRepository:
                    OR s.email ILIKE '%' || $5 || '%'
                    OR s.student_id ILIKE '%' || $5 || '%'
                    OR COALESCE(d.department_name, s.department_name) ILIKE '%' || $5 || '%'
-                   OR cp.preferred_domain ILIKE '%' || $5 || '%'
-                   OR cp.dream_job_role ILIKE '%' || $5 || '%')
-              AND ($6::text IS NULL OR cp.preferred_domain = $6)
-              AND ($7::text IS NULL OR cp.dream_job_role = $7)
+                   OR COALESCE(cp.preferred_domain, cv.primary_interest_domain) ILIKE '%' || $5 || '%'
+                   OR COALESCE(cp.dream_job_role, cv.preferred_role) ILIKE '%' || $5 || '%')
+              AND ($6::text IS NULL OR COALESCE(cp.preferred_domain, cv.primary_interest_domain) = $6)
+              AND ($7::text IS NULL OR COALESCE(cp.dream_job_role, cv.preferred_role) = $7)
               AND ($8::text IS NULL OR cp.internship_completed = $8)
               AND ($9::text IS NULL OR cp.placement_readiness_level = $9)
               AND ($10::text IS NULL OR
                    ($10 = 'At Risk' AND (s.academic_standing = 'At Risk' OR UPPER(sr.risk) IN ('HIGH', 'CRITICAL'))) OR
                    ($10 = 'Ready' AND (s.academic_standing IS NULL OR s.academic_standing != 'At Risk')))
               AND ($11::text IS NULL OR
-                   ($11 = 'below_5' AND cp.target_package_lpa < 5.0) OR
-                   ($11 = '5_7' AND cp.target_package_lpa >= 5.0 AND cp.target_package_lpa <= 7.0) OR
-                   ($11 = '7_10' AND cp.target_package_lpa > 7.0 AND cp.target_package_lpa <= 10.0) OR
-                   ($11 = 'above_10' AND cp.target_package_lpa > 10.0))
+                   ($11 = 'below_5' AND COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) < 5.0) OR
+                   ($11 = '5_7' AND COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) >= 5.0 AND COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) <= 7.0) OR
+                   ($11 = '7_10' AND COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) > 7.0 AND COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) <= 10.0) OR
+                   ($11 = 'above_10' AND COALESCE(cp.target_package_lpa, cv.desired_salary_lpa) > 10.0))
         """
         total_args = (
             department_code,

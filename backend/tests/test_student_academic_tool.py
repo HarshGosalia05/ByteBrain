@@ -393,6 +393,51 @@ class TestGrounding(unittest.TestCase):
         self.assertTrue(result.trend.available)
         self.assertEqual(result.trend.overall_direction, "improving")
 
+    def test_placeholder_semester_with_zero_result_is_not_completed(self):
+        # Semester 3 exists in the summary as a placeholder (0.0% / 0.0 SGPA)
+        # because the exam for that semester has NOT been taken yet. It must
+        # never be reported as the student's lowest / latest performance.
+        rows = [
+            summary_row(1, semester_percentage=85.0, sgpa=9.0),
+            summary_row(2, semester_percentage=90.0, sgpa=9.4),
+            summary_row(
+                3,
+                semester_percentage=0.0,
+                sgpa=0.0,
+                semester_total_marks=0,
+                semester_result="Pass",
+            ),
+        ]
+        conn = FakeConn(fetch_rows=rows, fetchrow_row=profile_row())
+        result = run(_service(conn).execute(student_id="STU-A"))
+
+        text = " ".join(result.signals.strong_areas + result.signals.attention_areas)
+        self.assertIn(
+            "Highest semester percentage: semester 2 (90.00%)",
+            " ".join(result.signals.strong_areas),
+        )
+        self.assertNotIn("semester 3", text)
+        self.assertNotIn("Low semester percentage", text)
+
+    def test_trend_points_exclude_unpublished_semester(self):
+        from app.services.student_analytics_rules import compute_trends
+
+        rows = [
+            summary_row(1, semester_percentage=85.0, sgpa=9.0),
+            summary_row(2, semester_percentage=90.0, sgpa=9.4),
+            summary_row(
+                3,
+                semester_percentage=0.0,
+                sgpa=0.0,
+                semester_total_marks=0,
+                semester_result="Pass",
+            ),
+        ]
+        trend = compute_trends(rows)
+        points = trend["points"]
+        self.assertEqual([p["semester"] for p in points], [1, 2])
+        self.assertEqual(trend["overall_direction"], "improving")
+
 
 class TestSecurityCapabilities(unittest.TestCase):
     def test_result_never_exposes_db_repo_or_session(self):

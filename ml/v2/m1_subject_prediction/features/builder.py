@@ -221,15 +221,20 @@ def _build_prior_aggregates(semester_summary: pd.DataFrame) -> pd.DataFrame:
     NaN is produced for semester 1 (no prior history) — handled by imputer.
     """
     ss = semester_summary.copy()
-    for col in ["semester_sgpa", "semester_attendance_percentage",
+    for col in ["semester_sgpa", "semester_percentage", "semester_attendance_percentage",
                 "sgpa_drift", "cumulative_backlog_events"]:
         ss[col] = pd.to_numeric(ss[col], errors="coerce")
+
+    # A semester counts as completed only when its result is published
+    # (sgpa > 0 AND percentage > 0). Placeholder rows for in-progress
+    # semesters use 0.0 for both and must not pollute prior-history features.
+    ss["_completed"] = (ss["semester_sgpa"] > 0) & (ss["semester_percentage"] > 0)
 
     results = []
     for student_id, grp in ss.sort_values("semester_no").groupby("student_id"):
         semesters = sorted(grp["semester_no"].unique())
         for sem_t in semesters:
-            prior = grp[grp["semester_no"] < sem_t]
+            prior = grp[(grp["semester_no"] < sem_t) & grp["_completed"]]
             n_prior = len(prior)
             if n_prior == 0:
                 row = {

@@ -148,6 +148,7 @@ _INFER_PRIOR_SQL = """
 SELECT
     ss.semester_no,
     ss.semester_sgpa,
+    ss.semester_percentage,
     ss.semester_attendance_percentage,
     ss.sgpa_drift,
     ss.cumulative_backlog_events
@@ -358,11 +359,16 @@ class M1V2Predictor:
         else:
             life_current = None
 
-        # Fetch prior semester aggregates
+        # Fetch prior semester aggregates (only COMPLETED semesters with a
+        # published result contribute: sgpa > 0 AND percentage > 0).
         prior_rows = await conn.fetch(_INFER_PRIOR_SQL, student_id)
         prior_df = pd.DataFrame([dict(r) for r in prior_rows]) if prior_rows else pd.DataFrame()
         if len(prior_df) > 0:
-            hist = prior_df[prior_df["semester_no"] < current_semester]
+            hist = prior_df[
+                (prior_df["semester_no"] < current_semester)
+                & (pd.to_numeric(prior_df["semester_sgpa"], errors="coerce") > 0)
+                & (pd.to_numeric(prior_df["semester_percentage"], errors="coerce") > 0)
+            ] if "semester_percentage" in prior_df.columns else pd.DataFrame()
             if len(hist) > 0:
                 last_hist = hist.sort_values("semester_no").iloc[-1]
                 prior_avg_sgpa = float(hist["semester_sgpa"].mean()) if "semester_sgpa" in hist else np.nan
