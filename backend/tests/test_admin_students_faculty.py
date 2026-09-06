@@ -20,6 +20,7 @@ from decimal import Decimal
 from datetime import datetime, timezone
 from fastapi import HTTPException
 from app.schemas.admin_students_faculty import (
+    AdminFacultyProfileResponse,
     AdminFacultyResponse,
     AdminStudentsResponse,
 )
@@ -224,6 +225,57 @@ def _default_responses(overrides=None):
             "internship_completed": "Yes",
             "target_package_lpa": Decimal("8.5"),
         },
+        # ---- Faculty detail profile ----
+        ("fetchrow", "FROM faculty f\n            LEFT JOIN departments d ON d.dept_code = f.department_code\n            WHERE f.faculty_id = $1"): {
+            "faculty_id": "FAC000001",
+            "faculty_code": "FAC-CSE-001",
+            "full_name": "Dr. A Sharma",
+            "gender": "Male",
+            "department_code": 1,
+            "department_name": "Computer Science and Engineering",
+            "designation": "Professor",
+            "qualification": "Ph.D",
+            "specialization": "Distributed Systems",
+            "experience_years": 12,
+            "email": "sharma@example.edu",
+            "phone_number": "9876543210",
+            "joining_date": "2018-07-01",
+            "employment_type": "Full Time",
+            "status": "Active",
+        },
+        ("fetch", "FROM student_subject_enrollment sse\n            JOIN subjects sub ON sub.subject_id = sse.subject_id"): [
+            {
+                "subject_id": "SUB001",
+                "subject_code": "CS101",
+                "subject_name": "Intro to CS",
+                "department_name": "CSE",
+                "semester_no": 1,
+                "academic_year": "2026-27",
+                "student_count": 60,
+                "total_classes": 45,
+                "avg_attendance": Decimal("88.50"),
+                "avg_marks_pct": Decimal("76.20"),
+                "at_risk_count": 2,
+            }
+        ],
+        ("fetchrow", "FROM offering o\n            """,): {
+            "total_subjects": 1,
+            "total_semesters": 1,
+            "active_students": 60,
+            "total_students_handled": 60,
+            "workload_hours": Decimal("3.00"),
+        },
+        ("fetchrow", "SELECT \n                ROUND(AVG(p.percentage), 2) AS overall_avg_marks"): {
+            "overall_avg_marks": Decimal("76.20"),
+            "overall_avg_attendance": Decimal("88.50"),
+            "total_at_risk_count": 2,
+            "total_evaluated_records": 60,
+        },
+        ("fetch", "GROUP BY p.grade\n            ORDER BY count DESC"): [
+            {"grade": "A", "count": 40},
+            {"grade": "B", "count": 18},
+            {"grade": "F", "count": 2},
+        ],
     }
     if overrides:
         responses.update(overrides)
@@ -400,6 +452,34 @@ class AdminFacultyOverviewServiceTests(unittest.TestCase):
         self.assertEqual(response.by_department, [])
         self.assertEqual(response.by_designation, [])
         self.assertEqual(response.faculty, [])
+
+    def test_faculty_profile_success(self):
+        service, conn = _service()
+        response = run(service.get_faculty_profile("FAC000001"))
+        self.assertIsInstance(response, AdminFacultyProfileResponse)
+        self.assertEqual(response.faculty.faculty_id, "FAC000001")
+        self.assertEqual(response.faculty.full_name, "Dr. A Sharma")
+        self.assertEqual(response.faculty.designation, "Professor")
+        self.assertEqual(response.faculty.department_name, "Computer Science and Engineering")
+        self.assertEqual(response.teaching_overview.total_subjects, 1)
+        self.assertEqual(response.teaching_overview.total_semesters, 1)
+        self.assertEqual(response.teaching_overview.active_students, 60)
+        self.assertEqual(response.teaching_overview.workload_hours, 3.0)
+        self.assertEqual(len(response.subjects), 1)
+        self.assertEqual(response.subjects[0].subject_code, "CS101")
+        self.assertEqual(response.insights.overall_avg_marks, 76.20)
+        self.assertEqual(response.insights.overall_avg_attendance, 88.50)
+        self.assertEqual(response.insights.total_at_risk_count, 2)
+        self.assertEqual(len(response.insights.grade_distribution), 3)
+
+    def test_faculty_profile_not_found(self):
+        overrides = {
+            ("fetchrow", "FROM faculty f\n            LEFT JOIN departments d ON d.dept_code = f.department_code\n            WHERE f.faculty_id = $1"): None,
+        }
+        service, _ = _service(overrides)
+        with self.assertRaises(HTTPException) as ctx:
+            run(service.get_faculty_profile("NONEXISTENT"))
+        self.assertEqual(ctx.exception.status_code, 404)
 
 
 if __name__ == "__main__":

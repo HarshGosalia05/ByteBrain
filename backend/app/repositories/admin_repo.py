@@ -1561,6 +1561,158 @@ class AdminRepository:
             (weeks,),
         )
 
+    async def get_faculty_profile(
+        self, faculty_id: str, weeks: float
+    ) -> Optional[Dict[str, Any]]:
+        """Admin Faculty Detail Profile — personal info, teaching allocations, and academic insights."""
+        faculty = await self._fetchrow(
+            """
+            SELECT f.faculty_id, f.faculty_code, f.full_name, f.gender,
+                   f.department_code, COALESCE(d.department_name, f.department_name) AS department_name,
+                   f.designation, f.qualification, f.specialization,
+                   f.experience_years, f.email, f.phone_number,
+                   f.joining_date, f.employment_type, f.status
+            FROM faculty f
+            LEFT JOIN departments d ON d.dept_code = f.department_code
+            WHERE f.faculty_id = $1
+            """,
+            (faculty_id,),
+        )
+        if not faculty:
+            return None
+
+        # Subject offerings and classes taught by this faculty member
+        subjects = await self._fetch(
+            """
+            SELECT 
+                sse.subject_id,
+                sub.subject_code,
+                sub.subject_name,
+                COALESCE(sub.department_name, d.department_name, 'General') AS department_name,
+                sse.semester_no,
+                sse.academic_year,
+                COUNT(DISTINCT sse.student_id) AS student_count,
+                MAX(a.total_classes) AS total_classes,
+                ROUND(AVG(a.attendance_percentage), 2) AS avg_attendance,
+                ROUND(AVG(p.percentage), 2) AS avg_marks_pct,
+                COUNT(CASE WHEN p.grade IN ('F', 'FF') OR p.percentage < 40 THEN 1 END) AS at_risk_count
+            FROM student_subject_enrollment sse
+            JOIN subjects sub ON sub.subject_id = sse.subject_id
+            LEFT JOIN departments d ON d.dept_code = sub.department_code
+            LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_subject_performance p ON p.student_id = sse.student_id AND p.subject_id = sse.subject_id AND p.semester_no = sse.semester_no
+            WHERE sse.faculty_id = $1
+            GROUP BY sse.subject_id, sub.subject_code, sub.subject_name, sub.department_name, d.department_name, sse.semester_no, sse.academic_year
+            ORDER BY sse.academic_year DESC, sse.semester_no ASC, sub.subject_name ASC
+            """,
+            (faculty_id,),
+        )
+
+        workload_row = await self._fetchrow(
+            """
+            WITH offering AS (
+                SELECT
+                    sse.subject_id,
+                    sse.semester_no,
+                    sse.academic_year,
+                    MAX(a.total_classes) AS classes
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+                WHERE sse.faculty_id = $1 AND sse.enrollment_status = 'Active'
+                GROUP BY sse.subject_id, sse.semester_no, sse.academic_year
+            )
+            SELECT
+                COUNT(DISTINCT o.subject_id) AS total_subjects,
+                COUNT(DISTINCT o.semester_no) AS total_semesters,
+                (SELECT COUNT(DISTINCT sse.student_id)
+                 FROM student_subject_enrollment sse
+                 WHERE sse.faculty_id = $1 AND sse.enrollment_status = 'Active') AS active_students,
+                (SELECT COUNT(DISTINCT sse.student_id)
+                 FROM student_subject_enrollment sse
+                 WHERE sse.faculty_id = $1) AS total_students_handled,
+                ROUND(
+                    CASE WHEN COUNT(o.subject_id) > 0
+                         THEN COALESCE(SUM(o.classes), 0)::numeric * 1.0 / $2::numeric
+                         ELSE NULL END,
+                    2
+                ) AS workload_hours
+            FROM offering o
+            """,
+            (faculty_id, weeks),
+        )
+
+        insights_row = await self._fetchrow(
+            """
+            SELECT 
+                ROUND(AVG(p.percentage), 2) AS overall_avg_marks,
+                ROUND(AVG(a.attendance_percentage), 2) AS overall_avg_attendance,
+                COUNT(CASE WHEN p.grade IN ('F', 'FF') OR p.percentage < 40 THEN 1 END) AS total_at_risk_count,
+                COUNT(p.performance_id) AS total_evaluated_records
+            FROM student_subject_enrollment sse
+            LEFT JOIN student_subject_performance p ON p.student_id = sse.student_id AND p.subject_id = sse.subject_id AND p.semester_no = sse.semester_no
+            LEFT JOIN attendance a ON a.enrollment_record_id = sse.enrollment_record_id
+            WHERE sse.faculty_id = $1
+            """,
+            (faculty_id,),
+        )
+
+        grades = await self._fetch(
+            """
+            SELECT p.grade, COUNT(*) AS count
+            FROM student_subject_enrollment sse
+            JOIN student_subject_performance p ON p.student_id = sse.student_id AND p.subject_id = sse.subject_id AND p.semester_no = sse.semester_no
+            WHERE sse.faculty_id = $1 AND p.grade IS NOT NULL
+            GROUP BY p.grade
+            ORDER BY count DESC
+            """,
+            (faculty_id,),
+        )
+
+        assigned_departments = sorted(list({s["department_name"] for s in subjects if s.get("department_name")}))
+        assigned_semesters = sorted(list({int(s["semester_no"]) for s in subjects if s.get("semester_no") is not None}))
+
+        faculty_dict = dict(faculty)
+        if faculty_dict.get("joining_date"):
+            faculty_dict["joining_date"] = str(faculty_dict["joining_date"])
+        if faculty_dict.get("phone_number"):
+            faculty_dict["phone_number"] = str(faculty_dict["phone_number"])
+
+        return {
+            "faculty": faculty_dict,
+            "teaching_overview": {
+                "total_subjects": int(workload_row["total_subjects"] or 0) if workload_row else 0,
+                "total_semesters": int(workload_row["total_semesters"] or 0) if workload_row else 0,
+                "active_students": int(workload_row["active_students"] or 0) if workload_row else 0,
+                "total_students_handled": int(workload_row["total_students_handled"] or 0) if workload_row else 0,
+                "workload_hours": float(workload_row["workload_hours"]) if workload_row and workload_row.get("workload_hours") is not None else None,
+                "assigned_departments": assigned_departments,
+                "assigned_semesters": assigned_semesters,
+            },
+            "subjects": [
+                {
+                    "subject_id": s["subject_id"],
+                    "subject_code": s["subject_code"],
+                    "subject_name": s["subject_name"],
+                    "department_name": s["department_name"],
+                    "semester_no": s["semester_no"],
+                    "academic_year": s["academic_year"],
+                    "student_count": int(s["student_count"] or 0),
+                    "total_classes": int(s["total_classes"]) if s.get("total_classes") is not None else None,
+                    "avg_attendance": float(s["avg_attendance"]) if s.get("avg_attendance") is not None else None,
+                    "avg_marks_pct": float(s["avg_marks_pct"]) if s.get("avg_marks_pct") is not None else None,
+                    "at_risk_count": int(s["at_risk_count"] or 0),
+                }
+                for s in subjects
+            ],
+            "insights": {
+                "overall_avg_marks": float(insights_row["overall_avg_marks"]) if insights_row and insights_row.get("overall_avg_marks") is not None else None,
+                "overall_avg_attendance": float(insights_row["overall_avg_attendance"]) if insights_row and insights_row.get("overall_avg_attendance") is not None else None,
+                "total_at_risk_count": int(insights_row["total_at_risk_count"] or 0) if insights_row else 0,
+                "total_evaluated_records": int(insights_row["total_evaluated_records"] or 0) if insights_row else 0,
+                "grade_distribution": [{"grade": g["grade"], "count": int(g["count"])} for g in grades],
+            },
+        }
+
     # --- MD-07 Admin Notifications & Executive Insights -----------------------
 
     async def create_announcement(

@@ -10,7 +10,7 @@ Faculty workload reuses the existing faculty workload calculation
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
@@ -116,4 +116,77 @@ class AdminFacultyResponse(BaseModel):
     by_department: List[AdminFacultyByDepartmentItem] = []
     by_designation: List[AdminFacultyByDesignationItem] = []
     faculty: List[AdminFacultyRow] = []
+    generated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Admin Faculty Detail Profile
+# ---------------------------------------------------------------------------
+
+
+class AdminFacultyDetail(BaseModel):
+    """Authoritative faculty personal and employment details."""
+
+    faculty_id: str
+    faculty_code: Optional[str] = None
+    full_name: str
+    gender: Optional[str] = None
+    department_code: int
+    department_name: str
+    designation: Optional[str] = None
+    qualification: Optional[str] = None
+    specialization: Optional[str] = None
+    experience_years: Optional[int] = None
+    email: Optional[str] = None
+    phone_number: Optional[Union[str, int]] = None
+    joining_date: Optional[str] = None
+    employment_type: Optional[str] = None
+    status: Optional[str] = None
+
+
+class AdminFacultyTeachingOverview(BaseModel):
+    """Teaching workload and assignment summary."""
+
+    total_subjects: int = 0
+    total_semesters: int = 0
+    active_students: int = 0
+    total_students_handled: int = 0
+    workload_hours: Optional[float] = None
+    assigned_departments: List[str] = []
+    assigned_semesters: List[int] = []
+
+
+class AdminFacultySubjectItem(BaseModel):
+    """Subject/class offering details for this faculty member."""
+
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    department_name: str
+    semester_no: Optional[int] = None
+    academic_year: Optional[str] = None
+    student_count: int = 0
+    total_classes: Optional[int] = None
+    avg_attendance: Optional[float] = None
+    avg_marks_pct: Optional[float] = None
+    at_risk_count: int = 0
+
+
+class AdminFacultyAcademicInsights(BaseModel):
+    """Aggregated academic performance and risk insights across taught classes."""
+
+    overall_avg_marks: Optional[float] = None
+    overall_avg_attendance: Optional[float] = None
+    total_at_risk_count: int = 0
+    total_evaluated_records: int = 0
+    grade_distribution: List[Dict[str, Any]] = []
+
+
+class AdminFacultyProfileResponse(BaseModel):
+    """Complete response payload for Admin Faculty Profile."""
+
+    faculty: AdminFacultyDetail
+    teaching_overview: AdminFacultyTeachingOverview
+    subjects: List[AdminFacultySubjectItem] = []
+    insights: AdminFacultyAcademicInsights
     generated_at: datetime

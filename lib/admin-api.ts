@@ -750,6 +750,73 @@ export function getAdminFaculty(): Promise<BffResult<AdminFacultyData>> {
   return callFastapi<AdminFacultyData>("faculty", BFF_TTL_MS)
 }
 
+export type AdminFacultyDetail = {
+  faculty_id: string
+  faculty_code: string | null
+  full_name: string
+  gender: string | null
+  department_code: number
+  department_name: string
+  designation: string | null
+  qualification: string | null
+  specialization: string | null
+  experience_years: number | null
+  email: string | null
+  phone_number: string | number | null
+  joining_date: string | null
+  employment_type: string | null
+  status: string | null
+}
+
+export type AdminFacultyTeachingOverview = {
+  total_subjects: number
+  total_semesters: number
+  active_students: number
+  total_students_handled: number
+  workload_hours: number | null
+  assigned_departments: string[]
+  assigned_semesters: number[]
+}
+
+export type AdminFacultySubjectItem = {
+  subject_id: string
+  subject_code: string
+  subject_name: string
+  department_name: string
+  semester_no: number | null
+  academic_year: string | null
+  student_count: number
+  total_classes: number | null
+  avg_attendance: number | null
+  avg_marks_pct: number | null
+  at_risk_count: number
+}
+
+export type AdminFacultyAcademicInsights = {
+  overall_avg_marks: number | null
+  overall_avg_attendance: number | null
+  total_at_risk_count: number
+  total_evaluated_records: number
+  grade_distribution: Array<{ grade: string; count: number }>
+}
+
+export type AdminFacultyProfileData = {
+  faculty: AdminFacultyDetail
+  teaching_overview: AdminFacultyTeachingOverview
+  subjects: AdminFacultySubjectItem[]
+  insights: AdminFacultyAcademicInsights
+  generated_at: string
+}
+
+export function getAdminFacultyProfile(
+  facultyId: string,
+): Promise<BffResult<AdminFacultyProfileData>> {
+  return callFastapi<AdminFacultyProfileData>(
+    `faculty/${encodeURIComponent(facultyId)}`,
+    BFF_TTL_MS,
+  )
+}
+
 // ---------------------------------------------------------------------------
 // MD-07 â€” Admin Notifications, Announcements & Executive Insights
 // ---------------------------------------------------------------------------

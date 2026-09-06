@@ -779,12 +779,13 @@ export async function getDashboardData(): Promise<BffResult<DashboardData>> {
   if (!summary.ok) return summary
   if (!performance.ok) return performance
 
+  const summariesWithSgpa = summary.data.summaries.filter((item) => item.sgpa > 0)
   const latestSummary =
-    summary.data.summaries.length > 0
-      ? summary.data.summaries.reduce((max, item) =>
-        item.semester > max.semester ? item : max,
-      )
-      : null
+    summariesWithSgpa.length > 0
+      ? summariesWithSgpa.reduce((max, item) => (item.semester > max.semester ? item : max))
+      : summary.data.summaries.length > 0
+        ? summary.data.summaries.reduce((max, item) => (item.semester > max.semester ? item : max))
+        : null
   const currentSemester = profile.data.current_semester
   const fetchedAt = [profile.fetchedAt, summary.fetchedAt, performance.fetchedAt].sort().pop()!
 

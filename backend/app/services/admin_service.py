@@ -60,11 +60,16 @@ from app.schemas.admin_dashboard import (
     RiskDistributionItem,
 )
 from app.schemas.admin_students_faculty import (
+    AdminFacultyAcademicInsights,
     AdminFacultyByDepartmentItem,
     AdminFacultyByDesignationItem,
+    AdminFacultyDetail,
     AdminFacultyKpis,
+    AdminFacultyProfileResponse,
     AdminFacultyResponse,
     AdminFacultyRow,
+    AdminFacultySubjectItem,
+    AdminFacultyTeachingOverview,
     AdminStudentRow,
     AdminStudentsResponse,
 )
@@ -1191,6 +1196,78 @@ class AdminService:
             by_department=by_department,
             by_designation=by_designation,
             faculty=faculty,
+            generated_at=datetime.now(timezone.utc),
+        )
+
+    async def get_faculty_profile(self, faculty_id: str) -> AdminFacultyProfileResponse:
+        """MD-05 Admin Faculty Detail Profile — comprehensive view of a single faculty member."""
+        data = await self.repo.get_faculty_profile(
+            faculty_id, weeks=settings.WORKLOAD_WEEKS_PER_SEMESTER
+        )
+        if not data:
+            raise HTTPException(status_code=404, detail="Faculty not found")
+
+        fac = data["faculty"]
+        f_detail = AdminFacultyDetail(
+            faculty_id=fac["faculty_id"],
+            faculty_code=fac.get("faculty_code"),
+            full_name=fac.get("full_name") or "",
+            gender=fac.get("gender"),
+            department_code=fac.get("department_code"),
+            department_name=fac.get("department_name") or "",
+            designation=fac.get("designation"),
+            qualification=fac.get("qualification"),
+            specialization=fac.get("specialization"),
+            experience_years=fac.get("experience_years"),
+            email=fac.get("email"),
+            phone_number=fac.get("phone_number"),
+            joining_date=fac.get("joining_date"),
+            employment_type=fac.get("employment_type"),
+            status=fac.get("status"),
+        )
+
+        overview = data["teaching_overview"]
+        t_overview = AdminFacultyTeachingOverview(
+            total_subjects=overview["total_subjects"],
+            total_semesters=overview["total_semesters"],
+            active_students=overview["active_students"],
+            total_students_handled=overview["total_students_handled"],
+            workload_hours=overview["workload_hours"],
+            assigned_departments=overview["assigned_departments"],
+            assigned_semesters=overview["assigned_semesters"],
+        )
+
+        subjects = [
+            AdminFacultySubjectItem(
+                subject_id=s["subject_id"],
+                subject_code=s["subject_code"],
+                subject_name=s["subject_name"],
+                department_name=s["department_name"],
+                semester_no=s["semester_no"],
+                academic_year=s["academic_year"],
+                student_count=s["student_count"],
+                total_classes=s["total_classes"],
+                avg_attendance=s["avg_attendance"],
+                avg_marks_pct=s["avg_marks_pct"],
+                at_risk_count=s["at_risk_count"],
+            )
+            for s in data["subjects"]
+        ]
+
+        insights_data = data["insights"]
+        insights = AdminFacultyAcademicInsights(
+            overall_avg_marks=insights_data["overall_avg_marks"],
+            overall_avg_attendance=insights_data["overall_avg_attendance"],
+            total_at_risk_count=insights_data["total_at_risk_count"],
+            total_evaluated_records=insights_data["total_evaluated_records"],
+            grade_distribution=insights_data["grade_distribution"],
+        )
+
+        return AdminFacultyProfileResponse(
+            faculty=f_detail,
+            teaching_overview=t_overview,
+            subjects=subjects,
+            insights=insights,
             generated_at=datetime.now(timezone.utc),
         )
 
