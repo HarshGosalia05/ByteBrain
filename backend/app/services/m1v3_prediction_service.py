@@ -5,8 +5,7 @@ FastAPI backend. Uses real production data from the database (read-only).
 
 PROVENANCE NOTE: This model was trained on SYNTHETIC data generated for
 demonstration purposes. Predictions should NOT be treated as validated
-real-world forecasts. The training_data_provenance field in the response
-indicates this clearly.
+real-world forecasts. The note field in the response indicates this clearly.
 
 The 8 features and their exact production sources:
   1. internal_marks       -> student_subject_performance.internal_marks
@@ -139,11 +138,6 @@ class M1V3PredictionService:
 
         self._guard_readiness(result, student_id)
         result["model_id"] = "m1_v3"
-        result["training_data_provenance"] = (
-            "synthetic_demonstration — this model was trained on synthetically "
-            "generated data for demonstration purposes and should not be treated "
-            "as a validated real-world prediction."
-        )
         return result
 
     @staticmethod

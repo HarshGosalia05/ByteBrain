@@ -42,6 +42,32 @@ export type M1V3PredictionData = {
   note: string | null
 }
 
+// The M1 V3 model predicts end-sem marks on the 0-70 scale (TARGET_MAX in the
+// backend predictor). The "Current" tile shows the student's verified mid-sem
+// marks stored in student_subject_performance.mid_sem_marks, which use a
+// 0-50 scale. The two scales must never be subtracted or shown with a shared
+// denominator.
+export const M1V3_PREDICTED_MAX = 70
+export const M1V3_MID_SEM_MAX = 50
+
+// The predicted end-sem mark is rendered verbatim from the M1 V3 model output.
+export function m1V3PredictedEndSem(item: M1V3SubjectPrediction): number {
+  return item.predicted_end_sem_marks
+}
+
+// The "Current" tile is sourced exclusively from the authenticated student's
+// verified mid-sem marks (input_features.mid_sem_marks) on their raw 0-50
+// scale. No prediction, M2, percentage, SGPA, or internal marks are used.
+// There is deliberately no delta helper: predicted (/70) and current (/50)
+// share no denominator.
+export function m1V3CurrentMidSem(item: M1V3SubjectPrediction): {
+  value: number | null
+  max: number
+} {
+  const mid = item.input_features.mid_sem_marks
+  return { value: mid ?? null, max: M1V3_MID_SEM_MAX }
+}
+
 // Shared grade tone mapping (same logic as M1 V2).
 export function m1V3GradeTone(
   band: string,

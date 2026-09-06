@@ -2,7 +2,9 @@ import { BookOpen, CircleAlert } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import {
+  m1V3CurrentMidSem,
   m1V3GradeTone,
+  m1V3PredictedEndSem,
   type M1V3PredictionData,
   type M1V3SubjectPrediction,
 } from "@/lib/m1v3-prediction"
@@ -11,13 +13,8 @@ import { ModelCard } from "./model-card"
 
 function SubjectTile({ item }: { item: M1V3SubjectPrediction }) {
   const displayName = item.subject_name || item.subject_id
-  const currentInternal =
-    item.input_features.internal_marks !== null &&
-    item.input_features.internal_marks !== undefined
-      ? item.input_features.internal_marks
-      : null
-  const diff =
-    currentInternal !== null ? item.predicted_end_sem_marks - currentInternal : null
+  const predicted = m1V3PredictedEndSem(item)
+  const current = m1V3CurrentMidSem(item)
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-foreground/10 bg-background/40 p-4">
@@ -37,7 +34,7 @@ function SubjectTile({ item }: { item: M1V3SubjectPrediction }) {
             Predicted
           </p>
           <p className="text-2xl font-bold tabular-nums">
-            {item.predicted_end_sem_marks.toFixed(1)}
+            {predicted.toFixed(1)}
             <span className="text-sm font-normal text-muted-foreground"> / {item.target_max}</span>
           </p>
           {item.grade_label && (
@@ -49,18 +46,11 @@ function SubjectTile({ item }: { item: M1V3SubjectPrediction }) {
             Current
           </p>
           <p className="text-2xl font-semibold tabular-nums">
-            {currentInternal !== null ? currentInternal.toFixed(1) : "—"}
-            {currentInternal !== null && (
-              <span className="text-sm font-normal text-muted-foreground"> / {item.target_max}</span>
+            {current.value !== null ? current.value.toFixed(1) : "—"}
+            {current.value !== null && (
+              <span className="text-sm font-normal text-muted-foreground"> / {current.max}</span>
             )}
           </p>
-          {diff !== null && (
-            <p
-              className={`text-xs font-medium tabular-nums ${diff >= 0 ? "text-success" : "text-destructive"}`}
-            >
-              {diff >= 0 ? "▲" : "▼"} {Math.abs(diff).toFixed(1)}
-            </p>
-          )}
         </div>
       </div>
     </div>
