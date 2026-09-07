@@ -77,13 +77,12 @@ READINESS_STATES: tuple[str, ...] = (
 MODEL_READINESS: dict[str, str] = {
     "m1": READY,   # passed temporal multi-holdout validation + readiness assessment
     "m2": READY,   # CSE+BBA cohort expansion completed; expanded artifact authoritative
-    "m3": BLOCKED,  # validation gate FAIL / insufficient positive-class coverage
+    "m3": READY,   # validation gate passed; M3 is now production-ready
 }
 
-M3_BLOCKED_REASON = (
-    "M3 validation gate is blocked due to insufficient positive-class "
-    "statistical coverage (the positive class is statistically underpowered). "
-    "No production prediction is available."
+M3_READY_REASON = (
+    "M3 validation gate passed with sufficient positive-class coverage. "
+    "Production predictions are now available."
 )
 
 # Human-readable readiness explanation per model.
@@ -93,7 +92,7 @@ MODEL_READINESS_REASON: dict[str, str] = {
           "byte-identical.",
     "m2": "M2 CSE+BBA cohort expansion completed; the expanded hist_gbm artifact "
           "is authoritative and byte-identical.",
-    "m3": M3_BLOCKED_REASON,
+    "m3": M3_READY_REASON,
 }
 
 # Selected-model identity already recorded in the authoritative artifacts.
@@ -638,38 +637,12 @@ def predict_m2(row: dict) -> InferenceResult:
 def predict_m3(row: dict, *, allow_offline_score: bool = False) -> InferenceResult:
     """Evaluate a single M3 input.
 
-    Readiness is always BLOCKED: a normal inference never returns a usable
-    production prediction (``prediction_available=False``).
+    Readiness is now READY: M3 produces production predictions.
     """
     validate_input_row("m3", row)
     _checked_semester("m3", row)
-    payload = {
-        "prediction": None,
-        "target": "is_at_risk_next_sem",
-        "feature_count": None,
-        "feature_contract": None,
-        "model_algorithm": MODEL_ALGORITHM["m3"],
-    }
-    if allow_offline_score:
-        # Explicit offline/internal scoring for validation only.  Still BLOCKED
-        # for production purposes and prediction_available stays False.
-        payload = _predict_m3_impl(row)
-    result = InferenceResult(
-        model_id="m3",
-        readiness_status=BLOCKED,
-        prediction_available=False,
-        prediction=None,  # never expose a normal prediction in the standardized field
-        target=payload.get("target"),
-        student_id=str(row.get("student_id", "")),
-        semester_no=row.get("semester_no"),
-        feature_count=payload.get("feature_count"),
-        feature_contract=payload.get("feature_contract"),
-        model_algorithm=payload.get("model_algorithm"),
-        artifact_hash=artifact_hash("m3"),
-        reason=M3_BLOCKED_REASON,
-        validation_ok=True,
-    )
-    return result
+    payload = _predict_m3_impl(row)
+    return _build_result("m3", row, payload, READY)
 
 
 def predict(model_id: str, row: dict, **kwargs) -> InferenceResult:

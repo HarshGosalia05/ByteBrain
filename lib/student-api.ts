@@ -432,6 +432,7 @@ async function callApiV1<T>(
   options?: {
     useCache?: boolean
     query?: Record<string, string | number | null | undefined>
+    timeoutMs?: number
   },
 ): Promise<BffResult<T>> {
   const auth = await requireStudentApiAccess()
@@ -447,6 +448,7 @@ async function callApiV1<T>(
     `${user.student_id}:${pathWithQuery}`,
     ttlMs,
     options?.useCache !== false,
+    options?.timeoutMs,
   )
 }
 
@@ -632,6 +634,7 @@ export function getStudentMlInsights(): Promise<BffResult<StudentMlInsights>> {
   return callApiV1<StudentMlInsights>(
     (studentId) => `/predict/insights/${encodeURIComponent(studentId)}`,
     BFF_TTL_MS,
+    { timeoutMs: 30000 },
   )
 }
 

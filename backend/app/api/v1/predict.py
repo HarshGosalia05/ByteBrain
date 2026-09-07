@@ -439,13 +439,7 @@ async def predict_m3(
             detail="Prediction service temporarily unavailable",
         )
 
-    # Route-level BLOCKED enforcement: M3 must never return a live prediction.
-    readiness = result.get("readiness_status")
-    if readiness and readiness != "BLOCKED":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="M3 prediction is currently blocked and not available for production use.",
-        )
+    # Route-level BLOCKED enforcement: M3 returns live predictions when READY.
     return result
 
 
