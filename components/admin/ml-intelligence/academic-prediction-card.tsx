@@ -24,6 +24,8 @@ export function AcademicPredictionCard({ data }: { data: AcademicPredictionIntel
       : "—"
 
   const hasM2Data = m2.department_performance_distribution.length > 0
+  const sgpaTotal = m2.sgpa_distribution.reduce((sum, d) => sum + d.count, 0)
+  const pctTotal = m2.percentage_distribution.reduce((sum, d) => sum + d.count, 0)
 
   return (
     <div className="flex flex-col gap-6">
@@ -145,7 +147,7 @@ export function AcademicPredictionCard({ data }: { data: AcademicPredictionIntel
         </div>
       </ChartCard>
 
-      {/* M2: SGPA Distribution & Department Performance */}
+      {/* M2: SGPA Distribution & Percentage Distribution */}
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard
           title="Predicted Next-Semester SGPA Distribution (M2)"
@@ -156,70 +158,93 @@ export function AcademicPredictionCard({ data }: { data: AcademicPredictionIntel
           emptyDescription="No M2 next-semester predictions found for current scope."
         >
           <div className="space-y-3">
-            {m2.sgpa_distribution.map((dist) => (
-              <div key={dist.band} className="space-y-1">
-                <div className="flex justify-between text-xs font-medium">
-                  <span>Band: {dist.band}</span>
-                  <span className="text-muted-foreground">{dist.count} student(s)</span>
+            {m2.sgpa_distribution.map((dist) => {
+              const pct = sgpaTotal > 0 ? (dist.count / sgpaTotal) * 100 : 0
+              return (
+                <div key={dist.band} className="space-y-1">
+                  <div className="flex justify-between text-xs font-medium">
+                    <span>Band: {dist.band}</span>
+                    <span className="text-muted-foreground">{dist.count} student(s)</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${Math.min(100, pct)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all"
-                    style={{
-                      width: `${
-                        data.m2.predicted_avg_next_sgpa
-                          ? Math.min(
-                              100,
-                              (dist.count /
-                                (data.m2.department_performance_distribution.length || 1)) *
-                                100
-                            )
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
           <p className="mt-4 text-xs text-muted-foreground">{m2.disclaimer}</p>
         </ChartCard>
 
         <ChartCard
-          title="Department Next-Sem Performance Forecast (M2)"
-          subtitle="Predicted average SGPA and Percentage per department"
-          status={m2.department_performance_distribution.length > 0 ? "ready" : "empty"}
+          title="Predicted Next-Semester Percentage Distribution (M2)"
+          subtitle="Forecast percentage band distribution for next semester"
+          status={hasM2Data && m2.percentage_distribution.length > 0 ? "ready" : "empty"}
+          emptyIcon={Info}
+          emptyTitle="No Percentage Distribution Data"
+          emptyDescription="No M2 next-semester percentage predictions found for current scope."
         >
           <div className="space-y-3">
-            {m2.department_performance_distribution.map((dept) => (
-              <div
-                key={dept.department_code}
-                className="flex items-center justify-between text-xs border-b border-border/50 pb-2 last:border-0 last:pb-0"
-              >
-                <div>
-                  <p className="font-medium text-foreground">{dept.department_name}</p>
-                </div>
-                <div className="text-right flex items-center gap-4">
-                  <div>
-                    <span className="text-muted-foreground">SGPA: </span>
-                    <span className="font-semibold text-foreground">
-                      {dept.predicted_avg_sgpa !== null ? dept.predicted_avg_sgpa.toFixed(2) : "—"}
-                    </span>
+            {m2.percentage_distribution.map((dist) => {
+              const pct = pctTotal > 0 ? (dist.count / pctTotal) * 100 : 0
+              return (
+                <div key={dist.band} className="space-y-1">
+                  <div className="flex justify-between text-xs font-medium">
+                    <span>Band: {dist.band}</span>
+                    <span className="text-muted-foreground">{dist.count} student(s)</span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">%: </span>
-                    <span className="font-semibold text-foreground">
-                      {dept.predicted_avg_percentage !== null
-                        ? `${dept.predicted_avg_percentage.toFixed(1)}%`
-                        : "—"}
-                    </span>
+                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${Math.min(100, pct)}%` }}
+                    />
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
+          <p className="mt-4 text-xs text-muted-foreground">{m2.disclaimer}</p>
         </ChartCard>
       </div>
+
+      {/* M2: Department Performance Forecast */}
+      <ChartCard
+        title="Department Next-Sem Performance Forecast (M2)"
+        subtitle="Predicted average SGPA and Percentage per department"
+        status={m2.department_performance_distribution.length > 0 ? "ready" : "empty"}
+      >
+        <div className="space-y-3">
+          {m2.department_performance_distribution.map((dept) => (
+            <div
+              key={dept.department_code}
+              className="flex items-center justify-between text-xs border-b border-border/50 pb-2 last:border-0 last:pb-0"
+            >
+              <div>
+                <p className="font-medium text-foreground">{dept.department_name}</p>
+              </div>
+              <div className="text-right flex items-center gap-4">
+                <div>
+                  <span className="text-muted-foreground">SGPA: </span>
+                  <span className="font-semibold text-foreground">
+                    {dept.predicted_avg_sgpa !== null ? dept.predicted_avg_sgpa.toFixed(2) : "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">%: </span>
+                  <span className="font-semibold text-foreground">
+                    {dept.predicted_avg_percentage !== null
+                      ? `${dept.predicted_avg_percentage.toFixed(1)}%`
+                      : "—"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </ChartCard>
     </div>
   )
 }

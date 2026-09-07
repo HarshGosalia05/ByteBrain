@@ -1,15 +1,17 @@
-"""M1 V3 production-integration tests (backend adapter + API).
+"""M1 V3 production-integration tests (backend adapter + API, clean model).
 
-Verifies, against the real synthetic-trained M1 V3 artifact:
+Verifies, against the real clean M1 V3 model (ml/M1_v3_CampusX_package,
+"m1_v3_clean", HistGradientBoostingRegressor):
 
-  * Artifact loading in the backend venv (no retrain), deterministic.
-  * Feature alignment to the exact 8-feature contract.
+  * Model loading in the backend venv (no retrain), deterministic.
+  * Feature alignment to the exact 38-feature contract.
   * Mechanical leakage protection (forbidden columns can never become
     prediction features).
   * Real read-only inference path driven by a fake DB that mirrors real
     Supabase row shapes (fake pool/conn, like the M1 V2 tests).
   * Readiness handling: READY when required data exists, NO_DATA with an
-    honest reason otherwise.
+    honest reason otherwise. Missing learning activity / pre-end-sem
+    aggregates / semester-1 history must NOT break readiness (imputed).
   * The service output MUST validate against M1V3PredictionResponse
     (regression: the service previously added an extra field that the
     response schema forbids, causing FastAPI to return HTTP 500).
@@ -31,16 +33,15 @@ for p in (str(ROOT), str(ROOT / "backend"), str(ROOT / "ml")):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from ml.v3.m1_subject_prediction.inference.predictor import (  # noqa: E402
+from ml.v3.m1_subject_prediction_clean.inference.predictor import (  # noqa: E402
     FEATURE_COLS,
+    FEATURE_COUNT,
+    FORBIDDEN_TARGET_FIELDS,
     TARGET_MAX,
 )
 from app.services.m1v3_prediction_service import M1V3PredictionService  # noqa: E402
 
-FORBIDDEN = {
-    "end_sem_marks", "total_marks", "percentage", "grade",
-    "grade_point", "result_status", "performance_category",
-}
+FORBIDDEN = set(FORBIDDEN_TARGET_FIELDS)
 
 
 # -----------------------------------------------------------------------------
@@ -49,9 +50,31 @@ FORBIDDEN = {
 
 def _student_row(sid="STU000002", semester=7):
     return {
-        "student_id": sid, "gender": "Male",
-        "current_semester": semester, "department_name": "CSE",
+        "student_id": sid,
+        "gender": "Male",
+        "category": "General",
+        "admission_year": 2023,
+        "department_code": 1,
+        "department_name": "CSE",
+        "current_semester": semester,
     }
+
+
+def _semester_history_rows():
+    return [
+        {"semester_no": 1, "semester_sgpa": 7.5, "semester_percentage": 70.0,
+         "semester_attendance_percentage": 80.0, "backlog_count": 0},
+        {"semester_no": 2, "semester_sgpa": 7.8, "semester_percentage": 72.0,
+         "semester_attendance_percentage": 81.0, "backlog_count": 0},
+        {"semester_no": 3, "semester_sgpa": 8.0, "semester_percentage": 74.0,
+         "semester_attendance_percentage": 82.0, "backlog_count": 0},
+        {"semester_no": 4, "semester_sgpa": 7.9, "semester_percentage": 73.0,
+         "semester_attendance_percentage": 83.0, "backlog_count": 0},
+        {"semester_no": 5, "semester_sgpa": 8.1, "semester_percentage": 75.0,
+         "semester_attendance_percentage": 84.0, "backlog_count": 0},
+        {"semester_no": 6, "semester_sgpa": 8.2, "semester_percentage": 76.0,
+         "semester_attendance_percentage": 85.0, "backlog_count": 0},
+    ]
 
 
 def _performance_rows():
@@ -59,10 +82,14 @@ def _performance_rows():
         {
             "student_id": "STU000002", "subject_id": "SUB0050", "semester_no": 7,
             "internal_marks": 16.0, "mid_sem_marks": 34.0,
+            "pre_endsem_assessment_pct": None, "assignment_score": None,
+            "quiz_avg_marks": None, "submission_delay_days": None,
         },
         {
             "student_id": "STU000002", "subject_id": "SUB0051", "semester_no": 7,
             "internal_marks": 18.0, "mid_sem_marks": 38.0,
+            "pre_endsem_assessment_pct": None, "assignment_score": None,
+            "quiz_avg_marks": None, "submission_delay_days": None,
         },
     ]
 
@@ -71,24 +98,57 @@ def _enrollment_rows():
     return [
         {
             "student_id": "STU000002", "subject_id": "SUB0050", "semester_no": 7,
-            "credits": 3, "subject_type": "Theory",
+            "credits": 3, "subject_type": "Theory", "department_code": 1,
         },
         {
             "student_id": "STU000002", "subject_id": "SUB0051", "semester_no": 7,
-            "credits": 2, "subject_type": "Laboratory",
+            "credits": 2, "subject_type": "Laboratory", "department_code": 1,
         },
     ]
 
 
-def _attendance_rows():
+def _learning_activity_rows():
+    # Real production learning activity IS present for some students; exercise
+    # the aggregation path with a single-per-week set for weeks 1..8.
+    rows = []
+    for subject_id, base in (("SUB0050", 3), ("SUB0051", 4)):
+        for week in range(1, 9):
+            rows.append({
+                "subject_id": subject_id,
+                "semester_no": 7,
+                "week_number": week,
+                "learning_sessions": base,
+                "resource_views": base * 2,
+                "assessment_attempts": 2,
+                "submission_count": 1,
+                "late_submission_count": 0,
+                "avg_submission_delay_days": 0.5,
+                "activity_volume": base * 10,
+                "activity_velocity": 5.0,
+                "activity_change_pct": 2.0,
+                "inactive_week_flag": False,
+                "engagement_consistency": 0.9,
+                "late_submission_rate": 0.0,
+                "assessment_completion_rate": 1.0,
+                "active_days": 4,
+            })
+    # Aggregated rows as produced by _SQL_LEARNING_ACTIVITY.
     return [
         {
-            "student_id": "STU000002", "subject_id": "SUB0050", "semester_no": 7,
-            "attendance_percentage": 88.0,
+            "subject_id": "SUB0050",
+            "act_sess_sum": 24, "act_resource_views_sum": 48, "act_assess_attempts_sum": 16,
+            "act_submission_sum": 8, "act_late_submission_sum": 0, "act_avg_delay_mean": 0.5,
+            "act_volume_sum": 240, "act_velocity_mean": 5.0, "act_change_mean": 2.0,
+            "act_inactive_weeks": 0, "act_engagement_mean": 0.9, "act_late_rate_mean": 0.0,
+            "act_completion_mean": 1.0, "act_active_days_sum": 32,
         },
         {
-            "student_id": "STU000002", "subject_id": "SUB0051", "semester_no": 7,
-            "attendance_percentage": 91.0,
+            "subject_id": "SUB0051",
+            "act_sess_sum": 32, "act_resource_views_sum": 64, "act_assess_attempts_sum": 16,
+            "act_submission_sum": 8, "act_late_submission_sum": 0, "act_avg_delay_mean": 0.5,
+            "act_volume_sum": 320, "act_velocity_mean": 5.0, "act_change_mean": 2.0,
+            "act_inactive_weeks": 0, "act_engagement_mean": 0.9, "act_late_rate_mean": 0.0,
+            "act_completion_mean": 1.0, "act_active_days_sum": 32,
         },
     ]
 
@@ -100,7 +160,7 @@ def _subject_rows():
     ]
 
 
-def _make_fetch(existing=True):
+def _make_fetch(existing=True, with_activity=True):
     """Return (fetchrow, fetch) handlers conditioned on 'existing'."""
     if not existing:
         return (lambda q, *a: None, lambda q, *a: [])
@@ -108,15 +168,21 @@ def _make_fetch(existing=True):
     def fetchrow(query, *args):
         if "FROM students" in query:
             return _student_row()
+        if "FROM student_subject_performance" in query and "DESC" in query:
+            return {"semester_no": 7}
         return None
 
     def fetch(query, *args):
         if "FROM student_subject_performance" in query:
+            if "DESC" in query:
+                return [{"semester_no": 7}]
             return _performance_rows()
         if "FROM student_subject_enrollment" in query:
             return _enrollment_rows()
-        if "FROM attendance" in query:
-            return _attendance_rows()
+        if "FROM student_semester_summary" in query:
+            return _semester_history_rows()
+        if "FROM student_learning_activity" in query:
+            return _learning_activity_rows() if with_activity else []
         if "FROM subjects" in query:
             return _subject_rows()
         return []
@@ -125,8 +191,8 @@ def _make_fetch(existing=True):
 
 
 class FakeConn:
-    def __init__(self, existing=True):
-        self.fetchrow_fn, self.fetch_fn = _make_fetch(existing)
+    def __init__(self, existing=True, with_activity=True):
+        self.fetchrow_fn, self.fetch_fn = _make_fetch(existing, with_activity)
 
     async def fetchrow(self, query, *args):
         return self.fetchrow_fn(query, *args)
@@ -172,7 +238,7 @@ class TestM1V3Service:
 
 
 # -----------------------------------------------------------------------------
-# Artifact loading (real artifact in backend venv, no retrain).
+# Model loading (real clean model in backend venv, no retrain).
 # -----------------------------------------------------------------------------
 
 class TestArtifactLoading(unittest.TestCase):
@@ -180,19 +246,22 @@ class TestArtifactLoading(unittest.TestCase):
     def setUpClass(cls):
         cls.predictor = M1V3PredictionService._get_predictor()
 
-    def test_artifact_loads_in_backend_venv(self):
+    def test_model_loads_in_backend_venv(self):
         self.assertTrue(self.predictor.is_loaded)
 
-    def test_algorithm_is_linear_regression(self):
-        self.assertEqual(self.predictor.metadata["algorithm"], "linear_regression")
+    def test_algorithm_is_hist_gradient_boosting(self):
+        self.assertEqual(self.predictor.metadata["algorithm"], "HistGradientBoostingRegressor")
 
-    def test_artifact_deterministic_load_returns_same_object(self):
+    def test_model_version_is_clean(self):
+        self.assertEqual(self.predictor.metadata["model_version"], "m1_v3_clean")
+
+    def test_model_deterministic_load_returns_same_object(self):
         again = M1V3PredictionService._get_predictor()
         self.assertIs(self.predictor, again)
 
 
 # -----------------------------------------------------------------------------
-# 8-feature contract alignment + mechanical leakage guard.
+# 38-feature contract alignment + mechanical leakage guard.
 # -----------------------------------------------------------------------------
 
 class TestFeatureContract(unittest.TestCase):
@@ -202,7 +271,8 @@ class TestFeatureContract(unittest.TestCase):
         cls.features = list(cls.predictor._feature_names)
 
     def test_feature_count_matches_contract(self):
-        self.assertEqual(len(self.features), 8)
+        self.assertEqual(len(self.features), FEATURE_COUNT)
+        self.assertEqual(len(self.features), 38)
 
     def test_feature_names_match_contract(self):
         self.assertEqual(self.features, list(FEATURE_COLS))
@@ -210,6 +280,10 @@ class TestFeatureContract(unittest.TestCase):
     def test_no_forbidden_feature_in_contract(self):
         leaked = [c for c in self.features if c in FORBIDDEN]
         self.assertEqual(leaked, [])
+
+    def test_internal_and_mid_sem_required_features_present(self):
+        self.assertIn("internal_marks", self.features)
+        self.assertIn("mid_sem_marks", self.features)
 
     def test_service_leakage_guard_clean(self):
         leaked = M1V3PredictionService.check_no_leakage(self.features)
@@ -238,7 +312,7 @@ class TestFeatureContract(unittest.TestCase):
             run(predictor.predict_for_student("STU000002", conn))
 
         cols = captured["cols"]
-        self.assertEqual(len(cols), 8)
+        self.assertEqual(len(cols), FEATURE_COUNT)
         leaked = [c for c in cols if c in FORBIDDEN]
         self.assertEqual(leaked, [])
 
@@ -252,8 +326,8 @@ class TestRealInferencePath(unittest.TestCase):
     def setUpClass(cls):
         cls.predictor = M1V3PredictionService._get_predictor()
 
-    def _predict(self):
-        svc = M1V3PredictionService(FakePool(FakeConn()))
+    def _predict(self, conn=None):
+        svc = M1V3PredictionService(FakePool(conn if conn is not None else FakeConn()))
         return run(svc.predict("STU000002"))
 
     def test_ready_with_predictions(self):
@@ -261,6 +335,7 @@ class TestRealInferencePath(unittest.TestCase):
         self.assertEqual(result["readiness_status"], "READY")
         self.assertEqual(result["student_id"], "STU000002")
         self.assertEqual(result["model_id"], "m1_v3")
+        self.assertEqual(result["model_version"], "m1_v3_clean")
         self.assertEqual(result["current_semester"], 7)
         self.assertEqual(result["prediction_count"], 2)
         self.assertEqual(len(result["subjects"]), 2)
@@ -282,13 +357,16 @@ class TestRealInferencePath(unittest.TestCase):
             self.assertIn("grade_label", subj)
             self.assertEqual(subj["semester_no"], 7)
 
-    def test_input_features_present(self):
+    def test_input_features_present_and_attendance_null(self):
         result = self._predict()
         feats = result["subjects"][0]["input_features"]
         self.assertEqual(
             set(feats),
             {"internal_marks", "mid_sem_marks", "attendance_percentage", "credits"},
         )
+        # The clean M1 V3 model has no attendance input: must be null, never
+        # fabricated from another table, so the faculty UI hides the tile.
+        self.assertIsNone(feats["attendance_percentage"])
         self.assertNotIn("end_sem_marks", feats)
 
     def test_deterministic_output(self):
@@ -298,6 +376,13 @@ class TestRealInferencePath(unittest.TestCase):
             [s["predicted_end_sem_marks"] for s in a["subjects"]],
             [s["predicted_end_sem_marks"] for s in b["subjects"]],
         )
+
+    def test_ready_even_without_learning_activity(self):
+        # Production students currently have no learning-activity rows; the
+        # act_* features must be imputed, not treated as missing required data.
+        result = self._predict(conn=FakeConn(with_activity=False))
+        self.assertEqual(result["readiness_status"], "READY")
+        self.assertEqual(result["prediction_count"], 2)
 
     def test_forbidden_deprecated_field_not_in_response(self):
         # REGRESSION: the service used to inject "training_data_provenance",
@@ -329,7 +414,9 @@ class TestErrorHandling(unittest.TestCase):
     def test_no_performance_returns_no_data(self):
         class NoPerfConn(FakeConn):
             async def fetch(self, query, *args):
-                if "FROM student_subject_performance" in query and "semester_no FROM" not in query:
+                if "FROM student_subject_performance" in query and "DESC" not in query:
+                    return []
+                if "FROM student_subject_performance" in query and "DESC" in query:
                     return []
                 return await super().fetch(query, *args)
 
@@ -338,18 +425,57 @@ class TestErrorHandling(unittest.TestCase):
         self.assertEqual(result["readiness_status"], "NO_DATA")
         self.assertEqual(result["subjects"], [])
 
-    def test_missing_attendance_returns_no_data_with_reason(self):
-        class NoAttConn(FakeConn):
+    def test_missing_internal_marks_returns_no_data_with_reason(self):
+        class NoMarksConn(FakeConn):
             async def fetch(self, query, *args):
-                if "FROM attendance" in query:
-                    return []
+                if "FROM student_subject_performance" in query and "DESC" not in query:
+                    return [
+                        {**row, "internal_marks": None, "mid_sem_marks": None}
+                        for row in _performance_rows()
+                    ]
                 return await super().fetch(query, *args)
 
-        svc = M1V3PredictionService(FakePool(NoAttConn()))
+        svc = M1V3PredictionService(FakePool(NoMarksConn()))
         result = run(svc.predict("STU000002"))
         self.assertEqual(result["readiness_status"], "NO_DATA")
         self.assertEqual(result["subjects"], [])
-        self.assertIn("attendance_percentage", result.get("reason", ""))
+        self.assertIn("internal_marks", result.get("reason", ""))
+
+    def test_semester_one_ready_with_only_required_features(self):
+        # A semester-1 student has no history (prev_* -> NaN, imputed) and no
+        # attendance/learning activity. With internal + mid-sem marks present,
+        # readiness must still be READY.
+        class SemOneConn(FakeConn):
+            async def fetchrow(self, query, *args):
+                if "FROM students" in query:
+                    return _student_row(semester=1)
+                return None
+
+            async def fetch(self, query, *args):
+                if "FROM student_semester_summary" in query:
+                    return []
+                if "FROM student_learning_activity" in query:
+                    return []
+                if "FROM student_subject_performance" in query:
+                    if "DESC" in query:
+                        return [{"semester_no": 1}]
+                    return [
+                        {**row, "semester_no": 1,
+                         "pre_endsem_assessment_pct": None,
+                         "assignment_score": None, "quiz_avg_marks": None,
+                         "submission_delay_days": None}
+                        for row in _performance_rows()
+                    ]
+                if "FROM student_subject_enrollment" in query:
+                    return [
+                        {**row, "semester_no": 1} for row in _enrollment_rows()
+                    ]
+                return await super().fetch(query, *args)
+
+        svc = M1V3PredictionService(FakePool(SemOneConn()))
+        result = run(svc.predict("STU000002"))
+        self.assertEqual(result["readiness_status"], "READY")
+        self.assertEqual(result["prediction_count"], 2)
 
     def test_none_pool_raises_runtime_error(self):
         with self.assertRaises(RuntimeError):
@@ -404,6 +530,8 @@ class TestM1V3Endpoint(unittest.TestCase):
         body = r.json()
         self.assertEqual(body["readiness_status"], "READY")
         self.assertEqual(body["model_id"], "m1_v3")
+        self.assertEqual(body["model_version"], "m1_v3_clean")
+        self.assertEqual(body["algorithm"], "HistGradientBoostingRegressor")
         self.assertNotIn("training_data_provenance", body)
         self.assertGreaterEqual(body["prediction_count"], 1)
         self.assertTrue(all(
@@ -416,13 +544,16 @@ class TestM1V3Endpoint(unittest.TestCase):
         from app.api.dependencies import get_db_pool
         client = _make_client("Admin", "STU000002")
 
-        class NoAttConn(FakeConn):
+        class NoMarksConn(FakeConn):
             async def fetch(self, query, *args):
-                if "FROM attendance" in query:
-                    return []
+                if "FROM student_subject_performance" in query and "DESC" not in query:
+                    return [
+                        {**row, "internal_marks": None, "mid_sem_marks": None}
+                        for row in _performance_rows()
+                    ]
                 return await super().fetch(query, *args)
 
-        client.app.dependency_overrides[get_db_pool] = lambda: FakePool(NoAttConn())
+        client.app.dependency_overrides[get_db_pool] = lambda: FakePool(NoMarksConn())
         r = client.get("/predict/m1v3/STU000002")
         self.assertEqual(r.status_code, 200)
         body = r.json()

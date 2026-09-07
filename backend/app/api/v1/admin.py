@@ -267,6 +267,12 @@ from app.schemas.admin_ml_intelligence import AdminMlIntelligenceResponse
 from app.services.admin_ml_service import AdminMLService
 from app.schemas.prediction_feedback import AdminMlFeedbackHealth
 from app.services.prediction_feedback_service import PredictionFeedbackService
+from app.schemas.admin_ml_generation import (
+    GenerateMlPredictionsRequest,
+    GenerateMlPredictionsResponse,
+    MlGenerationJobStatus,
+)
+from app.services.admin_ml_generation_service import AdminMLGenerationService
 
 
 def get_admin_ml_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> AdminMLService:
@@ -298,6 +304,72 @@ async def get_admin_ml_intelligence(
         academic_year=batch or academic_year,
         semester=semester,
     )
+
+
+@router.post(
+    "/ml-intelligence/generate",
+    response_model=GenerateMlPredictionsResponse,
+)
+async def generate_ml_predictions(
+    req: GenerateMlPredictionsRequest,
+    user: dict = Depends(require_admin_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+    department_code: Optional[int] = Query(None, ge=1, description="Filter by department code"),
+    batch: Optional[str] = Query(None, description="Filter by starting batch (e.g. 2023)"),
+    academic_year: Optional[str] = Query(None, description="Filter by academic year (e.g. 2025-26)"),
+    semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
+):
+    """Queue generation + persistence of M1-M4 predictions.
+
+    Runs asynchronously in the background. Poll ``/ml-intelligence/generate/status``
+    with the returned ``job_id`` for progress.
+    """
+    if not GenerateMlPredictionsRequest._valid_types(req.models):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="models must be a subset of m1, m2, m3, m4",
+        )
+    service = AdminMLGenerationService(pool)
+    try:
+        job = await service.start_generation(
+            req.models,
+            department_code=department_code,
+            semester=semester,
+            academic_year=batch or academic_year,
+            force=req.force,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
+    return GenerateMlPredictionsResponse(
+        job_id=job["job_id"],
+        status=job["status"],
+        models=job["models"],
+        total_students=0,
+        message="Generation queued. Poll the generation status endpoint for progress.",
+    )
+
+
+@router.get(
+    "/ml-intelligence/generate/status/{job_id}",
+    response_model=MlGenerationJobStatus,
+)
+async def get_ml_generation_status(
+    job_id: str,
+    user: dict = Depends(require_admin_role),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """Poll the status of an ML generation job."""
+    service = AdminMLGenerationService(pool)
+    job = await service.get_job(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Generation job not found",
+        )
+    return job
 
 
 @router.get("/ml-feedback", response_model=AdminMlFeedbackHealth)

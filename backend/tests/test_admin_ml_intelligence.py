@@ -46,7 +46,7 @@ class FakeConn:
         if "FROM departments d" in query:
             return self.department_options
         if "FROM students s" in query:
-            department_code, semester = args
+            department_code, semester, _academic_year = args
             rows = self.student_rows
             if department_code is not None:
                 rows = [r for r in rows if r["department_code"] == department_code]
@@ -403,7 +403,7 @@ class TestAdminMLIntelligenceFiltersAndScope(unittest.TestCase):
             for kind, q, args in conn.executed
             if kind == "fetchrow" and "FROM risk_predictions r" in q
         ]
-        self.assertEqual(risk_args[0], (1, None))
+        self.assertEqual(risk_args[0], (1, None, None))
 
     def test_semester_filtering(self):
         svc, _ = self._make_service()
@@ -440,7 +440,7 @@ class TestAdminMLIntelligenceFiltersAndScope(unittest.TestCase):
             for kind, q, args in conn.executed
             if kind == "fetchrow" and "FROM risk_predictions r" in q
         ]
-        self.assertEqual(risk_args[0], (2, 4))
+        self.assertEqual(risk_args[0], (2, 4, None))
 
     def test_m3_future_risk_independent_of_risk_register(self):
         svc, _ = self._make_service()
@@ -494,6 +494,150 @@ class TestAdminMLIntelligenceAuth(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             run(authorize_prediction_access(student_user, "STU001"))
         self.assertEqual(ctx.exception.status_code, 403)
+
+
+class TestAdminMLIntelligenceMultiRowAggregation(unittest.TestCase):
+    """Regression coverage for the multi-row per-student aggregation fix.
+
+    Previously ``SELECT DISTINCT ON (student_id, prediction_type)`` collapsed
+    every prediction for a student/model to a single arbitrary row, which:
+      * dropped all but one M1 subject prediction per student, and
+      * picked an arbitrary M2/M3 semester row.
+    The fixed pipeline fetches all rows and, in Python, keeps the latest
+    generation batch; for M2/M3 it retains only the most recently completed
+    semester (the actual "next-semester" forecast).
+    """
+
+    def setUp(self):
+        self.students = [
+            {
+                "student_id": "STU001",
+                "full_name": "Alice Smith",
+                "department_code": 1,
+                "department_name": "Computer Science and Engineering",
+                "current_semester": 6,
+            }
+        ]
+        self.department_options = [
+            {
+                "department_code": 1,
+                "department_name": "Computer Science and Engineering",
+                "student_count": 1,
+            }
+        ]
+        self.semester_options = [{"semester_no": 6, "student_count": 1}]
+
+    def _conn(self, predictions):
+        return FakeConn(
+            student_rows=self.students,
+            risk_row={"count": 0},
+            pred_rows=predictions,
+            department_options=self.department_options,
+            semester_options=self.semester_options,
+        )
+
+    def test_m1_keeps_all_subjects_not_one(self):
+        preds = [
+            {
+                "prediction_id": "subj1",
+                "student_id": "STU001",
+                "prediction_type": "m1",
+                "model_version": "1.0",
+                "prediction_value": json.dumps(
+                    {"predictions": [{"subject_code": "CS601", "subject_name": "ML",
+                                      "predicted_end_sem_marks": 40.0}]}
+                ),
+                "input_row_count": 1,
+                "prediction_count": 1,
+                "generated_at": "2026-08-13T10:00:00Z",
+            },
+            {
+                "prediction_id": "subj2",
+                "student_id": "STU001",
+                "prediction_type": "m1",
+                "model_version": "1.0",
+                "prediction_value": json.dumps(
+                    {"predictions": [{"subject_code": "CS602", "subject_name": "DBMS",
+                                      "predicted_end_sem_marks": 50.0}]}
+                ),
+                "input_row_count": 1,
+                "prediction_count": 1,
+                "generated_at": "2026-08-13T10:00:00Z",
+            },
+        ]
+        svc = AdminMLService(FakePool(self._conn(preds)))
+        res = run(svc.get_admin_ml_intelligence())
+        # Both subjects must be counted, not just one.
+        self.assertEqual(
+            res.academic_predictions.m1.total_subject_predictions, 2
+        )
+        self.assertEqual(
+            res.academic_predictions.m1.predicted_avg_subject_mark, 45.0
+        )
+        codes = [s.subject_code for s in res.academic_predictions.m1.subjects_needing_attention]
+        self.assertEqual(sorted(codes), ["CS601", "CS602"])
+
+    def test_m2_uses_latest_batch_and_max_semester(self):
+        # Older batch (older generated_at) with semesters 1-7.
+        older = [
+            {
+                "prediction_id": f"old-sem{s}",
+                "student_id": "STU001",
+                "prediction_type": "m2",
+                "model_version": None,
+                "prediction_value": json.dumps(
+                    {"predictions": [{"semester_no": s,
+                                      "predicted_next_semester_sgpa": 5.5,
+                                      "predicted_next_semester_percentage": 55.0}]}
+                ),
+                "input_row_count": 1,
+                "prediction_count": 1,
+                "generated_at": "2026-08-13T10:00:00Z",
+            }
+            for s in range(1, 8)
+        ]
+        # Newer batch (sem 8) with a distinct forecast.
+        newer = {
+            "prediction_id": "new-sem8",
+            "student_id": "STU001",
+            "prediction_type": "m2",
+            "model_version": None,
+            "prediction_value": json.dumps(
+                {"predictions": [{"semester_no": 8,
+                                  "predicted_next_semester_sgpa": 8.4,
+                                  "predicted_next_semester_percentage": 80.0}]}
+            ),
+            "input_row_count": 1,
+            "prediction_count": 1,
+            "generated_at": "2026-08-14T09:00:00Z",
+        }
+        preds = older + [newer]
+        svc = AdminMLService(FakePool(self._conn(preds)))
+        res = run(svc.get_admin_ml_intelligence())
+        # Only the latest batch (sem 8) forecast is aggregated.
+        self.assertEqual(res.academic_predictions.m2.predicted_avg_next_sgpa, 8.4)
+        self.assertEqual(
+            res.academic_predictions.m2.predicted_avg_next_percentage, 80.0
+        )
+
+    def test_m3_uses_latest_batch_and_max_semester(self):
+        newer = {
+            "prediction_id": "new-sem8",
+            "student_id": "STU001",
+            "prediction_type": "m3",
+            "model_version": None,
+            "prediction_value": json.dumps(
+                {"predictions": [{"semester_no": 8, "is_at_risk_next_sem": 1}]}
+            ),
+            "input_row_count": 1,
+            "prediction_count": 1,
+            "generated_at": "2026-08-14T09:00:00Z",
+        }
+        preds = [newer]
+        svc = AdminMLService(FakePool(self._conn(preds)))
+        res = run(svc.get_admin_ml_intelligence())
+        self.assertEqual(res.future_risk.future_at_risk_count, 1)
+        self.assertEqual(res.future_risk.future_low_risk_count, 0)
 
 
 if __name__ == "__main__":

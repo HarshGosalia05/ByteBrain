@@ -227,16 +227,19 @@ async def predict_m1_v3(
     faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
 ):
-    """Predict end-semester marks per subject with the M1 V3 model (synthetic-trained).
+    """Predict end-semester marks per subject with the M1 V3 clean model.
 
-    Uses real production data from the database (read-only). The model was trained
-    on a synthetic dataset and uses 8 features: internal_marks, mid_sem_marks,
-    attendance_percentage, credits, semester_no, subject_type, department_name, gender.
+    Uses real production data from the database (read-only). The clean model
+    ("m1_v3_clean") is a HistGradientBoostingRegressor trained on real CampusX
+    data with the 38-feature "C_core_history_learning" contract (see
+    ml/M1_v3_CampusX_package/schema/features.json).
 
-    Attendance is sourced from the attendance table (attendance_percentage column).
+    Only internal marks and mid-semester marks are required per subject; all
+    other features (learning activity, pre-end-sem assessment aggregates,
+    semester history, etc.) may be missing and are imputed by the pipeline.
 
-    If required real inputs are unavailable, readiness_status is NO_DATA with a
-    clear explanation. No values are fabricated or imputed for missing data.
+    If required real inputs are unavailable, readiness_status is NO_DATA with
+    a clear explanation. No values are fabricated for missing data.
     """
     await authorize_prediction_access(user, student_id, faculty_service)
 

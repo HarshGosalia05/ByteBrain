@@ -1029,7 +1029,7 @@ export function getFacultyStudentM1V2(
   return callFacultyPredictM1V2<M1V2PredictionData>(studentId, BFF_TTL_MS)
 }
 
-// M1 V3 â€” Subject Marks Prediction (synthetic-trained model, real production data).
+// M1 V3 — Subject Marks Prediction (clean model, real production data).
 
 async function callFacultyPredictM1V3<T>(
   studentId: string,

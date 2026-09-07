@@ -79,22 +79,27 @@ async function SemesterTrendSection() {
         }
       : null
 
-  const m1Prediction =
-    m1v3Data && m1v3Data.subjects.length > 0
-      ? m1v3Data
-      : m1v2Data && m1v2Data.subjects.length > 0
-        ? m1v2Data
-        : null
-
-  const currentSemester =
-    m1Prediction && m1Prediction.subjects.length > 0
-      ? {
-          semester_no: m1Prediction.current_semester,
-          predictedMarks: m1Prediction.subjects.map(
-            (s) => s.predicted_end_sem_marks,
-          ),
-        }
-      : null
+  // Pass the full M1V3 subjects (credit + grade_band + predicted marks) so the
+  // chart can compute credit-weighted SGPA via the university formula. Fall back
+  // to M1V2 marks-only if M1V3 is unavailable.
+  const currentSemester = (() => {
+    if (m1v3Data && m1v3Data.subjects.length > 0) {
+      return {
+        semester_no: m1v3Data.current_semester,
+        subjects: m1v3Data.subjects,
+        // Kept for M1V2 fallback path — unused when subjects is set
+        predictedMarks: m1v3Data.subjects.map((s) => s.predicted_end_sem_marks),
+      }
+    }
+    if (m1v2Data && m1v2Data.subjects.length > 0) {
+      return {
+        semester_no: m1v2Data.current_semester,
+        subjects: null,
+        predictedMarks: m1v2Data.subjects.map((s) => s.predicted_end_sem_marks),
+      }
+    }
+    return null
+  })()
 
   return (
     <SemesterTrendChart

@@ -175,49 +175,106 @@ class AdminMLService:
                 academic_year,
             )
 
-        # 3. Fetch stored predictions (strictly read-only)
+        # 3. Fetch stored predictions (strictly read-only).  All rows
+        #    are retrieved so per-student, per-type aggregation can pick
+        #    the latest generation batch deterministically.  A naive
+        #    DISTINCT ON (student_id, prediction_type) collapses M1's
+        #    per-subject rows to a single subject and picks an arbitrary
+        #    M2/M3 semester row.
         stored_predictions: List[Dict[str, Any]] = []
         if student_ids:
             async with self._pool.acquire() as conn:
                 rows = await conn.fetch(
                     """
-                    SELECT DISTINCT ON (student_id, prediction_type)
-                        prediction_id, student_id, prediction_type, model_version,
-                        prediction_value, input_row_count, prediction_count, generated_at
+                    SELECT prediction_id, student_id, prediction_type,
+                           model_version, prediction_value, input_row_count,
+                           prediction_count, generated_at
                     FROM ml_predictions
                     WHERE student_id = ANY($1::varchar[])
-                    ORDER BY student_id, prediction_type, generated_at DESC
+                    ORDER BY student_id, prediction_type,
+                             generated_at ASC, prediction_id ASC
                     """,
                     student_ids,
                 )
                 stored_predictions = [dict(r) for r in rows]
 
-        # Organize predictions by type
+        # Parse stored JSONB prediction_value into a usable dict.
+        for row in stored_predictions:
+            val = row["prediction_value"]
+            if isinstance(val, str):
+                try:
+                    row["parsed_value"] = json.loads(val)
+                except Exception:
+                    row["parsed_value"] = {}
+            else:
+                row["parsed_value"] = val or {}
+
+        # Organize by (student_id, prediction_type) and keep only the
+        # latest generation batch per pair.
+        #   * M1 persists one row per predicted subject; the whole
+        #     latest batch (all subjects) must be retained.
+        #   * M2/M3 persist one row per completed semester; only the
+        #     row for the most recently completed semester (the actual
+        #     "next-semester" forecast) is aggregated per student.
+        #   * M4 persists a single decision row per student.
+        def _parsed_semester(row: Dict[str, Any]) -> int:
+            """Extract the 'from' semester_no from an M2/M3 row."""
+            try:
+                val = row.get("parsed_value") or {}
+                if isinstance(val, list):
+                    first = val[0] if val else {}
+                    val = first if isinstance(first, dict) else {}
+                return int(val.get("semester_no", 0))
+            except (TypeError, ValueError):
+                return 0
+
+        # Key rows by (student_id, prediction_type)
+        keyed: Dict[tuple, List[Dict[str, Any]]] = {}
+        for row in stored_predictions:
+            ptype = row["prediction_type"]
+            sid = row["student_id"]
+            if ptype in ("m1", "m2", "m3", "m4") and sid in student_map:
+                keyed.setdefault((sid, ptype), []).append(row)
+
         preds_by_type: Dict[str, List[Dict[str, Any]]] = {
             "m1": [],
             "m2": [],
             "m3": [],
             "m4": [],
         }
-        students_with_preds = set()
+        students_with_preds: set = set()
 
-        for row in stored_predictions:
-            ptype = row["prediction_type"]
-            sid = row["student_id"]
-            if ptype in preds_by_type and sid in student_map:
-                preds_by_type[ptype].append(row)
-                students_with_preds.add(sid)
-
-        for ptype in preds_by_type:
-            for row in preds_by_type[ptype]:
-                val = row["prediction_value"]
-                if isinstance(val, str):
-                    try:
-                        row["parsed_value"] = json.loads(val)
-                    except Exception:
-                        row["parsed_value"] = {}
+        for (sid, ptype), rows_list in keyed.items():
+            # All rows share the same generated_at within one batch;
+            # pick the latest timestamp to isolate the newest batch.
+            latest_ts = max(r["generated_at"] for r in rows_list)
+            batch = [r for r in rows_list if r["generated_at"] == latest_ts]
+            if ptype in ("m2", "m3"):
+                # M2/M3 predict semester T+1 from the most recently
+                # completed semester T. A student in the final /
+                # internship semester (current_semester == 8) has NO
+                # upcoming regular semester, so T==8 forecasts a
+                # semester that does not exist (outside the model's
+                # training domain); exclude those students entirely.
+                sem = (student_map.get(sid) or {}).get("semester")
+                if sem is not None and sem >= 8:
+                    continue
+                # Prefer the row whose source semester equals the
+                # student's current semester (the genuine next-semester
+                # forecast); fall back to the most recently completed
+                # semester present in the batch.
+                if sem is not None:
+                    best = next(
+                        (r for r in batch if _parsed_semester(r) == sem), None
+                    )
+                    if best is None:
+                        best = max(batch, key=_parsed_semester)
                 else:
-                    row["parsed_value"] = val or {}
+                    best = max(batch, key=_parsed_semester)
+                preds_by_type[ptype].append(best)
+            else:
+                preds_by_type[ptype].extend(batch)
+            students_with_preds.add(sid)
 
         # ------------------------------------------------------------------
         # Section 1: Overview & Coverage KPIs
