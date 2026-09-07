@@ -1,26 +1,29 @@
 """M1 V3 — READ-ONLY subject end-sem mark prediction service (backend adapter).
 
-Wires the validated M1 V3 artifact (ml/v3/m1_subject_prediction) into the
-FastAPI backend. Uses real production data from the database (read-only).
+Wires the CLEAN M1 V3 model (ml/M1_v3_CampusX_package: model_version
+"m1_v3_clean", a HistGradientBoostingRegressor trained on real CampusX data,
+38-feature "C_core_history_learning" contract; production adapter in
+ml/v3/m1_subject_prediction_clean) into the FastAPI backend. Uses real
+production data from the database (read-only).
 
-PROVENANCE NOTE: This model was trained on SYNTHETIC data generated for
-demonstration purposes. Predictions should NOT be treated as validated
-real-world forecasts. The note field in the response indicates this clearly.
+The 38 clean features and their production sources are defined in
+ml/M1_v3_CampusX_package/schema/features.json and
+schema/M1_v3_FEATURE_CONTRACT.md. Brief groups:
+  current-subject: internal_marks, mid_sem_marks, pre_endsem_assessment_pct,
+                   assignment_score, quiz_avg_marks, submission_delay_days
+  history (sem < target N): prev_sgma_mean/pct/att/backlog + trends
+  learning activity (weeks 1-8): act_* aggregations
+  context: semester_no, credits, subject_type, department_code,
+           admission_year, gender, category
 
-The 8 features and their exact production sources:
-  1. internal_marks       -> student_subject_performance.internal_marks
-  2. mid_sem_marks        -> student_subject_performance.mid_sem_marks
-  3. attendance_percentage -> attendance.attendance_percentage
-  4. credits              -> student_subject_enrollment.credits
-  5. semester_no          -> student_subject_performance.semester_no
-  6. subject_type         -> student_subject_enrollment.subject_type
-  7. department_name      -> students.department_name
-  8. gender               -> students.gender
+Only internal_marks and mid_sem_marks are REQUIRED per subject; every other
+feature may be missing and is passed as NaN for the pipeline's embedded
+imputer (learning activity and semester-1 history are often absent).
 
 Design rules:
   * Reuses existing auth/RBAC and asyncpg pool. No new DB plumbing.
   * Read-only: only SELECT queries. No writes to Supabase.
-  * Uses the already-trained M1 V3 artifact. NO retraining.
+  * Uses the packaged M1 V3 clean pipeline. NO retraining.
   * Mechanical leakage guard: feature vector re-checked before inference.
   * Subject name enrichment: after predictor inference, the service resolves
     each subject_id to its human-readable subject_name via a single batch
@@ -58,7 +61,7 @@ WHERE subject_id = ANY($1::text[])
 class M1V3PredictionService:
     """Serve M1 V3 subject end-sem predictions for a student (read-only)."""
 
-    _predictor: Any = None  # process-wide cached M1V3Predictor singleton
+    _predictor: Any = None  # process-wide cached M1V3CleanPredictor singleton
 
     def __init__(self, pool: Any):
         self.pool = pool
@@ -66,10 +69,10 @@ class M1V3PredictionService:
     @classmethod
     def _get_predictor(cls):
         if cls._predictor is None:
-            from ml.v3.m1_subject_prediction.inference.predictor import (
-                M1V3Predictor,
+            from ml.v3.m1_subject_prediction_clean.inference.predictor import (
+                M1V3CleanPredictor,
             )
-            predictor = M1V3Predictor()
+            predictor = M1V3CleanPredictor()
             predictor.load()
             cls._predictor = predictor
         return cls._predictor

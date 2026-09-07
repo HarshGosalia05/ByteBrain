@@ -237,6 +237,10 @@ async function callFastapi<T>(
   }
 }
 
+export function clearAdminBffCache(): void {
+  bffCache.clear()
+}
+
 export function getAdminDashboard(
   filters: AdminDashboardFilters = {},
 ): Promise<BffResult<AdminDashboardData>> {
@@ -1062,6 +1066,74 @@ export function getAdminMLIntelligence(
   return callFastapi<AdminMlIntelligenceData>("ml-intelligence", BFF_TTL_MS, {
     query: filters as Record<string, string | number | null | undefined>,
   })
+}
+
+// M1-M4 batch generation (MD-08 / ML-11). POST queues an async backend
+// job; the status endpoint is polled until the job settles.
+
+export type MlGenerationModelStatus = {
+  model: string
+  eligible: number
+  total: number
+  completed: number
+  failed: number
+  skipped: number
+}
+
+export type MlGenerationJobStatus = {
+  job_id: string
+  status: "queued" | "running" | "completed" | "failed" | string
+  models: string[]
+  force: boolean
+  department_code?: number | null
+  semester?: number | null
+  academic_year?: string | null
+  total_tasks: number
+  completed_tasks: number
+  failed_tasks: number
+  skipped_tasks: number
+  progress_percent: number | null
+  per_model: MlGenerationModelStatus[]
+  errors: Array<{ student_id: string; model: string; error: string }>
+  started_at?: string | null
+  finished_at?: string | null
+  error?: string | null
+}
+
+export type GenerateMlPredictionsResponse = {
+  job_id: string
+  status: string
+  models: string[]
+  total_students: number
+  message: string
+}
+
+export function startMLGeneration(
+  filters?: AdminDashboardFilters,
+  models?: string[],
+  force?: boolean,
+): Promise<BffResult<GenerateMlPredictionsResponse>> {
+  return callFastapi<GenerateMlPredictionsResponse>(
+    "ml-intelligence/generate",
+    0,
+    {
+      method: "POST",
+      query: filters as Record<string, string | number | null | undefined>,
+      body: {
+        models: models && models.length > 0 ? models : ["m1", "m2", "m3", "m4"],
+        force: force ?? false,
+      },
+    },
+  )
+}
+
+export function getMLGenerationStatus(
+  jobId: string,
+): Promise<BffResult<MlGenerationJobStatus>> {
+  return callFastapi<MlGenerationJobStatus>(
+    `ml-intelligence/generate/status/${encodeURIComponent(jobId)}`,
+    0,
+  )
 }
 
 // M1 V2 â€” Subject Marks Prediction (validated production model).
