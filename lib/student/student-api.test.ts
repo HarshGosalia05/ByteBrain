@@ -1,4 +1,4 @@
-﻿// Frontend tests for the MD-05 student BFF layer (lib/student-api.ts).
+// Frontend tests for the MD-05 student BFF layer (lib/student-api.ts).
 //
 // Runs with Node's built-in test runner + TypeScript type stripping:
 //   node --experimental-test-module-mocks --test lib/student/student-api.test.ts
@@ -999,91 +999,115 @@ test("getStudentM1V3 maps 503 network/backend failure", async () => {
 })
 
 // ---------------------------------------------------------------------------
-// M2 V2 â€” Next-Semester Performance Prediction (validated production model).
-// The per-student route /predict/m2v2/{student_id} is consumed by the student
-// BFF. NO_DATA (incl. the deployment boundary: current cohort in the final /
-// internship semester has no upcoming regular semester) surfaces as a 404.
+// M2-TP — Next-Semester Theory & Practical Prediction (Clean package).
+// Route /predict/m2tp/{student_id} provides separate Theory & Practical
+// performance percentage predictions.
 // ---------------------------------------------------------------------------
 
-const M2V2_BODY = {
+const M2TP_BODY = {
   student_id: "STU-A",
-  model_id: "m2_v2",
-  model_version: "2.0",
+  model_id: "m2_tp",
+  model_version: "2.0.0",
   readiness_status: "READY",
   observation_semester: 6,
-  prediction_takes_effect_semester: 7,
-  predicted_next_semester_sgpa: 8.12,
-  predicted_next_semester_percentage: 76.4,
-  algorithm: { next_semester_sgpa: "random_forest", next_semester_percentage: "ridge" },
+  target_semester: 7,
+  theory: {
+    readiness_status: "READY",
+    predicted_percentage: 78.4,
+    target_subject_count: 4,
+    feature_count: 22,
+    algorithm: "RandomForestRegressor",
+    reason: null,
+  },
+  practical: {
+    readiness_status: "READY",
+    predicted_percentage: 82.1,
+    target_subject_count: 2,
+    feature_count: 22,
+    algorithm: "Ridge",
+    reason: null,
+  },
   reason: null,
-  predicted_at: "2026-09-01T08:00:00Z",
-  inference_ms: 2.1,
-  note: "Predicted next-semester SGPA/percentage are model estimates.",
+  predicted_at: "2026-09-08T00:00:00Z",
+  inference_ms: 3.2,
+  note: "M2-TP predicts separate next-semester Theory and Practical coursework performance.",
 }
 
-test("getStudentM2V2 fetches /predict/m2v2 with own student id and parses typed result", async () => {
-  route("/predict/m2v2/STU-A", 200, M2V2_BODY)
+test("getStudentM2TP fetches /predict/m2tp with own student id and parses typed result", async () => {
+  route("/predict/m2tp/STU-A", 200, M2TP_BODY)
 
-  const result = await studentApi.getStudentM2V2()
+  const result = await studentApi.getStudentM2TP()
   assert.equal(result.ok, true)
   if (!result.ok) return
-  assert.equal(result.data.model_id, "m2_v2")
+  assert.equal(result.data.model_id, "m2_tp")
   assert.equal(result.data.readiness_status, "READY")
-  assert.equal(result.data.prediction_takes_effect_semester, 7)
-  assert.equal(result.data.predicted_next_semester_sgpa, 8.12)
-  assert.equal(result.data.predicted_next_semester_percentage, 76.4)
+  assert.equal(result.data.observation_semester, 6)
+  assert.equal(result.data.target_semester, 7)
+  assert.equal(result.data.theory.predicted_percentage, 78.4)
+  assert.equal(result.data.practical.predicted_percentage, 82.1)
 
-  const hit = getCalls("/predict/m2v2")
+  const hit = getCalls("/predict/m2tp")
   assert.equal(hit.length, 1)
-  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2v2/STU-A")
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2tp/STU-A")
 })
 
-test("getStudentM2V2 url-encodes the student id", async () => {
+test("getStudentM2TP url-encodes the student id", async () => {
   activeSession = { ...DEFAULT_SESSION, student_id: "STU A/1" }
-  route("/predict/m2v2/STU%20A%2F1", 200, M2V2_BODY)
+  route("/predict/m2tp/STU%20A%2F1", 200, M2TP_BODY)
 
-  const result = await studentApi.getStudentM2V2()
+  const result = await studentApi.getStudentM2TP()
   assert.equal(result.ok, true)
-  const hit = getCalls("/predict/m2v2")
+  const hit = getCalls("/predict/m2tp")
   assert.equal(hit.length, 1)
-  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2v2/STU%20A%2F1")
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2tp/STU%20A%2F1")
 })
 
-test("getStudentM2V2 auth gating (401 / 403 / 400) applies", async () => {
+test("getStudentM2TP auth gating (401 / 403 / 400) applies", async () => {
   activeSession = null
-  const noSession = await studentApi.getStudentM2V2()
+  const noSession = await studentApi.getStudentM2TP()
   assert.equal(noSession.ok, false)
   if (!noSession.ok) assert.equal(noSession.error.status, 401)
 
   activeSession = { ...DEFAULT_SESSION, role: "Faculty" }
-  const wrongRole = await studentApi.getStudentM2V2()
+  const wrongRole = await studentApi.getStudentM2TP()
   assert.equal(wrongRole.ok, false)
   if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
 
   activeSession = { ...DEFAULT_SESSION, student_id: null }
-  const unlinked = await studentApi.getStudentM2V2()
+  const unlinked = await studentApi.getStudentM2TP()
   assert.equal(unlinked.ok, false)
   if (!unlinked.ok) assert.equal(unlinked.error.status, 400)
 })
 
-test("getStudentM2V2 maps 404 (NO_DATA / deployment boundary) and is cached", async () => {
-  route("/predict/m2v2/STU-A", 200, M2V2_BODY)
-  await studentApi.getStudentM2V2()
-  await studentApi.getStudentM2V2()
-  const gets = getCalls("/predict/m2v2")
-  assert.equal(gets.length, 1, "second read must hit the cache")
+test("getStudentM2TP returns 200 with NO_DATA for unavailable predictions", async () => {
+  const noDataBody = {
+    ...M2TP_BODY,
+    readiness_status: "NO_DATA",
+    reason: "No upcoming regular semester",
+    theory: { ...M2TP_BODY.theory, readiness_status: "NO_DATA", predicted_percentage: null },
+    practical: { ...M2TP_BODY.practical, readiness_status: "NO_DATA", predicted_percentage: null },
+  }
+  route("/predict/m2tp/STU-A", 200, noDataBody)
 
-  routes.clear()
-  route("/predict/m2v2/STU-A", 404, { detail: "no upcoming normal academic semester" })
-  await studentApi.invalidateBffKeys(DEFAULT_SESSION.student_id, [""])
-  const missing = await studentApi.getStudentM2V2()
-  assert.equal(missing.ok, false)
-  if (!missing.ok) assert.equal(missing.error.code, "not_found")
+  const result = await studentApi.getStudentM2TP()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.readiness_status, "NO_DATA")
+  assert.equal(result.data.theory.predicted_percentage, null)
+  assert.equal(result.data.practical.predicted_percentage, null)
 })
 
-test("getStudentM2V2 maps 503 network/backend failure", async () => {
-  route("/predict/m2v2/STU-A", 503, { detail: "down" })
-  const result = await studentApi.getStudentM2V2()
+test("getStudentM2TP is cached across reads", async () => {
+  route("/predict/m2tp/STU-A", 200, M2TP_BODY)
+  await studentApi.getStudentM2TP()
+  await studentApi.getStudentM2TP()
+  const gets = getCalls("/predict/m2tp")
+  assert.equal(gets.length, 1, "second read must hit the cache")
+})
+
+test("getStudentM2TP maps 503 network/backend failure", async () => {
+  route("/predict/m2tp/STU-A", 503, { detail: "down" })
+  const result = await studentApi.getStudentM2TP()
   assert.equal(result.ok, false)
   if (!result.ok) assert.equal(result.error.status, 503)
 })

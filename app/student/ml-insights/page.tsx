@@ -4,9 +4,8 @@ import { requireRole } from "@/lib/session"
 import { getSessionUser } from "@/lib/student-session"
 import {
   getStudentCareerGuidance,
-  getStudentM1V2,
   getStudentM1V3,
-  getStudentM2V2,
+  getStudentM2TP,
   getStudentM3V2,
   getStudentMlInsights,
 } from "@/lib/student-api"
@@ -44,25 +43,15 @@ async function SemesterTrendSection() {
   const user = await getSessionUser()
   const studentId = user?.student_id ?? null
 
-  const [m1v2Result, m1v3Result, m2v2Result, semHistoryResult] =
+  const [m1v3Result, semHistoryResult] =
     await Promise.allSettled([
-      getStudentM1V2(),
       getStudentM1V3(),
-      getStudentM2V2(),
       studentId ? getStudentSemesterHistory(studentId) : Promise.resolve(null),
     ])
 
-  const m1v2Data =
-    m1v2Result.status === "fulfilled" && m1v2Result.value.ok
-      ? m1v2Result.value.data
-      : null
   const m1v3Data =
     m1v3Result.status === "fulfilled" && m1v3Result.value.ok
       ? m1v3Result.value.data
-      : null
-  const m2v2Data =
-    m2v2Result.status === "fulfilled" && m2v2Result.value.ok
-      ? m2v2Result.value.data
       : null
 
   const semesterHistory =
@@ -70,69 +59,38 @@ async function SemesterTrendSection() {
       ? semHistoryResult.value.data.semesters
       : []
 
-  const predictedNextSemester =
-    m2v2Data && m2v2Data.readiness_status === "READY"
+  // Pass the full Clean M1V3 subjects (credit + grade_band + predicted marks) so the
+  // chart can compute credit-weighted SGPA via the university formula.
+  const currentSemester =
+    m1v3Data && m1v3Data.subjects.length > 0
       ? {
-          sgpa: m2v2Data.predicted_next_semester_sgpa,
-          percentage: m2v2Data.predicted_next_semester_percentage,
-          semester_no: m2v2Data.prediction_takes_effect_semester,
+          semester_no: m1v3Data.current_semester,
+          subjects: m1v3Data.subjects,
+          predictedMarks: m1v3Data.subjects.map((s) => s.predicted_end_sem_marks),
         }
       : null
-
-  // Pass the full M1V3 subjects (credit + grade_band + predicted marks) so the
-  // chart can compute credit-weighted SGPA via the university formula. Fall back
-  // to M1V2 marks-only if M1V3 is unavailable.
-  const currentSemester = (() => {
-    if (m1v3Data && m1v3Data.subjects.length > 0) {
-      return {
-        semester_no: m1v3Data.current_semester,
-        subjects: m1v3Data.subjects,
-        // Kept for M1V2 fallback path — unused when subjects is set
-        predictedMarks: m1v3Data.subjects.map((s) => s.predicted_end_sem_marks),
-      }
-    }
-    if (m1v2Data && m1v2Data.subjects.length > 0) {
-      return {
-        semester_no: m1v2Data.current_semester,
-        subjects: null,
-        predictedMarks: m1v2Data.subjects.map((s) => s.predicted_end_sem_marks),
-      }
-    }
-    return null
-  })()
 
   return (
     <SemesterTrendChart
       history={semesterHistory}
-      predictedNextSemester={predictedNextSemester}
+      predictedNextSemester={null}
       currentSemester={currentSemester}
     />
   )
 }
 
 async function MlInsightsSection() {
-  const [result, guidanceResult, m1v2Result, m1v3Result, m2v2Result, m3v2Result] =
+  const [result, guidanceResult, m1v3Result, m2tpResult, m3v2Result] =
     await Promise.allSettled([
       getStudentMlInsights(),
       getStudentCareerGuidance(),
-      getStudentM1V2(),
       getStudentM1V3(),
-      getStudentM2V2(),
+      getStudentM2TP(),
       getStudentM3V2(),
     ])
 
   const insights =
     result.status === "fulfilled" && result.value.ok ? result.value : null
-
-  const m1v2Data =
-    m1v2Result.status === "fulfilled" && m1v2Result.value.ok
-      ? m1v2Result.value.data
-      : null
-  const m1v2NoData =
-    m1v2Data !== null &&
-    m1v2Data.readiness_status === "NO_DATA" &&
-    m1v2Data.subjects?.length === 0
-  const m1v2Reason = m1v2NoData ? (m1v2Data?.reason ?? null) : null
 
   const m1v3Data =
     m1v3Result.status === "fulfilled" && m1v3Result.value.ok
@@ -143,6 +101,15 @@ async function MlInsightsSection() {
     m1v3Data.readiness_status === "NO_DATA" &&
     m1v3Data.subjects?.length === 0
   const m1v3Reason = m1v3NoData ? (m1v3Data?.reason ?? null) : null
+
+  const m2tpData =
+    m2tpResult.status === "fulfilled" && m2tpResult.value.ok
+      ? m2tpResult.value.data
+      : null
+  const m2tpReason =
+    m2tpResult.status === "fulfilled" && !m2tpResult.value.ok
+      ? m2tpResult.value.error.message
+      : (m2tpData?.reason ?? null)
 
   if (!insights) {
     return (
@@ -165,24 +132,11 @@ async function MlInsightsSection() {
           ? guidanceResult.value.data
           : null
       }
-      m1v2={m1v2NoData ? null : m1v2Data}
-      m1v2NoData={m1v2NoData}
-      m1v2Reason={m1v2Reason}
       m1v3={m1v3NoData ? null : m1v3Data}
       m1v3NoData={m1v3NoData}
       m1v3Reason={m1v3Reason}
-      m2v2={
-        m2v2Result.status === "fulfilled" && m2v2Result.value.ok
-          ? m2v2Result.value.data
-          : null
-      }
-      m2v2Reason={
-        m2v2Result.status === "fulfilled" &&
-        !m2v2Result.value.ok &&
-        m2v2Result.value.error.status === 404
-          ? m2v2Result.value.error.message
-          : null
-      }
+      m2tp={m2tpData}
+      m2tpReason={m2tpReason}
       m3v2={
         m3v2Result.status === "fulfilled" && m3v2Result.value.ok
           ? m3v2Result.value.data

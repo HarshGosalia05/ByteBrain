@@ -21,8 +21,8 @@ Design rules:
     ``get_latest`` resolves newest via ``generated_at DESC``, history
     stays available.
   * ``model_version`` is preserved where the producing model exposes
-    one (M1 artifact metadata ``version``; M4 engine ``version``) and
-    stays NULL for M2/M3 (no metadata).
+    one (M1 artifact metadata ``version``; M2-TP package ``m2_tp_v1``;
+    M4 engine ``version``) and stays NULL for M3 (no metadata).
   * The module imports nothing heavy at import time, so it can be unit
     tested in either environment (backend/persistence side without
     pandas, or ML/generation side without asyncpg).
@@ -37,9 +37,11 @@ VALID_PREDICTION_TYPES = ("m1", "m2", "m3", "m4")
 
 _GENERATION_METHODS: dict[str, str] = {
     "m1": "predict_m1_for_student",
-    "m2": "predict_m2_for_student",
     "m3": "predict_m3_for_student",
     "m4": "predict_m4_for_student",
+    # M2 is special-cased in generate_and_persist: it is served by the validated
+    # M2-TP package (M2TPPredictionService), which does not go through
+    # ml.src.prediction_service.
 }
 
 
@@ -50,25 +52,20 @@ def utc_now() -> datetime:
 def resolve_model_version(prediction_type: str) -> Optional[str]:
     """Return the producing model's version where one is exposed.
 
-    M1 -> artifact metadata ``version`` (e.g. "1").
+    M1 -> Clean M1_v3 model version ("m1_v3_clean").
+    M2 -> validated M2-TP package version ("m2_tp_v1").
     M4 -> rule-based engine ``version`` (e.g. "1.0").
-    M2/M3 -> no metadata exposed; returns None (stored as NULL).
+    M3 -> no metadata exposed; returns None (stored as NULL).
 
     Resolution failures never block persistence: returns None.
     """
     if prediction_type == "m1":
-        try:
-            from ml.src import registry
-
-            artifact = registry.load_model("m1")
-            metadata = artifact.get("metadata", {}) if isinstance(artifact, dict) else {}
-            version = metadata.get("version")
-            return str(version) if version is not None else None
-        except Exception:
-            return None
+        return "m1_v3_clean"
+    if prediction_type == "m2":
+        return "m2_tp_v1"
     if prediction_type == "m4":
         try:
-            from ml.src import registry
+            from ml.src import registry  # noqa: PLC0415
 
             engine = registry.load_model("m4")
             version = getattr(engine, "version", None)
@@ -99,10 +96,12 @@ class PredictionGenerationService:
         *,
         generation_service: Any = None,
         persistence_service: Any = None,
+        m2tp_service: Any = None,
     ):
         self._pool = pool
         self._generation = generation_service
         self._persistence = persistence_service
+        self._m2tp = m2tp_service
 
     # ------------------------------------------------------------------
     # Lazy dependency resolution (keeps module import dependency-free)
@@ -160,9 +159,68 @@ class PredictionGenerationService:
         if not student_id or not str(student_id).strip():
             raise ValueError("student_id is required")
 
-        generation = self._generation_service()
-        method = getattr(generation, _GENERATION_METHODS[prediction_type])
-        result = await method(student_id)  # real DB data -> features -> inference
+        if prediction_type == "m1" and self._generation is None and self._pool is not None:
+            # Clean M1_v3 prediction path using M1V3CleanPredictor
+            from app.services.m1v3_prediction_service import M1V3PredictionService  # noqa: PLC0415
+            from ml.src.inference import M1Prediction, PredictionResult  # noqa: PLC0415
+
+            m1_service = M1V3PredictionService(self._pool)
+            m1_result = await m1_service.predict(student_id)
+            predictions = [
+                M1Prediction(
+                    student_id=student_id,
+                    subject_id=s["subject_id"],
+                    semester_no=s["semester_no"],
+                    predicted_end_sem_marks=float(s["predicted_end_sem_marks"]),
+                    clipped=False,
+                )
+                for s in m1_result.get("subjects", [])
+            ]
+            result = PredictionResult(
+                model_id="m1",
+                predictions=predictions,
+                input_row_count=len(predictions),
+                prediction_count=len(predictions),
+            )
+        elif prediction_type == "m2":
+            # M2-TP: the validated M2-TP package (M2TPPredictionService) serves
+            # the next-semester Theory / Practical forecast. It returns a plain
+            # dict contract; we map it onto typed M2Prediction items for the
+            # ML-06 persistence pipeline. NO_DATA (no valid upcoming semester
+            # forecast) raises so nothing invalid is persisted.
+            from ml.src.inference import M2Prediction, PredictionResult  # noqa: PLC0415
+
+            if self._m2tp is None:
+                from app.services.m2tp_prediction_service import (  # noqa: PLC0415
+                    M2TPPredictionService,
+                )
+                self._m2tp = M2TPPredictionService(self._pool)
+            payload = await self._m2tp.predict(student_id)
+            theory = payload.get("theory") or {}
+            practical = payload.get("practical") or {}
+            if payload.get("readiness_status") == "NO_DATA":
+                raise ValueError(
+                    f"M2-TP has no valid prediction for student {student_id}: "
+                    f"{payload.get('reason') or 'no upcoming theory/practical courses.'}"
+                )
+            result = PredictionResult(
+                model_id="m2",
+                predictions=[
+                    M2Prediction(
+                        student_id=student_id,
+                        source_semester=payload.get("observation_semester"),
+                        target_semester=payload.get("target_semester"),
+                        theory_prediction_pct=theory.get("predicted_percentage"),
+                        practical_prediction_pct=practical.get("predicted_percentage"),
+                    )
+                ],
+                input_row_count=1,
+                prediction_count=1,
+            )
+        else:
+            generation = self._generation_service()
+            method = getattr(generation, _GENERATION_METHODS[prediction_type])
+            result = await method(student_id)  # real DB data -> features -> inference
 
         rows = to_persistence_rows(result)  # validates model_id + item types
         version = (

@@ -46,12 +46,23 @@ class M1Prediction:
 
 @dataclass(frozen=True)
 class M2Prediction:
-    """M2 prediction result for a single student-semester."""
+    """M2 prediction result for a single student-semester (M2-TP).
+
+    M2-TP is the validated next-semester performance package: it forecasts
+    the upcoming semester's Theory (M2_T) and Practical/Lab (M2_P) aggregate
+    percentages on a 0-100 scale.
+
+    ``theory_prediction_pct`` / ``practical_prediction_pct`` are ``None``
+    when the model reports NO_DATA (graduating/internship semester, a target
+    semester with zero registered subjects, or insufficient history).  ``None``
+    preserves the model semantics exactly and is never coerced to a fake 0.
+    """
 
     student_id: str
-    semester_no: int | float
-    predicted_next_semester_sgpa: float
-    predicted_next_semester_percentage: float
+    source_semester: int | float
+    target_semester: int | float
+    theory_prediction_pct: float | None
+    practical_prediction_pct: float | None
 
 
 @dataclass(frozen=True)
@@ -175,64 +186,6 @@ class InferenceService:
 
         return PredictionResult(
             model_id="m1",
-            predictions=predictions,
-            input_row_count=len(raw_df),
-            prediction_count=len(predictions),
-        )
-
-    # ---- M2: Next-Semester Performance Predictor ---------------------------
-
-    def predict_m2(
-        self,
-        summary: pd.DataFrame,
-        students: pd.DataFrame,
-    ) -> PredictionResult:
-        """Predict next-semester SGPA and percentage.
-
-        Parameters
-        ----------
-        summary:
-            Student semester summary records.
-        students:
-            Student metadata (joined on student_id).
-
-        Returns
-        -------
-        PredictionResult containing list[M2Prediction].
-
-        Raises
-        ------
-        ValueError
-            If required columns are missing.
-        RuntimeError
-            If model loading or prediction fails.
-        """
-        artifact = self._load_artifact("m2")
-
-        # Feature preparation (ML-02)
-        X, raw_df = features.prepare_m2_inference(summary, students)
-
-        # Predict each target
-        try:
-            pred_sgpa = artifact["next_semester_sgpa"].predict(X)
-            pred_pct = artifact["next_semester_percentage"].predict(X)
-        except Exception as exc:
-            raise RuntimeError(f"M2 prediction failed: {exc}") from exc
-
-        # Build results
-        predictions = []
-        for i, (_, row) in enumerate(raw_df.iterrows()):
-            predictions.append(
-                M2Prediction(
-                    student_id=str(row["student_id"]),
-                    semester_no=row["semester_no"],
-                    predicted_next_semester_sgpa=round(float(pred_sgpa[i]), 2),
-                    predicted_next_semester_percentage=round(float(pred_pct[i]), 2),
-                )
-            )
-
-        return PredictionResult(
-            model_id="m2",
             predictions=predictions,
             input_row_count=len(raw_df),
             prediction_count=len(predictions),

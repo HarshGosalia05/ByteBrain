@@ -2,13 +2,15 @@
 
 Focused tests covering:
 - M1 prediction (end-semester marks)
-- M2 prediction (SGPA and percentage)
 - M3 prediction (at-risk)
 - M4 scoring (career readiness)
 - Invalid/missing inputs
 - Output validation
 - Model loading failure handling
 - Deterministic repeated inference
+
+Note: M2 offline inference has been retired with the legacy V1 M2 pathway;
+M2 production predictions come exclusively from the validated M2-TP package.
 """
 from __future__ import annotations
 
@@ -28,16 +30,9 @@ if _ML_SRC not in sys.path:
 from inference import (  # noqa: E402
     InferenceService,
     M1Prediction,
-    M2Prediction,
     M3Prediction,
     M4Score,
     PredictionResult,
-)
-from features import (  # noqa: E402
-    build_m2m3_features,
-    _one_hot_encode,
-    M2_CONTRACT,
-    M3_CONTRACT,
 )
 
 
@@ -217,51 +212,6 @@ class TestM1Prediction(unittest.TestCase):
                 _make_subjects_df(),
                 _make_students_df(),
             )
-
-
-# ---------------------------------------------------------------------------
-# M2 prediction tests
-# ---------------------------------------------------------------------------
-
-
-class TestM2Prediction(unittest.TestCase):
-    """Verify M2 prediction pipeline."""
-
-    def test_predict_m2_returns_prediction_result(self):
-        svc = InferenceService()
-        result = svc.predict_m2(_make_summary_df(), _make_students_df())
-        self.assertIsInstance(result, PredictionResult)
-        self.assertEqual(result.model_id, "m2")
-
-    def test_predict_m2_returns_correct_count(self):
-        svc = InferenceService()
-        result = svc.predict_m2(_make_summary_df(), _make_students_df())
-        self.assertEqual(result.prediction_count, 3)
-
-    def test_predict_m2_predictions_are_m2prediction(self):
-        svc = InferenceService()
-        result = svc.predict_m2(_make_summary_df(), _make_students_df())
-        for pred in result.predictions:
-            self.assertIsInstance(pred, M2Prediction)
-
-    def test_predict_m2_has_both_targets(self):
-        svc = InferenceService()
-        result = svc.predict_m2(_make_summary_df(), _make_students_df())
-        for pred in result.predictions:
-            self.assertIsNotNone(pred.predicted_next_semester_sgpa)
-            self.assertIsNotNone(pred.predicted_next_semester_percentage)
-            self.assertIsInstance(pred.predicted_next_semester_sgpa, float)
-            self.assertIsInstance(pred.predicted_next_semester_percentage, float)
-
-    def test_predict_m2_missing_column_raises(self):
-        svc = InferenceService()
-        bad_summary = pd.DataFrame({
-            "student_id": ["S1"],
-            "semester_no": [1],
-            # missing many required columns
-        })
-        with self.assertRaises((ValueError, RuntimeError)):
-            svc.predict_m2(bad_summary, _make_students_df())
 
 
 # ---------------------------------------------------------------------------
@@ -462,13 +412,6 @@ class TestModelLoadingFailure(unittest.TestCase):
         self.assertIn("Failed to load model", str(ctx.exception))
 
     @patch("registry.load_model")
-    def test_m2_loading_failure_raises_runtime_error(self, mock_load):
-        mock_load.side_effect = ValueError("Corrupt artifact")
-        svc = InferenceService()
-        with self.assertRaises(RuntimeError):
-            svc.predict_m2(_make_summary_df(), _make_students_df())
-
-    @patch("registry.load_model")
     def test_m3_loading_failure_raises_runtime_error(self, mock_load):
         mock_load.side_effect = KeyError("Model not registered")
         svc = InferenceService()
@@ -514,13 +457,11 @@ class TestDeterministicInference(unittest.TestCase):
             self.assertEqual(p1.predicted_end_sem_marks, p2.predicted_end_sem_marks)
             self.assertEqual(p1.clipped, p2.clipped)
 
-    def test_m2_deterministic(self):
+    def test_m2_deterministic_removed(self):
+        # M2 offline inference is retired; M2Prediction is only the M2-TP
+        # persistence DTO now. No legacy M2 determinism contract remains.
         svc = InferenceService()
-        result1 = svc.predict_m2(_make_summary_df(), _make_students_df())
-        result2 = svc.predict_m2(_make_summary_df(), _make_students_df())
-        for p1, p2 in zip(result1.predictions, result2.predictions):
-            self.assertEqual(p1.predicted_next_semester_sgpa, p2.predicted_next_semester_sgpa)
-            self.assertEqual(p1.predicted_next_semester_percentage, p2.predicted_next_semester_percentage)
+        self.assertFalse(hasattr(svc, "predict_m2"))
 
     def test_m3_deterministic(self):
         svc = InferenceService()
@@ -570,17 +511,6 @@ class TestEdgeCases(unittest.TestCase):
                 _make_subjects_df(),
                 _make_students_df(),
             )
-
-    def test_m2_empty_summary_df_raises(self):
-        svc = InferenceService()
-        empty_summary = pd.DataFrame(columns=[
-            "student_id", "semester_no", "subjects_registered",
-            "credits_registered", "credits_earned", "semester_total_marks",
-            "semester_percentage", "semester_sgpa", "semester_attendance_percentage",
-            "backlog_count", "semester_result",
-        ])
-        with self.assertRaises(RuntimeError):
-            svc.predict_m2(empty_summary, _make_students_df())
 
     def test_m3_empty_summary_df_raises(self):
         svc = InferenceService()

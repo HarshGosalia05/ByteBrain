@@ -82,14 +82,14 @@ class M1SubjectIntelligence(BaseModel):
     subjects_needing_attention: List[SubjectPerformanceItem]
 
 
-class SgpaDistributionItem(BaseModel):
+class TheoryDistributionItem(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     band: str
     count: int
 
 
-class PercentageDistributionItem(BaseModel):
+class PracticalDistributionItem(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     band: str
@@ -101,17 +101,17 @@ class DepartmentNextSemPerformanceItem(BaseModel):
 
     department_code: int
     department_name: str
-    predicted_avg_sgpa: Optional[float] = None
-    predicted_avg_percentage: Optional[float] = None
+    predicted_avg_theory_pct: Optional[float] = None
+    predicted_avg_practical_pct: Optional[float] = None
 
 
 class M2NextSemPerformanceIntelligence(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    predicted_avg_next_sgpa: Optional[float] = None
-    predicted_avg_next_percentage: Optional[float] = None
-    sgpa_distribution: List[SgpaDistributionItem]
-    percentage_distribution: List[PercentageDistributionItem]
+    predicted_avg_theory_pct: Optional[float] = None
+    predicted_avg_practical_pct: Optional[float] = None
+    theory_distribution: List[TheoryDistributionItem]
+    practical_distribution: List[PracticalDistributionItem]
     department_performance_distribution: List[DepartmentNextSemPerformanceItem]
     disclaimer: str
 

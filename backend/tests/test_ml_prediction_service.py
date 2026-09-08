@@ -92,8 +92,8 @@ def valid_value(prediction_type="m1"):
     return {
         "m1": {"subject_id": "SUB0050", "semester_no": 7,
                "predicted_end_sem_marks": 58.5, "clipped": False},
-        "m2": {"semester_no": 7, "predicted_next_semester_sgpa": 8.25,
-               "predicted_next_semester_percentage": 78.4},
+        "m2": {"source_semester": 6, "target_semester": 7,
+               "theory_prediction_pct": 72.5, "practical_prediction_pct": 68.0},
         "m3": {"semester_no": 7, "is_at_risk_next_sem": 1},
         "m4": {"enrollment_no": "2023010001", "full_name": "Alice",
                "department_name": "CSE", "current_semester": 7,

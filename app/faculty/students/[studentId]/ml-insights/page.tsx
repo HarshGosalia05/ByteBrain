@@ -3,9 +3,8 @@ import { ArrowLeft } from "lucide-react"
 
 import { requireRole } from "@/lib/session"
 import {
-  getFacultyStudentM1V2,
   getFacultyStudentM1V3,
-  getFacultyStudentM2V2,
+  getFacultyStudentM2TP,
   getFacultyStudentM3V2,
   getFacultyStudentMlInsights,
   getFacultyStudentProfile,
@@ -22,13 +21,12 @@ export default async function FacultyStudentMlInsightsPage(props: {
 
   const { studentId } = await props.params
 
-  const [profileResult, insightsResult, m1v2Result, m1v3Result, m2v2Result, m3v2Result] =
+  const [profileResult, insightsResult, m1v3Result, m2tpResult, m3v2Result] =
     await Promise.allSettled([
       getFacultyStudentProfile(studentId),
       getFacultyStudentMlInsights(studentId),
-      getFacultyStudentM1V2(studentId),
       getFacultyStudentM1V3(studentId),
-      getFacultyStudentM2V2(studentId),
+      getFacultyStudentM2TP(studentId),
       getFacultyStudentM3V2(studentId),
     ])
 
@@ -55,7 +53,7 @@ export default async function FacultyStudentMlInsightsPage(props: {
     ? `${student.enrollment_no} • ${student.department_name ?? "—"} • Semester ${student.current_semester ?? "—"}`
     : "ML predictions with grounded explanations"
 
-  // A 404 on the M1/M2/M3 V2 routes is the deliberate NO_DATA boundary (e.g. the
+  // A 404 on the M1/M3 V2 routes is the deliberate NO_DATA boundary (e.g. the
   // student has no upcoming regular academic semester), not a real failure.
   const isNoData = (r: PromiseSettledResult<BffResult<unknown>>) =>
     r.status === "fulfilled" && !r.value.ok && r.value.error.status === 404
@@ -90,12 +88,10 @@ export default async function FacultyStudentMlInsightsPage(props: {
       />
       <FacultyMlInsightsGrid
         data={insights.data}
-        m1v2={m1v2Result.status === "fulfilled" && m1v2Result.value.ok ? m1v2Result.value.data : null}
-        m1v2NoData={isNoData(m1v2Result)}
         m1v3={m1v3NoData ? null : m1v3Data}
         m1v3NoData={m1v3NoData}
-        m2v2={m2v2Result.status === "fulfilled" && m2v2Result.value.ok ? m2v2Result.value.data : null}
-        m2v2NoData={isNoData(m2v2Result)}
+        m2tp={m2tpResult.status === "fulfilled" && m2tpResult.value.ok ? m2tpResult.value.data : null}
+        m2tpNoData={isNoData(m2tpResult)}
         m3v2={m3v2Result.status === "fulfilled" && m3v2Result.value.ok ? m3v2Result.value.data : null}
         m3v2NoData={isNoData(m3v2Result)}
       />

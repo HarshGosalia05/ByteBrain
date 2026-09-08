@@ -52,7 +52,6 @@ from prediction_service import (  # noqa: E402
 from inference import (  # noqa: E402
     PredictionResult,
     M1Prediction,
-    M2Prediction,
     M3Prediction,
     M4Score,
 )
@@ -261,11 +260,13 @@ class TestPredictionServiceInitialization:
         assert svc.pool is pool
         assert svc._inference is not None
         assert hasattr(svc, "predict_m1_for_student")
-        assert hasattr(svc, "predict_m2_for_student")
         assert hasattr(svc, "predict_m3_for_student")
         assert hasattr(svc, "predict_m4_for_student")
         assert hasattr(svc, "clear_cache")
         assert hasattr(svc, "clear_student_cache")
+        # M2 is served by the validated M2-TP package through the backend
+        # M2TPPredictionService, NOT through PredictionService/InferenceService.
+        assert not hasattr(svc, "predict_m2_for_student")
 
     def test_service_cache_isolated_per_instance(self):
         pool1 = MockPool()
@@ -299,30 +300,13 @@ class TestPredictionServiceM1:
         assert hasattr(result, "prediction_count")
 
 
-class TestPredictionServiceM2M3:
-    """M2/M3 prediction service tests."""
-
-    def test_predict_m2_service_path(self):
-        pool = _make_mock_pool()
-        svc = PredictionService(pool)
-        assert callable(getattr(svc, "predict_m2_for_student", None))
+class TestPredictionServiceM3:
+    """M3 prediction service tests."""
 
     def test_predict_m3_service_path(self):
         pool = _make_mock_pool()
         svc = PredictionService(pool)
         assert callable(getattr(svc, "predict_m3_for_student", None))
-
-    def test_predict_m2_returns_structured_result(self):
-        pool = _make_mock_pool()
-        svc = PredictionService(pool)
-        result = asyncio.run(svc.predict_m2_for_student("STU000001"))
-        assert result is not None
-        assert result.model_id == "m2"
-        assert hasattr(result, "predictions")
-        if result.predictions:
-            pred = result.predictions[0]
-            assert hasattr(pred, "predicted_next_semester_sgpa")
-            assert hasattr(pred, "predicted_next_semester_percentage")
 
 
 class TestPredictionServiceM4:
@@ -501,17 +485,6 @@ class TestServiceIntegration:
         assert hasattr(result, "input_row_count")
         assert hasattr(result, "prediction_count")
 
-    def test_m2_full_service_flow(self):
-        """Test M2 service flow from data fetch to inference result."""
-        result = asyncio.run(self.svc.predict_m2_for_student("STU000001"))
-        assert result is not None
-        assert result.model_id == "m2"
-        assert hasattr(result, "predictions")
-        if result.predictions:
-            pred = result.predictions[0]
-            assert hasattr(pred, "predicted_next_semester_sgpa")
-            assert hasattr(pred, "predicted_next_semester_percentage")
-
     def test_m3_full_service_flow(self):
         """Test M3 service flow from data fetch to inference result."""
         result = asyncio.run(self.svc.predict_m3_for_student("STU000001"))
@@ -562,11 +535,11 @@ class TestCaching:
     def test_cache_key_includes_model_type(self):
         """Distinct model types must not share a cache entry for one student."""
         m1 = asyncio.run(self.svc.predict_m1_for_student("STU000001"))
-        m2 = asyncio.run(self.svc.predict_m2_for_student("STU000001"))
+        m3 = asyncio.run(self.svc.predict_m3_for_student("STU000001"))
         assert m1.model_id == "m1"
-        assert m2.model_id == "m2"
+        assert m3.model_id == "m3"
         assert ("m1", "STU000001") in self.svc._cache
-        assert ("m2", "STU000001") in self.svc._cache
+        assert ("m3", "STU000001") in self.svc._cache
 
     def test_clear_cache(self):
         """Clear all cached predictions."""
@@ -601,15 +574,6 @@ class TestErrorHandling:
         import asyncio
         try:
             asyncio.run(self.svc.predict_m1_for_student("STU_NONEXISTENT"))
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "No data found" in str(e)
-
-    def test_m2_raises_when_no_data(self):
-        """M2 should raise ValueError when no student data found."""
-        import asyncio
-        try:
-            asyncio.run(self.svc.predict_m2_for_student("STU_NONEXISTENT"))
             assert False, "Should have raised ValueError"
         except ValueError as e:
             assert "No data found" in str(e)
@@ -664,20 +628,6 @@ class TestRawDataParam:
         with pytest.raises(ValueError) as exc:
             asyncio.run(svc_empty.predict_m1_for_student("STU000001", raw=(perf, att)))
         assert "m1 raw data must be" in str(exc.value)
-
-    def test_m2_with_raw_data(self):
-        summary = asyncio.run(_fetch_student_semester_summary(self.pool, "STU000001"))
-        students = asyncio.run(_fetch_student_profile(self.pool, "STU000001"))
-        raw = (summary, students)
-        empty_pool = MockPool()
-        svc_empty = PredictionService(empty_pool)
-        
-        res = asyncio.run(svc_empty.predict_m2_for_student("STU000001", raw=raw))
-        assert res.model_id == "m2"
-        
-        svc_empty.clear_cache()
-        with pytest.raises(ValueError):
-            asyncio.run(svc_empty.predict_m2_for_student("STU000001", raw=(summary,)))
 
     def test_m3_with_raw_data(self):
         summary = asyncio.run(_fetch_student_semester_summary(self.pool, "STU000001"))

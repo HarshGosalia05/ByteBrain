@@ -112,11 +112,11 @@ class AdminMlInsightsTool:
         if m2_obj is None and hasattr(ml_resp, "academic_predictions"):
             m2_obj = getattr(ml_resp.academic_predictions, "m2", None) or getattr(ml_resp.academic_predictions, "m2_next_sem", None)
 
-        avg_sgpa = getattr(m2_obj, "overall_avg_predicted_sgpa", None) or getattr(m2_obj, "predicted_avg_next_sgpa", None) if m2_obj else None
-        avg_pct = getattr(m2_obj, "overall_avg_predicted_percentage", None) or getattr(m2_obj, "predicted_avg_next_percentage", None) if m2_obj else None
+        avg_theory = getattr(m2_obj, "overall_avg_predicted_theory_pct", None) or getattr(m2_obj, "predicted_avg_theory_pct", None) if m2_obj else None
+        avg_practical = getattr(m2_obj, "overall_avg_predicted_practical_pct", None) or getattr(m2_obj, "predicted_avg_practical_pct", None) if m2_obj else None
         m2_summary = AdminM2NextSemSummary(
-            avg_predicted_sgpa=avg_sgpa,
-            avg_predicted_percentage=avg_pct,
+            avg_predicted_theory_pct=avg_theory,
+            avg_predicted_practical_pct=avg_practical,
         )
 
         # M3

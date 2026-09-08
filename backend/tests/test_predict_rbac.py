@@ -132,8 +132,8 @@ class AuthorizePredictionAccessTest(unittest.TestCase):
     def test_faculty_m1_route_scope_enforced(self):
         self._assert_faculty_scope_enforced("GET /predict/m1/{student_id}")
 
-    def test_faculty_m2_route_scope_enforced(self):
-        self._assert_faculty_scope_enforced("GET /predict/m2/{student_id}")
+    def test_faculty_m2tp_route_scope_enforced(self):
+        self._assert_faculty_scope_enforced("GET /predict/m2tp/{student_id}")
 
     def test_faculty_m3_route_scope_enforced(self):
         self._assert_faculty_scope_enforced("GET /predict/m3/{student_id}")

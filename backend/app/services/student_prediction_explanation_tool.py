@@ -25,7 +25,12 @@ It does NOT:
 Semantics:
   * M1 predicts subject end-sem marks (target_semester = the subject's
     semester).
-  * M2/M3 predict semester T+1 from the latest completed semester T; the
+  * M2 is served by the validated M2-TP package and persisted with
+    ``source_semester`` / ``target_semester`` plus separate
+    ``theory_prediction_pct`` / ``practical_prediction_pct``
+    (``model_version = m2_tp_v1``). The persisted payload does NOT carry a
+    ``semester_no``; no legacy M2 shape is read.
+  * M3 predicts semester T+1 from the latest completed semester T; the
     persisted ``semester_no`` is the SOURCE semester and ``target_semester``
     is ``source_semester + 1`` (per the ML-05 semantic contract).
   * M4 is a deterministic rule-based readiness engine (``model_kind`` =
@@ -88,14 +93,14 @@ _MODEL_KIND: dict[str, str] = {
 
 _TARGETS: dict[str, str] = {
     "m1": "subject_end_sem_marks",
-    "m2": "next_semester_percentage",
+    "m2": "next_semester_theory_practical_percentage",
     "m3": "next_semester_at_risk",
     "m4": "career_readiness_score",
 }
 
 _UNAVAILABLE_NOTES: dict[str, str] = {
     "m1": "No verified M1 subject end-marks prediction is available for this student.",
-    "m2": "No verified M2 next-semester performance prediction is available for this student.",
+    "m2": "No verified M2-TP next-semester Theory/Practical prediction is available for this student.",
     "m3": "No verified M3 next-semester at-risk prediction is available for this student.",
     "m4": "No verified M4 career readiness score is available for this student.",
 }
@@ -117,6 +122,15 @@ def _int_or_none(value: Any) -> int | None:
         return None
     try:
         return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
     except (TypeError, ValueError):
         return None
 
@@ -300,7 +314,12 @@ class StudentPredictionExplanationTool:
             common["source_semester"] = None
             common["target_semester"] = semester
             common["subject_id"] = value.get("subject_id")
-        elif prediction_type_id in ("m2", "m3"):
+        elif prediction_type_id == "m2":
+            # M2-TP persists source_semester/target_semester directly; the
+            # legacy payload (semester_no + sgpa) is never read.
+            common["source_semester"] = _int_or_none(value.get("source_semester"))
+            common["target_semester"] = _int_or_none(value.get("target_semester"))
+        elif prediction_type_id == "m3":
             semester = _int_or_none(value.get("semester_no"))
             common["source_semester"] = semester
             common["target_semester"] = (
@@ -364,12 +383,11 @@ class StudentPredictionExplanationTool:
         elif prediction_type_id == "m2":
             item = M2Prediction(
                 student_id=student_id,
-                semester_no=value.get("semester_no"),
-                predicted_next_semester_sgpa=float(
-                    value.get("predicted_next_semester_sgpa") or 0.0
-                ),
-                predicted_next_semester_percentage=float(
-                    value.get("predicted_next_semester_percentage") or 0.0
+                source_semester=value.get("source_semester"),
+                target_semester=value.get("target_semester"),
+                theory_prediction_pct=_float_or_none(value.get("theory_prediction_pct")),
+                practical_prediction_pct=_float_or_none(
+                    value.get("practical_prediction_pct")
                 ),
             )
         elif prediction_type_id == "m3":

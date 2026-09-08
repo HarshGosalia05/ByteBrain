@@ -5,8 +5,11 @@ INFERENCE CONTRACT (``ml.src.features.v1_inference_contract``):
 
   * Service-level: real PredictionContractService + real contract/artifacts
     over realistic DB frames that mirror the real CSV data columns.
-  * HTTP-level: the refactored GET /predict/m1|m2|m3 endpoints wired to the
-    contract service (M3 exposed as BLOCKED).
+  * M2 is RETIRED from this offline contract (legacy V1 artifact deleted;
+    production M2 is served by the M2-TP package), so the contract service
+    no longer exposes ``predict_m2`` and the old ``/predict/m2`` route is gone.
+  * HTTP-level: the refactored GET /predict/m1|m3 endpoints wired to the
+    contract service (M3 READY per the committed contract).
   * Read-only: verifies no write SQL / no persistence is invoked.
 
 Structure matches the existing backend test style (unittest, sys.path
@@ -130,34 +133,25 @@ class TestPredictionContractService(unittest.TestCase):
             self.assertTrue(all(isinstance(pred[k], (int, float)) for k in
                                 ("semester_no", "feature_count")))
 
-    def test_m2_returns_read_ready_prediction(self):
-        async def _run():
-            with _patch_fetch():
-                return await self.svc.predict_m2("STU000001")
+    def test_m2_is_retired_from_contract(self):
+        # M2 offline inference is gone: legacy V1 artifact deleted, predict_m2
+        # removed, and the contract reports M2 as BLOCKED (production M2 is
+        # served exclusively by the validated M2-TP package).
+        import ml.src.features.v1_inference_contract as contract
 
-        body = asyncio.run(_run())
-        self.assertEqual(body["model_id"], "m2")
-        self.assertEqual(body["readiness_status"], "READY")
-        self.assertTrue(body["prediction_available"])
-        pred = body["prediction"]
-        self.assertIn("next_semester_percentage", pred)
-        self.assertIn("next_semester_sgpa", pred)
-        self.assertIsInstance(pred["next_semester_percentage"], float)
-        self.assertIsInstance(pred["next_semester_sgpa"], float)
-        self.assertEqual(body["feature_count"], 12)
+        self.assertEqual(contract.get_readiness("m2"), contract.BLOCKED)
+        self.assertFalse(hasattr(self.svc, "predict_m2"))
 
-    def test_m3_is_blocked_not_approved(self):
+    def test_m3_returns_read_ready_prediction(self):
         async def _run():
             with _patch_fetch():
                 return await self.svc.predict_m3("STU000001")
 
         body = asyncio.run(_run())
         self.assertEqual(body["model_id"], "m3")
-        self.assertEqual(body["readiness_status"], "BLOCKED")
-        self.assertFalse(body["prediction_available"])
-        self.assertIsNone(body["prediction"])
-        self.assertIn("blocked", body["reason"].lower())
-        self.assertIn("No production prediction", body["reason"])
+        self.assertEqual(body["readiness_status"], "READY")
+        self.assertTrue(body["prediction_available"])
+        self.assertIn("is_at_risk_next_sem", body["prediction"])
 
     def test_no_data_raises_value_error(self):
         async def _run():
@@ -216,27 +210,25 @@ class TestPredictionContractEndpoints(unittest.TestCase):
         self.assertEqual(body["prediction_count"], 2)
         self.assertTrue(body["predictions"][0]["prediction_available"])
 
-    def test_http_m2(self):
+    def test_http_m2_route_removed(self):
+        # The legacy /predict/m2 endpoint was removed along with the M2 V1
+        # offline contract; M2 is served via /predict/m2tp instead.
         r = self.client.get("/predict/m2/STU000001")
+        self.assertEqual(r.status_code, 404)
+
+    def test_http_m3_ready(self):
+        r = self.client.get("/predict/m3/STU000001")
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertEqual(body["readiness_status"], "READY")
-        self.assertIn("next_semester_percentage", body["prediction"])
+        self.assertTrue(body["prediction_available"])
+        self.assertIsNotNone(body["prediction"])
 
-    def test_http_m3_blocked(self):
-        r = self.client.get("/predict/m3/STU000001")
-        self.assertEqual(r.status_code, 200)
-        body = r.json()
-        self.assertEqual(body["readiness_status"], "BLOCKED")
-        self.assertFalse(body["prediction_available"])
-        self.assertIsNone(body["prediction"])
-
-    def test_http_m3_no_real_prediction(self):
-        # BLOCKED must not smuggle a real is_at_risk value.
+    def test_http_m3_returns_real_prediction(self):
+        # READY must expose a real is_at_risk value in the prediction payload.
         r = self.client.get("/predict/m3/STU000001")
         body = r.json()
-        self.assertNotIn("is_at_risk_next_sem", body)
-        self.assertNotIn("is_at_risk_next_sem", body.get("prediction") or {})
+        self.assertIn("is_at_risk_next_sem", body.get("prediction") or {})
 
 
 if __name__ == "__main__":

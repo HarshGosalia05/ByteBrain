@@ -11,7 +11,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 
 import { m1V2GradeTone } from "./m1v2-prediction.ts"
-import { m2V2SgpaTone } from "./m2v2-prediction.ts"
+import { m2tpPerformanceTone } from "./m2tp-prediction.ts"
 import { m3V2RiskTone, riskLevelLabel, formatRiskPercent } from "./m3v2-prediction.ts"
 
 // ---------------------------------------------------------------------------
@@ -44,18 +44,18 @@ test("m1V2GradeTone is case/whitespace insensitive", () => {
 })
 
 // ---------------------------------------------------------------------------
-// M2 V2 SGPA tone
+// M2-TP performance tone
 // ---------------------------------------------------------------------------
 
-test("m2V2SgpaTone returns secondary for null (no forecast)", () => {
-  assert.equal(m2V2SgpaTone(null), "secondary")
+test("m2tpPerformanceTone returns secondary for null (no forecast)", () => {
+  assert.equal(m2tpPerformanceTone(null), "secondary")
 })
 
-test("m2V2SgpaTone maps SGPA bands to tone", () => {
-  assert.equal(m2V2SgpaTone(8.0), "success")
-  assert.equal(m2V2SgpaTone(7.0), "secondary")
-  assert.equal(m2V2SgpaTone(6.0), "warning")
-  assert.equal(m2V2SgpaTone(5.0), "destructive")
+test("m2tpPerformanceTone maps percentage bands to tone", () => {
+  assert.equal(m2tpPerformanceTone(80.0), "default")
+  assert.equal(m2tpPerformanceTone(70.0), "secondary")
+  assert.equal(m2tpPerformanceTone(60.0), "secondary")
+  assert.equal(m2tpPerformanceTone(50.0), "destructive")
 })
 
 // ---------------------------------------------------------------------------

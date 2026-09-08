@@ -92,9 +92,10 @@ def m1_row(**overrides):
 
 def m2_row(**overrides):
     value = {
-        "semester_no": 3,
-        "predicted_next_semester_sgpa": 8.2,
-        "predicted_next_semester_percentage": 78.5,
+        "source_semester": 3,
+        "target_semester": 4,
+        "theory_prediction_pct": 72.5,
+        "practical_prediction_pct": 68.0,
     }
     return prediction_row("m2", value, **overrides)
 
@@ -444,18 +445,16 @@ class TestM1Prediction(unittest.TestCase):
 
 
 class TestM2Prediction(unittest.TestCase):
-    def test_m2_next_semester_percentage_returned(self):
+    def test_m2_theory_prediction_returned(self):
         tool, _, _ = make_explaining_tool({"m2": m2_row()})
         item = run(tool.execute(student_id="STU-A", prediction_type="m2")).predictions[0]
         self.assertTrue(item.prediction_available)
-        self.assertEqual(
-            item.predicted_value["predicted_next_semester_percentage"], 78.5
-        )
+        self.assertEqual(item.predicted_value["theory_prediction_pct"], 72.5)
 
-    def test_m2_next_semester_sgpa_returned(self):
+    def test_m2_practical_prediction_returned(self):
         tool, _, _ = make_explaining_tool({"m2": m2_row()})
         item = run(tool.execute(student_id="STU-A", prediction_type="m2")).predictions[0]
-        self.assertEqual(item.predicted_value["predicted_next_semester_sgpa"], 8.2)
+        self.assertEqual(item.predicted_value["practical_prediction_pct"], 68.0)
 
     def test_m2_target_semester_correct(self):
         tool, _, _ = make_explaining_tool({"m2": m2_row()})
@@ -467,15 +466,17 @@ class TestM2Prediction(unittest.TestCase):
         tool, _, _ = make_explaining_tool({"m2": m2_row()})
         item = run(tool.execute(student_id="STU-A", prediction_type="m2")).predictions[0]
         self.assertTrue(item.is_prediction)
-        self.assertEqual(item.target, "next_semester_percentage")
+        self.assertEqual(item.target, "next_semester_theory_practical_percentage")
 
     def test_m2_no_actual_result_substituted(self):
         tool, _, _ = make_explaining_tool({"m2": m2_row()})
         item = run(tool.execute(student_id="STU-A", prediction_type="m2")).predictions[0]
-        for key in ("actual_percentage", "semester_percentage", "result"):
+        for key in ("actual_percentage", "semester_percentage", "result",
+                    "predicted_next_semester_sgpa",
+                    "predicted_next_semester_percentage", "semester_no"):
             self.assertNotIn(key, item.predicted_value)
-        self.assertIn("predicted_next_semester_percentage", item.predicted_value)
-        self.assertIn("predicted_next_semester_sgpa", item.predicted_value)
+        self.assertIn("theory_prediction_pct", item.predicted_value)
+        self.assertIn("practical_prediction_pct", item.predicted_value)
 
     def test_m2_missing_handled_safely(self):
         tool, _, _ = make_explaining_tool({})

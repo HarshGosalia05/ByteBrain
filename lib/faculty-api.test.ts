@@ -629,92 +629,106 @@ test("getFacultyStudentM1V2 rejects non-faculty / unlinked / anonymous", async (
 })
 
 // ---------------------------------------------------------------------------
-// getFacultyStudentM2V2 â€” M2 V2 Next-Semester Performance Prediction
-// Hits the generic /predict/m2v2/{student_id} route (NOT under /faculty/) with
+// getFacultyStudentM2TP â€” M2-TP Next-Semester Theory & Practical Prediction
+// Hits the generic /predict/m2tp/{student_id} route (NOT under /faculty/) with
 // the Faculty bearer token. Server-side authorize_prediction_access enforces
 // faculty scope.
 // ---------------------------------------------------------------------------
 
-const M2V2_FACULTY_BODY = {
+const M2TP_FACULTY_BODY = {
   student_id: "STU-A",
-  model_id: "m2_v2",
-  model_version: "2.0",
+  model_id: "m2_tp",
+  model_version: "m2_tp_v1",
   readiness_status: "READY",
   observation_semester: 6,
-  prediction_takes_effect_semester: 7,
-  predicted_next_semester_sgpa: 7.88,
-  predicted_next_semester_percentage: 71.5,
-  algorithm: { next_semester_sgpa: "random_forest", next_semester_percentage: "ridge" },
+  target_semester: 7,
+  theory: {
+    readiness_status: "READY",
+    predicted_percentage: 74.2,
+    target_subject_count: 4,
+    feature_count: 8,
+    algorithm: "m2tp_lgbm_theory",
+    reason: null,
+  },
+  practical: {
+    readiness_status: "READY",
+    predicted_percentage: 68.5,
+    target_subject_count: 3,
+    feature_count: 6,
+    algorithm: "m2tp_rf_practical",
+    reason: null,
+  },
   reason: null,
   predicted_at: "2026-09-01T08:00:00Z",
-  inference_ms: 2.0,
-  note: "Predicted next-semester SGPA/percentage are model estimates.",
+  inference_ms: 3.1,
+  note: "Theory/Practical performance percentages are model estimates.",
 }
 
-test("getFacultyStudentM2V2 hits the generic predict route with faculty auth", async () => {
-  route("/predict/m2v2/STU-A", 200, M2V2_FACULTY_BODY)
+test("getFacultyStudentM2TP hits the generic predict route with faculty auth", async () => {
+  route("/predict/m2tp/STU-A", 200, M2TP_FACULTY_BODY)
 
-  const result = await facultyApi.getFacultyStudentM2V2("STU-A")
+  const result = await facultyApi.getFacultyStudentM2TP("STU-A")
   assert.equal(result.ok, true)
   if (!result.ok) return
-  assert.equal(result.data.model_id, "m2_v2")
+  assert.equal(result.data.model_id, "m2_tp")
   assert.equal(result.data.readiness_status, "READY")
-  assert.equal(result.data.prediction_takes_effect_semester, 7)
+  assert.equal(result.data.theory.predicted_percentage, 74.2)
+  assert.equal(result.data.practical.predicted_percentage, 68.5)
 
-  const hit = getCalls("/predict/m2v2")
+  const hit = getCalls("/predict/m2tp")
   assert.equal(hit.length, 1)
-  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2v2/STU-A")
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2tp/STU-A")
   const expectedToken = MOCK_TOKEN
   const headers = hit[0].init?.headers as Record<string, string>
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
 
-test("getFacultyStudentM2V2 URL-encodes the student id", async () => {
-  route("/predict/m2v2/STU%20A%2F1", 200, M2V2_FACULTY_BODY)
+test("getFacultyStudentM2TP URL-encodes the student id", async () => {
+  route("/predict/m2tp/STU%20A%2F1", 200, M2TP_FACULTY_BODY)
 
-  const result = await facultyApi.getFacultyStudentM2V2("STU A/1")
+  const result = await facultyApi.getFacultyStudentM2TP("STU A/1")
   assert.equal(result.ok, true)
-  const hit = getCalls("/predict/m2v2")
+  const hit = getCalls("/predict/m2tp")
   assert.equal(hit.length, 1)
-  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2v2/STU%20A%2F1")
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/predict/m2tp/STU%20A%2F1")
 })
 
-test("getFacultyStudentM2V2 caches per faculty+student within TTL", async () => {
-  route("/predict/m2v2/STU-A", 200, M2V2_FACULTY_BODY)
+test("getFacultyStudentM2TP caches per faculty+student within TTL", async () => {
+  route("/predict/m2tp/STU-A", 200, M2TP_FACULTY_BODY)
 
-  await facultyApi.getFacultyStudentM2V2("STU-A")
-  await facultyApi.getFacultyStudentM2V2("STU-A")
-  assert.equal(getCalls("/predict/m2v2").length, 1)
+  await facultyApi.getFacultyStudentM2TP("STU-A")
+  await facultyApi.getFacultyStudentM2TP("STU-A")
+  assert.equal(getCalls("/predict/m2tp").length, 1)
 })
 
-test("getFacultyStudentM2V2 maps 404 (NO_DATA / out of scope) to not_found", async () => {
-  route("/predict/m2v2/STU-MISSING", 404, { detail: "no record" })
+test("getFacultyStudentM2TP maps 404 (NO_DATA / out of scope) to not_found", async () => {
+  route("/predict/m2tp/STU-MISSING", 404, { detail: "no record" })
 
-  const result = await facultyApi.getFacultyStudentM2V2("STU-MISSING")
+  const result = await facultyApi.getFacultyStudentM2TP("STU-MISSING")
   assert.equal(result.ok, false)
   if (result.ok) return
   assert.equal(result.error.code, "not_found")
 })
 
-test("getFacultyStudentM2V2 rejects non-faculty / unlinked / anonymous", async () => {
+test("getFacultyStudentM2TP rejects non-faculty / unlinked / anonymous", async () => {
   activeSession = null
-  const anon = await facultyApi.getFacultyStudentM2V2("STU-A")
+  const anon = await facultyApi.getFacultyStudentM2TP("STU-A")
   assert.equal(anon.ok, false)
   if (!anon.ok) assert.equal(anon.error.status, 401)
 
   activeSession = { ...DEFAULT_SESSION, role: "Student", student_id: "STU-A" }
-  const wrongRole = await facultyApi.getFacultyStudentM2V2("STU-A")
+  const wrongRole = await facultyApi.getFacultyStudentM2TP("STU-A")
   assert.equal(wrongRole.ok, false)
   if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
 
   activeSession = { ...DEFAULT_SESSION, faculty_id: null }
-  const unlinked = await facultyApi.getFacultyStudentM2V2("STU-A")
+  const unlinked = await facultyApi.getFacultyStudentM2TP("STU-A")
   assert.equal(unlinked.ok, false)
   if (!unlinked.ok) {
     assert.equal(unlinked.error.status, 400)
     assert.equal(unlinked.error.code, "unlinked")
   }
-  assert.equal(getCalls("/predict/m2v2").length, 0)
+  assert.equal(getCalls("/predict/m2tp").length, 0)
 })
 
 // ---------------------------------------------------------------------------

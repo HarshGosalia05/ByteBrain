@@ -135,9 +135,10 @@ def _m2_result(student_id=STUDENT, sem=2):
         predictions=[
             inference.M2Prediction(
                 student_id=student_id,
-                semester_no=sem,
-                predicted_next_semester_sgpa=7.5,
-                predicted_next_semester_percentage=70.0,
+                source_semester=sem,
+                target_semester=sem + 1,
+                theory_prediction_pct=70.0,
+                practical_prediction_pct=63.0,
             )
         ],
         input_row_count=1,
@@ -339,9 +340,11 @@ def test_m2_grounded_trend_and_inputs():
     svc = ExplanationService()
     result = run(svc.explain_m2(_m2_result(), raw=(_m2_summary(), _students())))
     item = result.explanations[0]
+    assert item.source_semester == 2
+    assert item.target_semester == 3
+    assert item.theory_prediction_pct == 70.0
+    assert item.practical_prediction_pct == 63.0
     assert item.current_percentage == 68.0
-    assert item.projected_delta_percentage == pytest.approx(2.0)
-    assert item.predicted_next_semester_sgpa == 7.5
     inputs = {i.name: i for i in item.inputs}
     assert inputs["semester_percentage"].value == 68.0
     assert inputs["backlog_count"].value == 0

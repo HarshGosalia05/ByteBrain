@@ -18,7 +18,10 @@ Design rules:
     retrained and no artifact is modified.
   * NEVER writes predictions back to the database, NEVER persists, NEVER
     mutates a row. This is a pure read path.
-  * M1/M2 are READY; M3 is exposed as BLOCKED (not an approved prediction).
+  * M1 is READY; M3 is exposed as BLOCKED (not an approved prediction).
+  * M2 is retired from this contract: legacy V1 M2 offline inference no longer
+    exists (the artifact was removed) and M2 production predictions are served
+    exclusively by the validated M2-TP package (``M2TPPredictionService``).
   * M3 does NOT return a production prediction; its standardized result
     reports ``readiness_status=BLOCKED`` and ``prediction_available=False``.
 """
@@ -99,25 +102,8 @@ class PredictionContractService:
         }
 
     # -----------------------------------------------------------------------
-    # M2: Next-Semester Performance Prediction (READY)
+    # M2: RETIRED — legacy V1 offline inference removed; M2-TP serves M2.
     # -----------------------------------------------------------------------
-
-    async def predict_m2(self, student_id: str) -> dict:
-        """Return the contract-shaped M2 prediction (latest completed semester)."""
-        fetch = self._fetch()
-        summary = await fetch._fetch_student_semester_summary(self.pool, student_id)
-        profile = await fetch._fetch_student_profile(self.pool, student_id)
-
-        if summary.empty or profile.empty:
-            raise ValueError(f"No data found for student {student_id}")
-
-        dept, gender = self._profile_fields(profile)
-        latest = self._latest_semester_row(summary)
-        row_dict = self._m2m3_row(latest, student_id, dept, gender)
-
-        contract = self._contract()
-        result = contract.predict_m2(row_dict)
-        return result.to_dict()
 
     # -----------------------------------------------------------------------
     # M3: Next-Semester At-Risk Prediction (BLOCKED)

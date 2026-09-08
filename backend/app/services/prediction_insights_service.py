@@ -36,9 +36,9 @@ PREDICTION_TYPES = ("m1", "m2", "m3", "m4")
 
 _GENERATION_METHODS: dict[str, str] = {
     "m1": "predict_m1_for_student",
-    "m2": "predict_m2_for_student",
     "m3": "predict_m3_for_student",
     "m4": "predict_m4_for_student",
+    # M2 is special-cased in get_student_insights (served by M2-TP package).
 }
 
 
@@ -67,10 +67,12 @@ class PredictionInsightsService:
         *,
         prediction_service: Any = None,
         explanation_service: Any = None,
+        m2tp_service: Any = None,
     ):
         self._pool = pool
         self._prediction = prediction_service
         self._explanation = explanation_service
+        self._m2tp = m2tp_service
 
     # ------------------------------------------------------------------
     # Lazy dependency resolution (keeps module import dependency-free)
@@ -185,12 +187,12 @@ class PredictionInsightsService:
         prediction_service = self._prediction_service()
         explanation_service = self._explanation_service()
 
-        # M3 is BLOCKED for production: honor the unified offline inference
-        # contract and never expose a raw M3 prediction as a trustworthy
-        # production risk output. The insights bundle reports M3 as blocked
-        # so the UI shows the validation-gate state instead of a risk badge.
-        # (Persisted *legacy* M3 predictions remain reviewable through the
-        # separate faculty feedback flow, which labels them clearly.)
+        # M3 readiness is contract-driven: when the unified offline inference
+        # contract reports M3 as BLOCKED (validation gate closed) the bundle
+        # reports it as unavailable so the UI shows the gate state instead of
+        # a risk badge. When the contract reports READY, M3 flows like every
+        # other model. (Persisted legacy M3 predictions remain reviewable
+        # through the separate faculty feedback flow, which labels them.)
         try:
             from ml.src.features import v1_inference_contract as _contract  # noqa: PLC0415
             _m3_blocked = _contract.get_readiness("m3") == _contract.BLOCKED
@@ -210,15 +212,50 @@ class PredictionInsightsService:
                 continue
             try:
                 raw = raw_inputs[prediction_type]
-                method = getattr(prediction_service, _GENERATION_METHODS[prediction_type])
-                
-                # Check method signature for 'raw' parameter support
-                sig = inspect.signature(method)
-                kwargs = {}
-                if "raw" in sig.parameters:
-                    kwargs["raw"] = raw
-                
-                result = await method(student_id, **kwargs)
+                if prediction_type == "m2":
+                    # M2-TP: the validated M2-TP package serves next-semester
+                    # Theory / Practical percentages (read-only, direct dict
+                    # contract). NO_DATA (no valid upcoming semester forecast)
+                    # degrades to an unavailable insight, never a fabricated row.
+                    if self._m2tp is None:
+                        from app.services.m2tp_prediction_service import (  # noqa: PLC0415
+                            M2TPPredictionService,
+                        )
+                        self._m2tp = M2TPPredictionService(self._pool)
+                    from ml.src.inference import M2Prediction, PredictionResult  # noqa: PLC0415
+
+                    payload = await self._m2tp.predict(student_id)
+                    if payload.get("readiness_status") == "NO_DATA":
+                        raise ValueError(
+                            payload.get("reason")
+                            or "M2-TP has no valid prediction for this student."
+                        )
+                    _theory = payload.get("theory") or {}
+                    _practical = payload.get("practical") or {}
+                    result = PredictionResult(
+                        model_id="m2",
+                        predictions=[
+                            M2Prediction(
+                                student_id=student_id,
+                                source_semester=payload.get("observation_semester"),
+                                target_semester=payload.get("target_semester"),
+                                theory_prediction_pct=_theory.get("predicted_percentage"),
+                                practical_prediction_pct=_practical.get("predicted_percentage"),
+                            )
+                        ],
+                        input_row_count=1,
+                        prediction_count=1,
+                    )
+                else:
+                    method = getattr(prediction_service, _GENERATION_METHODS[prediction_type])
+
+                    # Check method signature for 'raw' parameter support
+                    sig = inspect.signature(method)
+                    kwargs = {}
+                    if "raw" in sig.parameters:
+                        kwargs["raw"] = raw
+
+                    result = await method(student_id, **kwargs)
 
                 # Check explanation method signature for 'raw' parameter support
                 sig_exp = inspect.signature(explanation_service.explain)

@@ -289,10 +289,10 @@ class AdminM1SubjectAttentionItem(BaseModel):
 
 
 class AdminM2NextSemSummary(BaseModel):
-    """M2 next-semester performance intelligence rollup."""
+    """M2-TP next-semester Theory/Practical prediction rollup."""
 
-    avg_predicted_sgpa: float | None = None
-    avg_predicted_percentage: float | None = None
+    avg_predicted_theory_pct: float | None = None
+    avg_predicted_practical_pct: float | None = None
 
     model_config = ConfigDict(extra="forbid")
 

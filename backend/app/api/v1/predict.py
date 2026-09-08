@@ -23,12 +23,12 @@ from app.services.prediction_contract_service import (
 )
 from app.services.m1v2_prediction_service import M1V2PredictionService
 from app.services.m1v3_prediction_service import M1V3PredictionService
-from app.services.m2v2_prediction_service import M2V2PredictionService
+from app.services.m2tp_prediction_service import M2TPPredictionService
 from app.services.m3v2_prediction_service import M3V2PredictionService
 from app.services.faculty_service import FacultyService
 from app.schemas import m1v2 as schemas
 from app.schemas import m1v3 as m1v3_schemas
-from app.schemas import m2v2 as m2v2_schemas
+from app.schemas import m2tp as m2tp_schemas
 from app.schemas import m3v2 as m3v2_schemas
 
 router = APIRouter(prefix="/predict", tags=["predictions"])
@@ -63,10 +63,10 @@ def get_m1v3_prediction_service(
     return M1V3PredictionService(pool)
 
 
-def get_m2v2_prediction_service(
+def get_m2tp_prediction_service(
     pool: asyncpg.Pool = Depends(get_db_pool),
-) -> M2V2PredictionService:
-    return M2V2PredictionService(pool)
+) -> M2TPPredictionService:
+    return M2TPPredictionService(pool)
 
 
 def get_m3v2_prediction_service(
@@ -264,33 +264,26 @@ async def predict_m1_v3(
 
 
 @router.get(
-    "/m2v2/{student_id}",
-    response_model=m2v2_schemas.M2V2PredictionResponse,
+    "/m2tp/{student_id}",
+    response_model=m2tp_schemas.M2TPPredictionResponse,
     responses={
-        404: {"model": m2v2_schemas.M2V2Error},
-        503: {"model": m2v2_schemas.M2V2Error},
-        500: {"model": m2v2_schemas.M2V2Error},
+        404: {"model": m2tp_schemas.M2TPError},
+        503: {"model": m2tp_schemas.M2TPError},
+        500: {"model": m2tp_schemas.M2TPError},
     },
     tags=["predictions"],
 )
-async def predict_m2_v2(
+async def predict_m2_tp(
     student_id: str,
-    service: M2V2PredictionService = Depends(get_m2v2_prediction_service),
+    service: M2TPPredictionService = Depends(get_m2tp_prediction_service),
     faculty_service: FacultyService = Depends(get_faculty_service),
     user: dict = Depends(get_current_user),
 ):
-    """Predict next-semester SGPA and percentage with the validated M2 V2 model.
+    """Predict next-semester Theory & Practical performance percentages with the M2-TP model.
 
-    Explicit, version controlled M2 V2 path (T -> T+1 contract). Reads real
-    student data (read-only) and returns predicted next-semester
-    ``semester_sgpa``/``semester_percentage`` from the student's last completed
-    NORMAL academic observation semester. Uses the SAME authorization rule as
-    every other /predict route. The legacy /predict/m2/{student_id} endpoint is
-    unchanged.
-
-    If the student has no upcoming regular academic semester (e.g. currently in
-    the final / internship semester 8), readiness is NO_DATA and the service
-    surfaces a 404 — no fabricated forward prediction is returned.
+    Produces separate predicted percentages (0-100%) for Theory and Practical courses
+    for the student's next regular academic semester, based strictly on pre-semester data.
+    Uses the exact 32-feature Theory and 33-feature Practical contracts from M2_TP_CampusX_package.
     """
     await authorize_prediction_access(user, student_id, faculty_service)
 
@@ -299,17 +292,17 @@ async def predict_m2_v2(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student not found or no upcoming semester available",
+            detail="Student not found",
         )
     except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="M2 V2 model artifact is not available",
+            detail="M2-TP model artifacts are not available",
         )
     except (ConnectionError, RuntimeError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="M2 V2 service is temporarily unavailable",
+            detail="M2-TP service is temporarily unavailable",
         )
     except Exception:
         raise HTTPException(
@@ -373,37 +366,6 @@ async def predict_m3_v2(
             detail="Prediction service temporarily unavailable",
         )
     return result
-
-
-@router.get(
-    "/m2/{student_id}",
-    tags=["predictions"],
-)
-async def predict_m2(
-    student_id: str,
-    contract_service: PredictionContractService = Depends(get_contract_prediction_service),
-    faculty_service: FacultyService = Depends(get_faculty_service),
-    user: dict = Depends(get_current_user),
-) -> dict:
-    """Predict next-semester SGPA and percentage via the unified inference contract.
-
-    Uses real data from the database (read-only) for the student's latest
-    completed semester and returns a readiness-aware contract result.
-    """
-    await authorize_prediction_access(user, student_id, faculty_service)
-
-    try:
-        return await contract_service.predict_m2(student_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student not found or insufficient data for prediction",
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Prediction service temporarily unavailable",
-        )
 
 
 @router.get(

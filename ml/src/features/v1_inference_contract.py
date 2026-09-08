@@ -1,7 +1,7 @@
 """V1 Unified OFFLINE Inference Contract (M1/M2/M3).
 
 A single, centralized, **offline-only** prediction boundary that wraps the
-EXISTING M1/M2/M3 artifacts behind a deterministic, readiness-aware contract.
+EXISTING M1/M3 artifacts behind a deterministic, readiness-aware contract.
 
 This module is NOT an API, NOT a dashboard, NOT deployment, NOT GenAI and NOT
 training.  It is a pure function/abstraction over the existing ML layers:
@@ -10,7 +10,7 @@ training.  It is a pure function/abstraction over the existing ML layers:
 - Feature prep    -> ``ml.src.features.prepare_*_inference`` (exact training-time
                      encoding / order / preprocessing).
 - M1 clipping     -> ``ml.src.m1.config.TARGET_MIN / TARGET_MAX`` (0..70).
-- Readiness       -> project-documented states (M1 READY, M2 READY, M3 BLOCKED).
+- Readiness       -> project-documented states (M1 READY, M3 READY, M2 RETIRED).
 - Leakage rules   -> ``ml.src.feature_config.ALL_FORBIDDEN`` + explicit targets.
 
 Design rules enforced here:
@@ -21,6 +21,12 @@ Design rules enforced here:
   Its model may only be scored through an explicit ``allow_offline_score`` flag
   and even then the result still reports ``readiness=BLOCKED`` and
   ``prediction_available=False``.
+- M2 (legacy V1) is RETIRED: the legacy ``m2_next_semester_performance.joblib``
+  artifact has been deleted from the repo.  This contract no longer serves M2;
+  production M2 predictions come exclusively from the validated M2-TP package
+  (backend ``M2TPPredictionService``).  Calling ``predict_m2`` raises; the M2
+  input/feature contract below is preserved only because M3 shares the exact
+  same 12-column encoded contract.
 - No DB writes, no artifact writes, no training, no label generation.
 """
 from __future__ import annotations
@@ -47,13 +53,11 @@ try:
     # training-time encoding/order/preprocessing (no parallel pipeline).
     from . import (
         prepare_m1_inference,
-        prepare_m2_inference,
         prepare_m3_inference,
     )
 except ImportError:
     from ml.src.features import (  # type: ignore[no-redef]
         prepare_m1_inference,
-        prepare_m2_inference,
         prepare_m3_inference,
     )
 
@@ -76,7 +80,7 @@ READINESS_STATES: tuple[str, ...] = (
 # Authoritative readiness per model (project-documented, NOT re-invented here).
 MODEL_READINESS: dict[str, str] = {
     "m1": READY,   # passed temporal multi-holdout validation + readiness assessment
-    "m2": READY,   # CSE+BBA cohort expansion completed; expanded artifact authoritative
+    "m2": BLOCKED, # legacy V1 artifact RETIRED/deleted; M2 served by M2-TP package
     "m3": READY,   # validation gate passed; M3 is now production-ready
 }
 
@@ -85,13 +89,19 @@ M3_READY_REASON = (
     "Production predictions are now available."
 )
 
+M2_RETIRED_REASON = (
+    "The legacy V1 M2 artifact (m2_next_semester_performance.joblib) has been "
+    "retired and removed. M2 production predictions are served exclusively by "
+    "the validated M2-TP package (backend M2TPPredictionService); this OFFLINE "
+    "contract no longer serves M2 and predict_m2 is unavailable."
+)
+
 # Human-readable readiness explanation per model.
 MODEL_READINESS_REASON: dict[str, str] = {
     "m1": "M1 passed temporal multi-holdout validation and prediction-readiness "
           "assessment; the selected hist_gbm artifact is authoritative and "
           "byte-identical.",
-    "m2": "M2 CSE+BBA cohort expansion completed; the expanded hist_gbm artifact "
-          "is authoritative and byte-identical.",
+    "m2": M2_RETIRED_REASON,
     "m3": M3_READY_REASON,
 }
 
@@ -537,35 +547,6 @@ def _predict_m1_impl(row: dict) -> dict:
     }
 
 
-def _predict_m2_impl(row: dict) -> dict:
-    artifact = registry.load_model("m2")
-    expected = feature_names("m2")
-    summary, students = _m2m3_single_row_frames(row)
-    X, raw_df = prepare_m2_inference(summary, students)
-    if X.shape[1] != len(expected) or len(expected) != 12:
-        raise RuntimeError(
-            f"M2 inference produced {X.shape[1]} features; expected 12."
-        )
-    _check_encoded_contract("m2", list(M2_M3_ENCODED_FEATURES))
-    pred_sgpa = float(round(float(np.asarray(
-        artifact["next_semester_sgpa"].predict(X)
-    )[0]), 2))
-    pred_pct = float(round(float(np.asarray(
-        artifact["next_semester_percentage"].predict(X)
-    )[0]), 2))
-    prediction = {
-        "next_semester_percentage": pred_pct,
-        "next_semester_sgpa": pred_sgpa,
-    }
-    return {
-        "prediction": prediction,
-        "target": "next_semester_percentage,next_semester_sgpa",
-        "feature_count": int(X.shape[1]),
-        "model_algorithm": MODEL_ALGORITHM["m2"],
-        "feature_contract": "12-feature-hist_gbm-m2",
-    }
-
-
 def _predict_m3_impl(row: dict) -> dict:
     """Offline/internal M3 scoring only — never a production prediction."""
     artifact = registry.load_model("m3")
@@ -627,11 +608,23 @@ def predict_m1(row: dict) -> InferenceResult:
 
 
 def predict_m2(row: dict) -> InferenceResult:
-    """Predict next_semester_percentage + next_semester_sgpa (offline)."""
-    validate_input_row("m2", row)
-    _checked_semester("m2", row)
-    payload = _predict_m2_impl(row)
-    return _build_result("m2", row, payload, READY)
+    """Retired: legacy V1 M2 offline inference no longer exists.
+
+    The legacy ``m2_next_semester_performance.joblib`` artifact has been
+    deleted; M2 production predictions are served exclusively by the
+    validated M2-TP package (backend ``M2TPPredictionService``).  Nothing
+    may silently fall back to another model, so this returns a BLOCKED,
+    prediction-unavailable result unconditionally.
+    """
+    return InferenceResult(
+        model_id="m2",
+        readiness_status=BLOCKED,
+        prediction_available=False,
+        student_id=str(row.get("student_id", "")) if isinstance(row, dict) else "",
+        semester_no=row.get("semester_no") if isinstance(row, dict) else None,
+        reason=M2_RETIRED_REASON,
+        validation_ok=False,
+    )
 
 
 def predict_m3(row: dict, *, allow_offline_score: bool = False) -> InferenceResult:

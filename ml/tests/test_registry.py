@@ -1,7 +1,8 @@
 """Tests for ML-01: Model Registry + Safe Model Loader.
 
 Focused tests covering:
-- Successful load of each registered model (M1, M2, M3, M4)
+- Successful load of each registered model (M1, M3, M4)
+- Retired M2 handled correctly (no registry artifact; served by M2-TP)
 - Missing artifact error handling
 - Invalid/corrupt artifact error handling
 - Registry resolution (lookup, listing, status)
@@ -58,12 +59,14 @@ class TestRegistryMetadata(unittest.TestCase):
         self.assertEqual(entry.task, "regression")
         self.assertEqual(entry.target, "end_sem_marks")
 
-    def test_get_entry_m2(self):
+    def test_get_entry_m2_retired(self):
+        # Legacy V1 M2 artifact retired; M2 is served by the M2-TP package.
         entry = get_entry("m2")
         self.assertEqual(entry.model_id, "m2")
         self.assertEqual(entry.model_type, ModelType.JOBLIB)
-        self.assertEqual(entry.task, "multi_target_regression")
-        self.assertEqual(entry.target, ["next_semester_percentage", "next_semester_sgpa"])
+        self.assertEqual(entry.task, "multivariate_regression")
+        self.assertEqual(entry.target, ["theory_percentage", "practical_percentage"])
+        self.assertIsNone(entry.artifact_path)
 
     def test_get_entry_m3(self):
         entry = get_entry("m3")
@@ -94,10 +97,11 @@ class TestArtifactExists(unittest.TestCase):
         self.assertTrue(entry.artifact_path.exists())
         self.assertTrue(artifact_exists("m1"))
 
-    def test_m2_artifact_exists(self):
+    def test_m2_artifact_retired(self):
+        # Legacy V1 M2 artifact is retired — no registry artifact exists.
         entry = get_entry("m2")
-        self.assertTrue(entry.artifact_path.exists())
-        self.assertTrue(artifact_exists("m2"))
+        self.assertIsNone(entry.artifact_path)
+        self.assertFalse(artifact_exists("m2"))
 
     def test_m3_artifact_exists(self):
         entry = get_entry("m3")
@@ -124,12 +128,10 @@ class TestSuccessfulLoad(unittest.TestCase):
         self.assertIsInstance(obj["feature_names"], list)
         self.assertIsInstance(obj["metadata"], dict)
 
-    def test_load_m2_returns_dict_of_pipelines(self):
-        obj = load_model("m2")
-        self.assertIsInstance(obj, dict)
-        self.assertIn("next_semester_percentage", obj)
-        self.assertIn("next_semester_sgpa", obj)
-        self.assertTrue(hasattr(obj["next_semester_percentage"], "predict"))
+    def test_load_m2_raises_without_artifact(self):
+        # M2-TP is not loadable through the registry (no artifact).
+        with self.assertRaises(FileNotFoundError):
+            load_model("m2")
 
     def test_load_m3_returns_pipeline_with_predict(self):
         obj = load_model("m3")
@@ -244,22 +246,10 @@ class TestShapeValidation(unittest.TestCase):
             object.__setattr__(entry, "artifact_path", original_path)
             corrupt_path.unlink(missing_ok=True)
 
-    def test_m2_missing_targets_raises_type_error(self):
-        entry = get_entry("m2")
-        original_path = entry.artifact_path
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".joblib", delete=False) as f:
-                # Save dict missing expected target keys
-                joblib.dump({"wrong_target": "dummy"}, f.name)
-                corrupt_path = Path(f.name)
-
-            object.__setattr__(entry, "artifact_path", corrupt_path)
-            with self.assertRaises(TypeError) as ctx:
-                load_model("m2")
-            self.assertIn("missing expected targets", str(ctx.exception))
-        finally:
-            object.__setattr__(entry, "artifact_path", original_path)
-            corrupt_path.unlink(missing_ok=True)
+    def test_m2_no_artifact_raises_file_not_found(self):
+        # No artifact to shape-validate for retired M2; loading raises.
+        with self.assertRaises(FileNotFoundError):
+            load_model("m2")
 
     def test_m3_no_predict_method_raises_type_error(self):
         entry = get_entry("m3")
@@ -291,8 +281,12 @@ class TestRegistryStatus(unittest.TestCase):
     def test_status_shows_artifact_exists(self):
         status = registry_status()
         for s in status:
-            self.assertIn("artifact_exists", s)
-            self.assertTrue(s["artifact_exists"])
+            if s["model_id"] == "m2":
+                # Retired: no registry artifact for M2
+                self.assertFalse(s["artifact_exists"])
+            else:
+                self.assertIn("artifact_exists", s)
+                self.assertTrue(s["artifact_exists"])
 
     def test_status_shows_cached_field(self):
         clear_cache()
@@ -380,17 +374,12 @@ class TestArtifactLoadUnderPinnedRuntime(unittest.TestCase):
         self.assertIn("model", obj)
         self.assertIn("feature_names", obj)
 
-    def test_m2_loads_without_version_warning(self):
-        obj = self._load_without_version_warnings("m2")
-        self.assertIn("next_semester_percentage", obj)
-        self.assertIn("next_semester_sgpa", obj)
-
     def test_m3_loads_without_version_warning(self):
         obj = self._load_without_version_warnings("m3")
         self.assertTrue(hasattr(obj, "predict"))
 
     def test_all_artifacts_reload_after_clear(self):
-        for model_id in ("m1", "m2", "m3"):
+        for model_id in ("m1", "m3"):
             clear_cache()
             self._load_without_version_warnings(model_id)
 

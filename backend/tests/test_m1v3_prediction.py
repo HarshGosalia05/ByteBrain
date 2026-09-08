@@ -362,7 +362,16 @@ class TestRealInferencePath(unittest.TestCase):
         feats = result["subjects"][0]["input_features"]
         self.assertEqual(
             set(feats),
-            {"internal_marks", "mid_sem_marks", "attendance_percentage", "credits"},
+            {
+                "internal_marks",
+                "mid_sem_marks",
+                "attendance_percentage",
+                "credits",
+                "assignment_score",
+                "quiz_avg_marks",
+                "submission_delay_days",
+                "pre_endsem_assessment_pct",
+            },
         )
         # The clean M1 V3 model has no attendance input: must be null, never
         # fabricated from another table, so the faculty UI hides the tile.

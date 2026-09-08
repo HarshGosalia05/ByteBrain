@@ -181,26 +181,31 @@ class TestArtifactAndSelectedModel(unittest.TestCase):
 
     def test_all_artifacts_load(self):
         res = _audit()
-        for mid in ("m1", "m2", "m3"):
+        for mid in ("m1", "m3"):
             self.assertTrue(res.artifacts[mid].exists, mid)
             self.assertTrue(res.artifacts[mid].loads, mid)
+
+    def test_retired_m2_has_no_registry_artifact(self):
+        res = _audit()
+        a = res.artifacts["m2"]
+        self.assertFalse(a.exists)
+        self.assertFalse(a.loads)
 
     def test_selected_model_types_match_reports(self):
         res = _audit()
         self.assertEqual(res.artifacts["m1"].model_type, SELECTED_MODELS["m1"])
-        self.assertEqual(res.artifacts["m2"].model_type, SELECTED_MODELS["m2"])
         self.assertEqual(res.artifacts["m3"].model_type, SELECTED_MODELS["m3"])
 
     def test_feature_count_matches_contract(self):
         res = _audit()
-        for mid in ("m1", "m2", "m3"):
+        for mid in ("m1", "m3"):
             a = res.artifacts[mid]
             self.assertEqual(a.n_features, 12, mid)
             self.assertTrue(a.feature_count_ok, mid)
 
     def test_artifacts_are_deterministic_and_unchanged(self):
         res = _audit()
-        for mid in ("m1", "m2", "m3"):
+        for mid in ("m1", "m3"):
             a = res.artifacts[mid]
             self.assertTrue(a.deterministic_pred, mid)
             self.assertTrue(a.unchanged, mid)

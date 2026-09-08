@@ -56,17 +56,18 @@ def sample_insights_dict() -> dict:
         "m2": {
             "available": True,
             "prediction": {
-                "semester_no": 5,
-                "predicted_next_semester_sgpa": 7.8,
-                "predicted_next_semester_percentage": 76.5,
+                "source_semester": 5,
+                "target_semester": 6,
+                "theory_prediction_pct": 76.5,
+                "practical_prediction_pct": 71.0,
             },
-            "model_version": "m2-v1.0",
+            "model_version": "m2_tp_v1",
             "generated_at": "2026-08-14T00:00:00Z",
-            "positive_factors": ["Consistent SGPA trend"],
+            "positive_factors": ["Consistent semester trend"],
             "risk_factors": [],
             "explanation": {
                 "factors": [
-                    {"kind": "positive", "source": "sgpa_trend", "detail": "Consistent improvement"}
+                    {"kind": "positive", "source": "semester_trend", "detail": "Consistent improvement"}
                 ]
             },
         },
@@ -176,6 +177,16 @@ class TestFacultyPredictionInsightsTool(unittest.TestCase):
         self.assertEqual(m1.model_kind, "ml")
         self.assertEqual(m1.target, "subject_end_sem_marks")
         self.assertEqual(m1.predicted_value["predicted_end_sem_marks"], 58.5)
+
+        # Verify M2 (M2-TP persists source/target + Theory/Practical pcts)
+        m2 = next(p for p in result.predictions if p.model_id == "m2")
+        self.assertEqual(m2.model_kind, "ml")
+        self.assertEqual(m2.target, "next_semester_theory_practical_percentage")
+        self.assertEqual(m2.predicted_value["theory_prediction_pct"], 76.5)
+        self.assertEqual(m2.predicted_value["practical_prediction_pct"], 71.0)
+        self.assertEqual(m2.predicted_value["source_semester"], 5)
+        self.assertEqual(m2.predicted_value["target_semester"], 6)
+        self.assertEqual(m2.model_version, "m2_tp_v1")
 
         # Verify M3
         m3 = next(p for p in result.predictions if p.model_id == "m3")

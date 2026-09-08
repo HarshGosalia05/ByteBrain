@@ -75,18 +75,26 @@ try:
     from .. import registry
     from .. import features as _features
     from ..m1 import data as m1_data
-    from ..m2 import data as m2_data
-    from ..m2 import config as m2_config
     from ..m3 import data as m3_data
     from ..m3 import config as m3_config
 except ImportError:  # sys.path == ml/src
     import registry  # type: ignore[no-redef]
     import features as _features  # type: ignore[no-redef]
     import m1.data as m1_data  # type: ignore[no-redef]
-    import m2.data as m2_data  # type: ignore[no-redef]
-    import m2.config as m2_config  # type: ignore[no-redef]
     import m3.data as m3_data  # type: ignore[no-redef]
     import m3.config as m3_config  # type: ignore[no-redef]
+
+# The legacy M2 package (ml/src/m2, which historically supplied m2_data /
+# m2_config) has been retired along with the old M2 artifact.  M2 and M3
+# share the identical 12-column encoded contract and the same CSV-backed
+# read layer, so the M3 data/config pair is a faithful stand-in when this
+# historical readiness audit is re-run.
+try:
+    from ..m2 import data as m2_data
+    from ..m2 import config as m2_config
+except ImportError:
+    m2_data = m3_data
+    m2_config = m3_config
 
 # Project-documented selected models (from reports / artifacts)
 SELECTED_MODELS: Dict[str, str] = {
@@ -94,6 +102,12 @@ SELECTED_MODELS: Dict[str, str] = {
     "m2": "HistGradientBoostingRegressor",
     "m3": "LogisticRegression",
 }
+
+# Models retired from the registry: M2 is now served exclusively by the
+# validated M2-TP package (ml/M2_TP_CampusX_package / M2TPPredictionService)
+# and has NO registry artifact, so the integrated audit skips its (nonexistent)
+# artifact in the final verdict while still checking its contract/data shape.
+RETIRED_MODELS: set[str] = {"m2"}
 
 # Targets per model (name-based, source of truth = feature_config.TARGETS)
 TARGETS: Dict[str, list[str]] = {
@@ -586,6 +600,9 @@ def _finalize_verdict(res: IntegratedAuditResult) -> None:
     if res.reproducibility is False:
         issues.append("reproducibility FAILED")
     for mid, a in res.artifacts.items():
+        if mid in RETIRED_MODELS:
+            # Retired models have no registry artifact by design; skip.
+            continue
         if not a.exists or not a.loads:
             issues.append(f"artifact {mid} missing/failed to load")
         elif a.type_ok is False or a.feature_count_ok is False:

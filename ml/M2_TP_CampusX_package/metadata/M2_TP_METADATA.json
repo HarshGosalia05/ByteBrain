@@ -1,0 +1,198 @@
+{
+  "experiment": "M2-TP Next-Semester Theory & Practical Performance Prediction",
+  "created_at": "2026-09-08",
+  "package": "M2_TP_CampusX_package",
+  "dataset_source": "supabase_export_04_09_latest_27table",
+  "m2_theory": {
+    "model_id": "m2_t_clean",
+    "target": "target_theory_pct",
+    "scale": "0 - 100 percentage",
+    "best_algorithm": "random_forest",
+    "feature_count": 32,
+    "validation_comparison": {
+      "ridge": {
+        "validation_metrics": {
+          "mae": 2.9648,
+          "rmse": 3.7626,
+          "r2": 0.7803,
+          "pearson_r": 0.8842,
+          "pct_within_5": 83.7,
+          "pct_within_10": 98.76,
+          "pct_within_15": 99.91,
+          "weak_mae": 5.8903,
+          "weak_count": 67,
+          "avg_mae": 2.7928,
+          "avg_count": 864,
+          "strong_mae": 2.7254,
+          "strong_count": 198,
+          "regression_to_mean_slope": 0.7621
+        }
+      },
+      "random_forest": {
+        "validation_metrics": {
+          "mae": 2.9029,
+          "rmse": 3.7412,
+          "r2": 0.7828,
+          "pearson_r": 0.8858,
+          "pct_within_5": 83.26,
+          "pct_within_10": 98.49,
+          "pct_within_15": 100.0,
+          "weak_mae": 5.7233,
+          "weak_count": 67,
+          "avg_mae": 2.6934,
+          "avg_count": 864,
+          "strong_mae": 2.863,
+          "strong_count": 198,
+          "regression_to_mean_slope": 0.7618
+        }
+      },
+      "hist_gradient_boosting": {
+        "validation_metrics": {
+          "mae": 2.9425,
+          "rmse": 3.7978,
+          "r2": 0.7761,
+          "pearson_r": 0.8817,
+          "pct_within_5": 83.08,
+          "pct_within_10": 98.32,
+          "pct_within_15": 100.0,
+          "weak_mae": 5.6464,
+          "weak_count": 67,
+          "avg_mae": 2.7576,
+          "avg_count": 864,
+          "strong_mae": 2.8342,
+          "strong_count": 198,
+          "regression_to_mean_slope": 0.7667
+        }
+      }
+    },
+    "test_metrics": {
+      "mae": 2.8718,
+      "rmse": 3.6921,
+      "r2": 0.7796,
+      "pearson_r": 0.8831,
+      "pct_within_5": 84.51,
+      "pct_within_10": 99.48,
+      "pct_within_15": 99.91,
+      "weak_mae": 4.5093,
+      "weak_count": 68,
+      "avg_mae": 2.6875,
+      "avg_count": 895,
+      "strong_mae": 3.1697,
+      "strong_count": 180,
+      "regression_to_mean_slope": 0.7943
+    },
+    "temporal_metrics": {
+      "mae": 3.339,
+      "rmse": 4.2489,
+      "r2": 0.7054,
+      "pearson_r": 0.8487,
+      "pct_within_5": 77.15,
+      "pct_within_10": 97.92,
+      "pct_within_15": 99.96,
+      "weak_mae": 5.9441,
+      "weak_count": 159,
+      "avg_mae": 3.1856,
+      "avg_count": 1910,
+      "strong_mae": 3.0217,
+      "strong_count": 382,
+      "regression_to_mean_slope": 0.7341
+    },
+    "sha256": "de13eb0c868fceab4f2b188c84106bd99493f02f56c486dde1ac95408b9fe804"
+  },
+  "m2_practical": {
+    "model_id": "m2_p_clean",
+    "target": "target_lab_pct",
+    "scale": "0 - 100 percentage",
+    "best_algorithm": "ridge",
+    "feature_count": 33,
+    "validation_comparison": {
+      "ridge": {
+        "validation_metrics": {
+          "mae": 4.9133,
+          "rmse": 6.4179,
+          "r2": 0.5168,
+          "pearson_r": 0.7198,
+          "pct_within_5": 60.45,
+          "pct_within_10": 88.42,
+          "pct_within_15": 97.43,
+          "weak_mae": 14.5627,
+          "weak_count": 22,
+          "avg_mae": 4.6038,
+          "avg_count": 550,
+          "strong_mae": 4.7968,
+          "strong_count": 361,
+          "regression_to_mean_slope": 0.521
+        }
+      },
+      "random_forest": {
+        "validation_metrics": {
+          "mae": 4.9405,
+          "rmse": 6.4567,
+          "r2": 0.5109,
+          "pearson_r": 0.7155,
+          "pct_within_5": 60.02,
+          "pct_within_10": 88.21,
+          "pct_within_15": 97.32,
+          "weak_mae": 14.2842,
+          "weak_count": 22,
+          "avg_mae": 4.6157,
+          "avg_count": 550,
+          "strong_mae": 4.866,
+          "strong_count": 361,
+          "regression_to_mean_slope": 0.5087
+        }
+      },
+      "hist_gradient_boosting": {
+        "validation_metrics": {
+          "mae": 5.0693,
+          "rmse": 6.598,
+          "r2": 0.4893,
+          "pearson_r": 0.7013,
+          "pct_within_5": 59.16,
+          "pct_within_10": 87.46,
+          "pct_within_15": 97.32,
+          "weak_mae": 13.9921,
+          "weak_count": 22,
+          "avg_mae": 4.8412,
+          "avg_count": 550,
+          "strong_mae": 4.873,
+          "strong_count": 361,
+          "regression_to_mean_slope": 0.5138
+        }
+      }
+    },
+    "test_metrics": {
+      "mae": 4.937,
+      "rmse": 6.2528,
+      "r2": 0.574,
+      "pearson_r": 0.7588,
+      "pct_within_5": 59.33,
+      "pct_within_10": 90.09,
+      "pct_within_15": 97.58,
+      "weak_mae": 10.6121,
+      "weak_count": 35,
+      "avg_mae": 4.4618,
+      "avg_count": 554,
+      "strong_mae": 5.1165,
+      "strong_count": 360,
+      "regression_to_mean_slope": 0.5502
+    },
+    "temporal_metrics": {
+      "mae": 5.324,
+      "rmse": 6.7893,
+      "r2": 0.3333,
+      "pearson_r": 0.7508,
+      "pct_within_5": 57.1,
+      "pct_within_10": 86.04,
+      "pct_within_15": 96.65,
+      "weak_mae": 10.6042,
+      "weak_count": 55,
+      "avg_mae": 5.5525,
+      "avg_count": 1557,
+      "strong_mae": 4.553,
+      "strong_count": 838,
+      "regression_to_mean_slope": 0.7742
+    },
+    "sha256": "4e04f07c3d4580b8b3589e69340dec18eeb06ad867fa54ed541472181ed17f39"
+  }
+}

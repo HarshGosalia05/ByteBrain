@@ -59,14 +59,17 @@ class TestPredictionToRow:
         row = prediction_to_row(
             M2Prediction(
                 student_id="STU000001",
-                semester_no=7,
-                predicted_next_semester_sgpa=8.25,
-                predicted_next_semester_percentage=78.4,
+                source_semester=7,
+                target_semester=8,
+                theory_prediction_pct=78.4,
+                practical_prediction_pct=72.1,
             )
         )
         assert row["prediction_type"] == "m2"
-        assert row["prediction_value"]["predicted_next_semester_sgpa"] == 8.25
-        assert row["prediction_value"]["predicted_next_semester_percentage"] == 78.4
+        assert row["prediction_value"]["source_semester"] == 7
+        assert row["prediction_value"]["target_semester"] == 8
+        assert row["prediction_value"]["theory_prediction_pct"] == 78.4
+        assert row["prediction_value"]["practical_prediction_pct"] == 72.1
 
     def test_m3_row(self):
         row = prediction_to_row(
@@ -96,7 +99,7 @@ class TestPredictionToRow:
     def test_student_id_always_drives_row_key(self):
         for item in (
             M1Prediction("STU1", "SUB1", 1, 50.0, False),
-            M2Prediction("STU1", 1, 8.0, 75.0),
+            M2Prediction("STU1", 1, 2, 8.0, 75.0),
             M3Prediction("STU1", 1, 0),
             M4Score("STU1", "E1", "N", "D", 7, 60.0, "Medium", "f", "r"),
         ):
@@ -130,7 +133,7 @@ class TestResultToRows:
     def test_all_four_types(self):
         items = [
             M1Prediction("S", "SUB", 7, 55.0, False),
-            M2Prediction("S", 7, 8.1, 76.0),
+            M2Prediction("S", 7, 8, 8.1, 76.0),
             M3Prediction("S", 7, 1),
             M4Score("S", "E", "N", "D", 7, 70.0, "High", "", ""),
         ]
@@ -163,7 +166,7 @@ class TestResultToRows:
     def test_model_id_item_mismatch_rejected(self):
         result = PredictionResult(
             model_id="m1",
-            predictions=[M2Prediction("S", 7, 8.1, 76.0)],
+            predictions=[M2Prediction("S", 7, 8, 8.1, 76.0)],
             input_row_count=1,
             prediction_count=1,
         )

@@ -40,9 +40,9 @@ from app.schemas.admin_ml_intelligence import (
     M1SubjectIntelligence,
     M2NextSemPerformanceIntelligence,
     MlOverviewKpis,
-    PercentageDistributionItem,
-    SgpaDistributionItem,
+    PracticalDistributionItem,
     SubjectPerformanceItem,
+    TheoryDistributionItem,
 )
 
 logger = logging.getLogger(__name__)
@@ -218,13 +218,23 @@ class AdminMLService:
         #     "next-semester" forecast) is aggregated per student.
         #   * M4 persists a single decision row per student.
         def _parsed_semester(row: Dict[str, Any]) -> int:
-            """Extract the 'from' semester_no from an M2/M3 row."""
+            """Extract the 'from' semester from an M2/M3 row.
+
+            M2-TP persists ``source_semester`` directly; legacy payloads and
+            M3 use ``semester_no``. ``source_semester`` (or ``semester_no``)
+            is the completed semester the next-semester forecast departs from.
+            """
             try:
                 val = row.get("parsed_value") or {}
                 if isinstance(val, list):
                     first = val[0] if val else {}
                     val = first if isinstance(first, dict) else {}
-                return int(val.get("semester_no", 0))
+                if isinstance(val, dict):
+                    if val.get("source_semester") is not None:
+                        return int(val.get("source_semester"))
+                    if val.get("semester_no") is not None:
+                        return int(val.get("semester_no"))
+                return 0
             except (TypeError, ValueError):
                 return 0
 
@@ -289,9 +299,9 @@ class AdminMLService:
 
         # models_status reports each model's PRODUCTION validation status,
         # sourced from the authoritative readiness contract (single source
-        # of truth). M3 is always BLOCKED for production regardless of how
-        # many historical M3 rows exist; historical future-risk rows are
-        # reported separately in the Future Risk Intelligence section.
+        # of truth). M3 status follows the committed contract (currently
+        # READY); historical future-risk rows are reported separately in the
+        # Future Risk Intelligence section.
         try:
             from ml.src.features import v1_inference_contract as _contract  # noqa: PLC0415
 
@@ -511,22 +521,24 @@ class AdminMLService:
             subjects_needing_attention=subj_attention_items,
         )
 
-        # M2 Aggregations
+        # M2 Aggregations (M2-TP: separate next-semester Theory % and
+        # Practical/Lab % per student; the persisted payload is
+        # {source_semester, target_semester, theory_prediction_pct,
+        # practical_prediction_pct}).
         m2_rows = preds_by_type["m2"]
-        m2_sgpa_list: List[float] = []
-        m2_pct_list: List[float] = []
+        m2_theory_list: List[float] = []
+        m2_practical_list: List[float] = []
         dept_m2: Dict[str, Dict[str, Any]] = {}
 
-        sgpa_bands = {
-            "< 6.0": 0,
-            "6.0 - 7.0": 0,
-            "7.0 - 8.0": 0,
-            "8.0 - 9.0": 0,
-            ">= 9.0": 0,
+        theory_bands = {
+            "< 40%": 0,
+            "40 - 60%": 0,
+            "60 - 75%": 0,
+            ">= 75%": 0,
         }
-        pct_bands = {
-            "< 50%": 0,
-            "50 - 60%": 0,
+        practical_bands = {
+            "< 40%": 0,
+            "40 - 60%": 0,
             "60 - 75%": 0,
             ">= 75%": 0,
         }
@@ -541,65 +553,63 @@ class AdminMLService:
                 dept_m2[dname] = {
                     "code": dcode,
                     "name": dname,
-                    "sgpas": [],
-                    "pcts": [],
+                    "theories": [],
+                    "practicals": [],
                 }
 
             pval = r["parsed_value"]
             m2_items = (
                 [pval]
-                if isinstance(pval, dict) and "predicted_next_semester_sgpa" in pval
+                if isinstance(pval, dict) and "theory_prediction_pct" in pval
                 else (pval.get("predictions", []) if isinstance(pval, dict) else [])
             )
 
             for item in m2_items:
                 if not isinstance(item, dict):
                     continue
-                sgpa = item.get("predicted_next_semester_sgpa")
-                pct = item.get("predicted_next_semester_percentage")
+                theory = item.get("theory_prediction_pct")
+                practical = item.get("practical_prediction_pct")
 
-                if sgpa is not None:
+                if theory is not None:
                     try:
-                        fsgpa = float(sgpa)
-                        m2_sgpa_list.append(fsgpa)
-                        dept_m2[dname]["sgpas"].append(fsgpa)
-                        if fsgpa < 6.0:
-                            sgpa_bands["< 6.0"] += 1
-                        elif fsgpa < 7.0:
-                            sgpa_bands["6.0 - 7.0"] += 1
-                        elif fsgpa < 8.0:
-                            sgpa_bands["7.0 - 8.0"] += 1
-                        elif fsgpa < 9.0:
-                            sgpa_bands["8.0 - 9.0"] += 1
+                        ftheory = float(theory)
+                        m2_theory_list.append(ftheory)
+                        dept_m2[dname]["theories"].append(ftheory)
+                        if ftheory < 40.0:
+                            theory_bands["< 40%"] += 1
+                        elif ftheory < 60.0:
+                            theory_bands["40 - 60%"] += 1
+                        elif ftheory < 75.0:
+                            theory_bands["60 - 75%"] += 1
                         else:
-                            sgpa_bands[">= 9.0"] += 1
+                            theory_bands[">= 75%"] += 1
                     except (ValueError, TypeError):
                         pass
 
-                if pct is not None:
+                if practical is not None:
                     try:
-                        fpct = float(pct)
-                        m2_pct_list.append(fpct)
-                        dept_m2[dname]["pcts"].append(fpct)
-                        if fpct < 50.0:
-                            pct_bands["< 50%"] += 1
-                        elif fpct < 60.0:
-                            pct_bands["50 - 60%"] += 1
-                        elif fpct < 75.0:
-                            pct_bands["60 - 75%"] += 1
+                        fpractical = float(practical)
+                        m2_practical_list.append(fpractical)
+                        dept_m2[dname]["practicals"].append(fpractical)
+                        if fpractical < 40.0:
+                            practical_bands["< 40%"] += 1
+                        elif fpractical < 60.0:
+                            practical_bands["40 - 60%"] += 1
+                        elif fpractical < 75.0:
+                            practical_bands["60 - 75%"] += 1
                         else:
-                            pct_bands[">= 75%"] += 1
+                            practical_bands[">= 75%"] += 1
                     except (ValueError, TypeError):
                         pass
 
-        avg_m2_sgpa = (
-            round(sum(m2_sgpa_list) / len(m2_sgpa_list), 2)
-            if m2_sgpa_list
+        avg_m2_theory = (
+            round(sum(m2_theory_list) / len(m2_theory_list), 2)
+            if m2_theory_list
             else None
         )
-        avg_m2_pct = (
-            round(sum(m2_pct_list) / len(m2_pct_list), 2)
-            if m2_pct_list
+        avg_m2_practical = (
+            round(sum(m2_practical_list) / len(m2_practical_list), 2)
+            if m2_practical_list
             else None
         )
 
@@ -607,30 +617,31 @@ class AdminMLService:
             DepartmentNextSemPerformanceItem(
                 department_code=v["code"],
                 department_name=v["name"],
-                predicted_avg_sgpa=round(sum(v["sgpas"]) / len(v["sgpas"]), 2)
-                if v["sgpas"]
+                predicted_avg_theory_pct=round(sum(v["theories"]) / len(v["theories"]), 2)
+                if v["theories"]
                 else None,
-                predicted_avg_percentage=round(sum(v["pcts"]) / len(v["pcts"]), 2)
-                if v["pcts"]
+                predicted_avg_practical_pct=round(sum(v["practicals"]) / len(v["practicals"]), 2)
+                if v["practicals"]
                 else None,
             )
             for v in sorted(dept_m2.values(), key=lambda x: x["code"])
         ]
 
         m2_intel = M2NextSemPerformanceIntelligence(
-            predicted_avg_next_sgpa=avg_m2_sgpa,
-            predicted_avg_next_percentage=avg_m2_pct,
-            sgpa_distribution=[
-                SgpaDistributionItem(band=k, count=v) for k, v in sgpa_bands.items()
+            predicted_avg_theory_pct=avg_m2_theory,
+            predicted_avg_practical_pct=avg_m2_practical,
+            theory_distribution=[
+                TheoryDistributionItem(band=k, count=v) for k, v in theory_bands.items()
             ],
-            percentage_distribution=[
-                PercentageDistributionItem(band=k, count=v)
-                for k, v in pct_bands.items()
+            practical_distribution=[
+                PracticalDistributionItem(band=k, count=v)
+                for k, v in practical_bands.items()
             ],
             department_performance_distribution=dept_m2_items,
             disclaimer=(
-                "M2 forecasts next-semester SGPA and percentage based on historical academic trends. "
-                "Predictions are decision-support estimates, not guaranteed outcomes."
+                "M2-TP forecasts next-semester Theory percentage and Practical/Lab percentage "
+                "based on historical academic trends. Predictions are decision-support estimates, "
+                "not guaranteed outcomes."
             ),
         )
 
@@ -781,17 +792,18 @@ class AdminMLService:
                 )
             )
 
-        if avg_m2_sgpa is not None:
+        if avg_m2_theory is not None or avg_m2_practical is not None:
             insights.append(
                 GroundedExecutiveInsight(
                     category="Academic Outlook",
                     title="Institution Next-Semester Performance Forecast",
                     detail=(
-                        f"The M2 model predicts an institution-wide average next-semester SGPA of {avg_m2_sgpa} "
-                        f"and an average percentage of {avg_m2_pct}%. "
-                        f"{sgpa_bands.get('< 6.0', 0)} student(s) are predicted below 6.0 SGPA."
+                        f"The M2-TP model predicts an institution-wide average next-semester "
+                        f"Theory percentage of {avg_m2_theory}% and Practical/Lab percentage of "
+                        f"{avg_m2_practical}%. {theory_bands.get('< 40%', 0)} student(s) are "
+                        f"predicted below the 40% pass threshold for Theory."
                     ),
-                    priority="medium" if sgpa_bands.get("< 6.0", 0) > 0 else "low",
+                    priority="medium" if theory_bands.get("< 40%", 0) > 0 else "low",
                 )
             )
 

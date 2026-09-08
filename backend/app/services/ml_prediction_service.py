@@ -44,9 +44,17 @@ class _M1Value(BaseModel):
 
 
 class _M2Value(BaseModel):
-    semester_no: int | float
-    predicted_next_semester_sgpa: float
-    predicted_next_semester_percentage: float
+    """M2-TP output contract (next-semester Theory/Practical percentages).
+
+    Mirrors ``ml.src.inference.M2Prediction``.  ``theory_prediction_pct`` /
+    ``practical_prediction_pct`` persist ``None`` when the M2-TP model reports
+    NO_DATA for the target semester (never a fake 0).
+    """
+
+    source_semester: int | float
+    target_semester: int | float
+    theory_prediction_pct: float | None
+    practical_prediction_pct: float | None
 
 
 class _M3Value(BaseModel):

@@ -1,6 +1,7 @@
 import { getSessionUser, getSessionToken } from "./student-session.ts"
 import type { M1V2PredictionData } from "./m1v2-prediction"
-import type { M2V2PredictionData } from "./m2v2-prediction"
+import type { M1V3PredictionData } from "./m1v3-prediction"
+import type { M2TPPredictionData } from "./m2tp-prediction"
 import type { M3V2PredictionData } from "./m3v2-prediction"
 
 export type { SessionUser } from "./student-session.ts"
@@ -968,12 +969,12 @@ export type M1SubjectIntelligence = {
   subjects_needing_attention: SubjectPerformanceItem[]
 }
 
-export type SgpaDistributionItem = {
+export type TheoryDistributionItem = {
   band: string
   count: number
 }
 
-export type PercentageDistributionItem = {
+export type PracticalDistributionItem = {
   band: string
   count: number
 }
@@ -981,15 +982,15 @@ export type PercentageDistributionItem = {
 export type DepartmentNextSemPerformanceItem = {
   department_code: number
   department_name: string
-  predicted_avg_sgpa: number | null
-  predicted_avg_percentage: number | null
+  predicted_avg_theory_pct: number | null
+  predicted_avg_practical_pct: number | null
 }
 
 export type M2NextSemPerformanceIntelligence = {
-  predicted_avg_next_sgpa: number | null
-  predicted_avg_next_percentage: number | null
-  sgpa_distribution: SgpaDistributionItem[]
-  percentage_distribution: PercentageDistributionItem[]
+  predicted_avg_theory_pct: number | null
+  predicted_avg_practical_pct: number | null
+  theory_distribution: TheoryDistributionItem[]
+  practical_distribution: PracticalDistributionItem[]
   department_performance_distribution: DepartmentNextSemPerformanceItem[]
   disclaimer: string
 }
@@ -1220,12 +1221,10 @@ export function getAdminStudentM1V2(
   return callAdminPredictM1V2<M1V2PredictionData>(studentId, BFF_TTL_MS)
 }
 
-// M2 V2 â€” Next-Semester Performance Prediction (validated production model).
-// Also a per-student route at /predict/m2v2/{student_id} (not under /admin/).
-// Reuses the Admin role guard + BFF cache. Server-side authorize_prediction_access
-// allows Admin to read any student's M2 V2 prediction.
+// Clean M1 V3 — Subject Marks Prediction (HistGradientBoostingRegressor, 38-feature contract).
+// Per-student route at /predict/m1v3/{student_id}. Reuses Admin role guard + BFF cache.
 
-async function callAdminPredictM2V2<T>(
+async function callAdminPredictM1V3<T>(
   studentId: string,
   ttlMs: number,
 ): Promise<BffResult<T>> {
@@ -1251,7 +1250,7 @@ async function callAdminPredictM2V2<T>(
     }
   }
 
-  const path = `predict/m2v2/${encodeURIComponent(studentId)}`
+  const path = `predict/m1v3/${encodeURIComponent(studentId)}`
   const key = `${user.user_id}:${path}`
   const hit = bffCache.get(key)
   if (hit && hit.expiresAt > Date.now()) {
@@ -1288,10 +1287,84 @@ async function callAdminPredictM2V2<T>(
   }
 }
 
-export function getAdminStudentM2V2(
+export function getAdminStudentM1V3(
+  studentId: string,
+): Promise<BffResult<M1V3PredictionData>> {
+  return callAdminPredictM1V3<M1V3PredictionData>(studentId, BFF_TTL_MS)
+}
+
+// M2-TP â€” Next-Semester Theory & Practical Performance Prediction (validated
+// M2-TP package). Per-student route at /predict/m2tp/{student_id} (not under
+// /admin/). Reuses the Admin role guard + BFF cache. Server-side
+// authorize_prediction_access allows Admin to read any student's M2-TP forecast.
+
+async function callAdminPredictM2TP<T>(
+  studentId: string,
+  ttlMs: number,
+): Promise<BffResult<T>> {
+  const user = await getSessionUser()
+  if (!user) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to view this.",
+      },
+    }
+  }
+  if (user.role !== "Admin") {
+    return {
+      ok: false,
+      error: {
+        status: 403,
+        code: "unauthorized",
+        message: "This account is not allowed to view admin analytics.",
+      },
+    }
+  }
+
+  const path = `predict/m2tp/${encodeURIComponent(studentId)}`
+  const key = `${user.user_id}:${path}`
+  const hit = bffCache.get(key)
+  if (hit && hit.expiresAt > Date.now()) {
+    return Promise.resolve(hit.value as BffResult<T>)
+  }
+
+  try {
+    const token = (await getSessionToken()) ?? ""
+    const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!res.ok) {
+      return { ok: false, error: toBffError(res.status) }
+    }
+    const data = (await res.json()) as T
+    const result: BffResult<T> = {
+      ok: true,
+      data,
+      fetchedAt: new Date().toISOString(),
+    }
+    bffCache.set(key, { value: result, expiresAt: Date.now() + ttlMs })
+    return result
+  } catch {
+    return {
+      ok: false,
+      error: {
+        status: 503,
+        code: "unavailable",
+        message: "The academic service is temporarily unavailable. Please try again later.",
+      },
+    }
+  }
+}
+
+export function getAdminStudentM2TP(
   studentId: string
-): Promise<BffResult<M2V2PredictionData>> {
-  return callAdminPredictM2V2<M2V2PredictionData>(studentId, BFF_TTL_MS)
+): Promise<BffResult<M2TPPredictionData>> {
+  return callAdminPredictM2TP<M2TPPredictionData>(studentId, BFF_TTL_MS)
 }
 
 // M3 V2 â€” At-Risk Student Prediction (validated production model).

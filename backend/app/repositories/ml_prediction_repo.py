@@ -193,12 +193,19 @@ class MLPredictionRepository:
 
         None when no prediction has been persisted for that pair.
         Uses prediction_id as a deterministic tiebreaker for near-simultaneous writes.
+
+        M2 is served exclusively by the validated M2-TP package: only rows with
+        ``model_version = 'm2_tp_v1'`` are ever returned for that type, so legacy
+        V1/V2 historical rows are never surfaced as "latest".
         """
         self._validate_type(prediction_type)
+        version_filter = (
+            " AND model_version = 'm2_tp_v1'" if prediction_type == "m2" else ""
+        )
         query = f"""
             SELECT {_PREDICTION_COLUMNS}
             FROM ml_predictions
-            WHERE student_id = $1 AND prediction_type = $2
+            WHERE student_id = $1 AND prediction_type = $2{version_filter}
             ORDER BY generated_at DESC, prediction_id DESC
             LIMIT 1
         """
@@ -217,23 +224,26 @@ class MLPredictionRepository:
         """Paginated, newest-first prediction history for a student.
 
         When ``prediction_type`` is None, all prediction types for the
-        student are returned.
+        student are returned.  M2 history is limited to ``m2_tp_v1`` rows
+        (the legacy V1/V2 rows for the retired artifact are not surfaced).
         """
         if prediction_type is not None:
             self._validate_type(prediction_type)
         if limit < 1 or offset < 0:
             raise ValueError("limit must be >= 1 and offset >= 0")
 
-        type_filter = " AND prediction_type = $2"
+        extra_filter = ""
         params: list[Any] = [student_id]
         if prediction_type is not None:
             params.append(prediction_type)
+            if prediction_type == "m2":
+                extra_filter = " AND model_version = 'm2_tp_v1'"
         params.extend([limit, offset])
 
         query = f"""
             SELECT {_PREDICTION_COLUMNS}
             FROM ml_predictions
-            WHERE student_id = $1{type_filter if prediction_type is not None else ""}
+            WHERE student_id = $1{"" if prediction_type is None else " AND prediction_type = $2"}{extra_filter}
             ORDER BY generated_at DESC, prediction_id DESC
             LIMIT ${len(params) - 1} OFFSET ${len(params)}
         """

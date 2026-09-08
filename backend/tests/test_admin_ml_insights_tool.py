@@ -3,7 +3,7 @@
 Verifies:
   * Aggregated M1-M4 intelligence.
   * M1 subjects needing attention.
-  * M2 next-semester SGPA & percentage rollup.
+  * M2 next-semester Theory & Practical percentage rollup.
   * M3 future risk student count (strictly separate from Risk Register).
   * M4 deterministic career readiness distribution.
   * Feedback health metrics from PredictionFeedbackService.
@@ -95,12 +95,12 @@ def sample_ml_intelligence_response() -> AdminMlIntelligenceResponse:
                 ],
             ),
             m2=M2NextSemPerformanceIntelligence(
-                predicted_avg_next_sgpa=7.45,
-                predicted_avg_next_percentage=73.8,
-                sgpa_distribution=[],
-                percentage_distribution=[],
+                predicted_avg_theory_pct=73.8,
+                predicted_avg_practical_pct=69.2,
+                theory_distribution=[],
+                practical_distribution=[],
                 department_performance_distribution=[],
-                disclaimer="M2 predicts overall next semester SGPA/percentage.",
+                disclaimer="M2-TP predicts next semester Theory % and Practical/Lab %.",
             ),
         ),
         career_readiness=CareerReadinessIntelligence(
@@ -176,7 +176,7 @@ class TestAdminMlInsightsTool(unittest.TestCase):
         self.assertEqual(
             result.m1_subjects_needing_attention[0].subject_code, "CS602"
         )
-        self.assertEqual(result.m2_next_sem_summary.avg_predicted_sgpa, 7.45)
+        self.assertEqual(result.m2_next_sem_summary.avg_predicted_theory_pct, 73.8)
         self.assertEqual(result.m3_future_risk_summary.total_predicted_at_risk, 45)
         self.assertEqual(result.m4_career_readiness_summary.high_readiness_count, 450)
         self.assertEqual(result.feedback_health.agreement_rate_pct, 80.0)

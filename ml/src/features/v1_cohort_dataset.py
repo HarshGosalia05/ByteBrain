@@ -56,15 +56,20 @@ class V1CohortScope:
 
 
 def _load_summary_and_students(tables=None):
-    """Reuse the existing M2 data-loading utility (no parallel loader).
+    """Reuse the existing M2/M3 data-loading utility (no parallel loader).
 
     ``tables`` may be supplied (e.g. frames fetched read-only from the live
     PostgreSQL database) to run the SAME cohort transformation on the real DB
-    data; otherwise the existing CSV snapshot loader is used.
+    data; otherwise the existing CSV snapshot loader is used.  The legacy M2
+    package (``ml/src/m2``) has been retired; ``m3.data.load_tables`` reads the
+    identical CSV snapshots and is used as the fallback loader.
     """
     if tables is not None:
         return tables["summary"], tables["students"]
-    from m2.data import load_tables  # type: ignore
+    try:
+        from m2.data import load_tables  # type: ignore
+    except ImportError:  # legacy m2 package retired
+        from m3.data import load_tables  # type: ignore
     return load_tables()["summary"], load_tables()["students"]
 
 

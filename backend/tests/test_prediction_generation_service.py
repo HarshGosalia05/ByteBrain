@@ -10,7 +10,7 @@ Verifies the explicit generate -> validate -> persist -> return flow:
   * unknown type / missing student id rejected before any work
   * repeated generation appends history (ML-06 append-only contract)
   * latest/history retrieval decodes the JSONB prediction_value
-  * model_version resolution (M1 metadata, M4 engine, M2/M3 NULL)
+  * model_version resolution (M1 metadata, M2-TP m2_tp_v1, M4 engine, M3 NULL)
 """
 
 from __future__ import annotations
@@ -69,6 +69,50 @@ class FakeGeneration:
         return await self._run(student_id)
 
 
+class FakeM2TP:
+    """Stand-in for M2TPPredictionService (validated M2-TP package adapter)."""
+
+    READY_PAYLOAD = {
+        "student_id": "STU000001",
+        "model_id": "m2_tp",
+        "model_version": "m2_tp_v1",
+        "readiness_status": "READY",
+        "observation_semester": 6,
+        "target_semester": 7,
+        "theory": {
+            "readiness_status": "READY",
+            "predicted_percentage": 72.5,
+            "target_subject_count": 3,
+            "feature_count": 32,
+            "algorithm": "RandomForestRegressor",
+            "reason": None,
+        },
+        "practical": {
+            "readiness_status": "READY",
+            "predicted_percentage": 68.0,
+            "target_subject_count": 2,
+            "feature_count": 33,
+            "algorithm": "Ridge",
+            "reason": None,
+        },
+        "reason": None,
+        "predicted_at": "2026-09-08T00:00:00Z",
+        "inference_ms": 12.3,
+        "note": "model estimate",
+    }
+
+    def __init__(self, payload=None, error=None):
+        self.payload = payload if payload is not None else dict(self.READY_PAYLOAD)
+        self.error = error
+        self.calls = []
+
+    async def predict(self, student_id):
+        self.calls.append(student_id)
+        if self.error is not None:
+            raise self.error
+        return self.payload
+
+
 class FakePersistence:
     def __init__(self, latest=None):
         self.rows = []
@@ -94,9 +138,12 @@ class FakePersistence:
         return list(reversed(self.rows))
 
 
-def make_service(generation, persistence):
+def make_service(generation, persistence, m2tp=None):
     return PredictionGenerationService(
-        pool=None, generation_service=generation, persistence_service=persistence
+        pool=None,
+        generation_service=generation,
+        persistence_service=persistence,
+        m2tp_service=m2tp,
     )
 
 
@@ -130,11 +177,12 @@ class TestGenerateAndPersist(unittest.TestCase):
         self.assertIs(out["result"], self.gen.result)
 
     def test_all_four_types_dispatch(self):
-        versions = {"m1": "1", "m2": None, "m3": None, "m4": "1.0"}
+        versions = {"m1": "1", "m2": "m2_tp_v1", "m3": None, "m4": "1.0"}
         for ptype in ("m1", "m2", "m3", "m4"):
             gen = FakeGeneration(result=FakeResult(ptype))
             persist = FakePersistence()
-            service = make_service(gen, persist)
+            m2tp = FakeM2TP() if ptype == "m2" else None
+            service = make_service(gen, persist, m2tp=m2tp)
             with mock.patch.object(pgs, "to_persistence_rows",
                                    return_value=[{"student_id": "STU000001",
                                                   "prediction_value": {}}]), \
@@ -144,7 +192,23 @@ class TestGenerateAndPersist(unittest.TestCase):
             self.assertEqual(out["model_id"], ptype)
             self.assertEqual(out["model_version"], versions[ptype])
             self.assertEqual(persist.persist_calls[0][0], ptype)
-            self.assertEqual(gen.calls, ["STU000001"])
+            if ptype == "m2":
+                self.assertEqual(m2tp.calls, ["STU000001"])
+                self.assertEqual(gen.calls, [])
+            else:
+                self.assertEqual(gen.calls, ["STU000001"])
+
+    def test_m2_no_data_raises_and_persists_nothing(self):
+        m2tp = FakeM2TP(payload={
+            **FakeM2TP.READY_PAYLOAD,
+            "readiness_status": "NO_DATA",
+            "reason": "no upcoming regular academic semester",
+        })
+        persist = FakePersistence()
+        service = make_service(FakeGeneration(), persist, m2tp=m2tp)
+        with self.assertRaises(ValueError):
+            run(service.generate_and_persist("m2", "STU000001"))
+        self.assertEqual(persist.persist_calls, [])
 
     def test_invalid_prediction_not_persisted(self):
         with mock.patch.object(pgs, "to_persistence_rows",
@@ -228,25 +292,14 @@ class TestRetrieval(unittest.TestCase):
 
 
 class TestResolveModelVersion(unittest.TestCase):
-    def test_m2_m3_returns_none_without_loading(self):
-        self.assertIsNone(resolve_model_version("m2"))
+    def test_m2_returns_m2_tp_version(self):
+        self.assertEqual(resolve_model_version("m2"), "m2_tp_v1")
+
+    def test_m3_returns_none_without_loading(self):
         self.assertIsNone(resolve_model_version("m3"))
 
-    def test_m1_from_artifact_metadata(self):
-        with mock.patch("ml.src.registry.load_model",
-                        return_value={"metadata": {"version": 7}}) as m:
-            self.assertEqual(resolve_model_version("m1"), "7")
-            m.assert_called_once_with("m1")
-
-    def test_m1_no_version_metadata(self):
-        with mock.patch("ml.src.registry.load_model",
-                        return_value={"metadata": {}}):
-            self.assertIsNone(resolve_model_version("m1"))
-
-    def test_m1_load_error_returns_none(self):
-        with mock.patch("ml.src.registry.load_model",
-                        side_effect=RuntimeError("boom")):
-            self.assertIsNone(resolve_model_version("m1"))
+    def test_m1_returns_clean_version(self):
+        self.assertEqual(resolve_model_version("m1"), "m1_v3_clean")
 
     def test_m4_from_engine_version(self):
         engine = mock.Mock()

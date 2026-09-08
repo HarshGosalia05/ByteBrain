@@ -83,6 +83,50 @@ class FakePrediction:
         return await self._run("m4", student_id)
 
 
+class FakeM2TP:
+    """Stand-in for M2TPPredictionService (validated M2-TP package adapter)."""
+
+    READY_PAYLOAD = {
+        "student_id": "STU000001",
+        "model_id": "m2_tp",
+        "model_version": "m2_tp_v1",
+        "readiness_status": "READY",
+        "observation_semester": 6,
+        "target_semester": 7,
+        "theory": {
+            "readiness_status": "READY",
+            "predicted_percentage": 72.5,
+            "target_subject_count": 3,
+            "feature_count": 32,
+            "algorithm": "RandomForestRegressor",
+            "reason": None,
+        },
+        "practical": {
+            "readiness_status": "READY",
+            "predicted_percentage": 68.0,
+            "target_subject_count": 2,
+            "feature_count": 33,
+            "algorithm": "Ridge",
+            "reason": None,
+        },
+        "reason": None,
+        "predicted_at": "2026-09-08T00:00:00Z",
+        "inference_ms": 12.3,
+        "note": "model estimate",
+    }
+
+    def __init__(self, payload=None, error=None):
+        self.payload = payload if payload is not None else dict(self.READY_PAYLOAD)
+        self.error = error
+        self.calls = []
+
+    async def predict(self, student_id):
+        self.calls.append(student_id)
+        if self.error is not None:
+            raise self.error
+        return self.payload
+
+
 class FakeExplanation:
     def __init__(self):
         self.calls = []
@@ -106,10 +150,12 @@ class InsightsServiceTestCase(unittest.TestCase):
     def setUp(self):
         self.fake_prediction = FakePrediction(make_results())
         self.fake_explanation = FakeExplanation()
+        self.fake_m2tp = FakeM2TP()
         self.service = PredictionInsightsService(
             pool=None,
             prediction_service=self.fake_prediction,
             explanation_service=self.fake_explanation,
+            m2tp_service=self.fake_m2tp,
         )
         patcher = mock.patch.object(pis, "resolve_model_version", return_value="1")
         patcher.start()
@@ -121,7 +167,7 @@ class TestInsightsBundle(InsightsServiceTestCase):
         result = run(self.service.get_student_insights("STU000001"))
         self.assertEqual(result["student_id"], "STU000001")
         self.assertEqual(sorted(result["models"]), ["m1", "m2", "m3", "m4"])
-        for prediction_type in ("m1", "m2", "m4"):
+        for prediction_type in ("m1", "m2", "m3", "m4"):
             model = result["models"][prediction_type]
             self.assertTrue(model["available"], prediction_type)
             self.assertEqual(model["prediction"]["model_id"], prediction_type)
@@ -132,31 +178,30 @@ class TestInsightsBundle(InsightsServiceTestCase):
 
     def test_every_ready_model_was_predicted_then_explained(self):
         result = run(self.service.get_student_insights("STU000001"))
-        self.assertEqual(result["models"]["m3"]["available"], False)
-        self.assertEqual(result["models"]["m3"]["reason"], "blocked")
-        self.assertIn("validation gate", result["models"]["m3"]["message"].lower())
+        # M2 is served by the injected M2-TP adapter, all other models by the
+        # ML-05 forecast service; each paired prediction is then explained.
         self.assertEqual(
             [call[0] for call in self.fake_prediction.calls],
-            ["m1", "m2", "m4"],
+            ["m1", "m3", "m4"],
         )
+        self.assertEqual(self.fake_m2tp.calls, ["STU000001"])
         self.assertEqual(
             [call[0] for call in self.fake_explanation.calls],
-            ["m1", "m2", "m4"],
+            ["m1", "m2", "m3", "m4"],
         )
 
     def test_model_version_resolved_and_passed_to_explanation(self):
         run(self.service.get_student_insights("STU000001"))
         self.assertEqual(
             self.fake_explanation.calls,
-            [(prediction_type, "1") for prediction_type in ("m1", "m2", "m4")],
+            [(prediction_type, "1") for prediction_type in ("m1", "m2", "m3", "m4")],
         )
 
-    def test_m3_blocked_even_when_data_available(self):
-        # Even with full data present, M3 is never exposed as production
-        # because its validation gate is blocked.
+    def test_m3_contract_state_drives_serving(self):
+        # With the contract reporting M3 READY, M3 is served like any model;
+        # a BLOCKED contract state would degrade it to unavailable instead.
         result = run(self.service.get_student_insights("STU000001"))
-        self.assertEqual(result["models"]["m3"]["available"], False)
-        self.assertEqual(result["models"]["m3"]["reason"], "blocked")
+        self.assertEqual(result["models"]["m3"]["available"], True)
         self.assertEqual(result["models"]["m1"]["available"], True)
         self.assertEqual(result["models"]["m2"]["available"], True)
         self.assertEqual(result["models"]["m4"]["available"], True)
@@ -168,17 +213,14 @@ class TestInsightsBundle(InsightsServiceTestCase):
 
 class TestGracefulDegradation(InsightsServiceTestCase):
     def test_missing_data_model_degrades_without_failing_others(self):
-        self.fake_prediction.errors = {
-            "m2": ValueError("No data found for student STU000001")
-        }
+        self.fake_m2tp.error = ValueError("No data found for student STU000001")
         result = run(self.service.get_student_insights("STU000001"))
         self.assertTrue(result["models"]["m1"]["available"])
         self.assertFalse(result["models"]["m2"]["available"])
         self.assertEqual(result["models"]["m2"]["reason"], "no_data")
         self.assertIn("No data found", result["models"]["m2"]["message"])
+        self.assertTrue(result["models"]["m3"]["available"])
         self.assertTrue(result["models"]["m4"]["available"])
-        # m3 stays blocked regardless of data errors.
-        self.assertEqual(result["models"]["m3"]["reason"], "blocked")
 
     def test_unexpected_error_degrades_with_generic_message(self):
         self.fake_prediction.errors = {"m4": RuntimeError("boom")}
@@ -193,8 +235,9 @@ class TestGracefulDegradation(InsightsServiceTestCase):
     def test_all_models_failing_returns_full_bundle(self):
         self.fake_prediction.errors = {
             prediction_type: ValueError("No data found for student STU000001")
-            for prediction_type in pis.PREDICTION_TYPES
+            for prediction_type in ("m1", "m3", "m4")
         }
+        self.fake_m2tp.error = ValueError("No data found for student STU000001")
         result = run(self.service.get_student_insights("STU000001"))
         self.assertEqual(sorted(result["models"]), ["m1", "m2", "m3", "m4"])
         self.assertTrue(

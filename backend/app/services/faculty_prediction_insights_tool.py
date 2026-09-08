@@ -49,14 +49,14 @@ _MODEL_KIND: dict[str, str] = {
 
 _TARGETS: dict[str, str] = {
     "m1": "subject_end_sem_marks",
-    "m2": "next_semester_percentage",
+    "m2": "next_semester_theory_practical_percentage",
     "m3": "next_semester_at_risk",
     "m4": "career_readiness_score",
 }
 
 _NOTES: dict[str, str] = {
     "m1": "Supervised ML prediction of end-semester subject marks.",
-    "m2": "Supervised ML prediction of next-semester performance.",
+    "m2": "M2-TP supervised ML prediction of next-semester Theory % and Practical/Lab % (m2_tp_v1).",
     "m3": "Supervised ML binary classification of next-semester future risk (0/1).",
     "m4": "Deterministic rule-based career readiness score (not an ML model; not a placement guarantee).",
 }

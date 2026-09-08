@@ -13,50 +13,46 @@ export function AcademicPredictionCard({ data }: { data: AcademicPredictionIntel
       ? `${m1.predicted_avg_subject_mark.toFixed(1)} / 70`
       : "—"
 
-  const m2AvgSgpaStr =
-    m2.predicted_avg_next_sgpa !== null && m2.predicted_avg_next_sgpa !== undefined
-      ? m2.predicted_avg_next_sgpa.toFixed(2)
+  const m2AvgTheoryStr =
+    m2.predicted_avg_theory_pct !== null && m2.predicted_avg_theory_pct !== undefined
+      ? `${m2.predicted_avg_theory_pct.toFixed(1)}%`
       : "—"
 
-  const m2AvgPctStr =
-    m2.predicted_avg_next_percentage !== null && m2.predicted_avg_next_percentage !== undefined
-      ? `${m2.predicted_avg_next_percentage.toFixed(1)}%`
+  const m2AvgPracticalStr =
+    m2.predicted_avg_practical_pct !== null && m2.predicted_avg_practical_pct !== undefined
+      ? `${m2.predicted_avg_practical_pct.toFixed(1)}%`
       : "—"
 
   const hasM2Data = m2.department_performance_distribution.length > 0
-  const sgpaTotal = m2.sgpa_distribution.reduce((sum, d) => sum + d.count, 0)
-  const pctTotal = m2.percentage_distribution.reduce((sum, d) => sum + d.count, 0)
+  const theoryTotal = m2.theory_distribution.reduce((sum, d) => sum + d.count, 0)
+  const practicalTotal = m2.practical_distribution.reduce((sum, d) => sum + d.count, 0)
 
   return (
     <div className="flex flex-col gap-6">
-      {/* M1 V2 availability notice — documented limitation, never fabricated */}
+      {/* Clean M1 V3 availability notice — documented limitation, never fabricated */}
       <div className="flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
         <CircleAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="flex flex-col gap-0.5">
-          <p className="text-sm font-medium">M1 V2 cohort analytics (not yet available)</p>
+          <p className="text-sm font-medium">Clean M1 V3 cohort analytics (surfaced per-student)</p>
           <p className="text-xs text-muted-foreground">
-            Institutional M1 V2 (Subject Marks Prediction) aggregate statistics are unavailable
-            because the backend exposes M1 V2 per-student only, with no cohort endpoint and no
-            persistence wiring. The validated M1 V2 predictions are surfaced per student for the
-            Student and Faculty/Mentor experiences. No aggregate figures are shown here to avoid
-            presenting unverified statistics.
+            Institutional Clean M1 V3 (Subject Marks Prediction) predictions are surfaced per student for the
+            Student, Faculty/Mentor, and Chatbot experiences with 38-feature history learning. No unverified
+            aggregate figures are displayed here to ensure honest generalization.
           </p>
         </div>
       </div>
 
-      {/* M2 V2 availability notice — documented limitation, never fabricated */}
+      {/* M2-TP availability notice — documented limitation, never fabricated */}
       <div className="flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
         <CircleAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="flex flex-col gap-0.5">
-          <p className="text-sm font-medium">M2 V2 cohort analytics (not yet available)</p>
+          <p className="text-sm font-medium">M2-TP cohort analytics (validated M2-TP aggregate)</p>
           <p className="text-xs text-muted-foreground">
-            Institutional M2 V2 (Next-Semester Performance Prediction) aggregate statistics are
-            unavailable because the backend exposes M2 V2 per-student only, with no cohort endpoint
-            and no persistence wiring. The validated M2 V2 predictions are surfaced per student for
-            the Student and Faculty/Mentor experiences. Additionally, the current cohort is in the
-            final / internship semester and has no upcoming regular academic semester, so their
-            per-student M2 V2 predictions are NO_DATA by design. No aggregate figures are shown here
-            to avoid presenting unverified statistics.
+            The M2-TP (Next-Semester Theory & Practical Performance) aggregate below is computed from
+            persisted, model-version-verified M2-TP predictions (prediction_type=&quot;m2&quot;,
+            model_version=&quot;m2_tp_v1&quot;). Only verified rows are aggregated; old or
+            non-M2-TP rows are never mixed in. Forecasts apply to upcoming regular semesters and are
+            never fabricated.
           </p>
         </div>
       </div>
@@ -93,16 +89,16 @@ export function AcademicPredictionCard({ data }: { data: AcademicPredictionIntel
           hint="Overall predicted subject performance (/70)"
         />
         <StatCard
-          label="Predicted Next-Sem SGPA (M2)"
-          value={m2AvgSgpaStr}
+          label="Predicted Next-Sem Theory (M2)"
+          value={m2AvgTheoryStr}
           icon={TrendingUp}
-          hint="Institution forecast next-semester SGPA"
+          hint="Institution forecast next-semester Theory %"
         />
         <StatCard
-          label="Predicted Next-Sem % (M2)"
-          value={m2AvgPctStr}
+          label="Predicted Next-Sem Practical (M2)"
+          value={m2AvgPracticalStr}
           icon={TrendingUp}
-          hint="Institution forecast next-semester percentage"
+          hint="Institution forecast next-semester Practical %"
         />
       </div>
 
@@ -147,19 +143,19 @@ export function AcademicPredictionCard({ data }: { data: AcademicPredictionIntel
         </div>
       </ChartCard>
 
-      {/* M2: SGPA Distribution & Percentage Distribution */}
+      {/* M2: Theory Distribution & Practical Distribution */}
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard
-          title="Predicted Next-Semester SGPA Distribution (M2)"
-          subtitle="Forecast SGPA distribution for next semester"
-          status={hasM2Data && m2.sgpa_distribution.length > 0 ? "ready" : "empty"}
+          title="Predicted Next-Semester Theory Distribution (M2)"
+          subtitle="Forecast Theory percentage band distribution for next semester"
+          status={hasM2Data && m2.theory_distribution.length > 0 ? "ready" : "empty"}
           emptyIcon={Info}
-          emptyTitle="No SGPA Distribution Data"
-          emptyDescription="No M2 next-semester predictions found for current scope."
+          emptyTitle="No Theory Distribution Data"
+          emptyDescription="No M2-TP next-semester predictions found for current scope."
         >
           <div className="space-y-3">
-            {m2.sgpa_distribution.map((dist) => {
-              const pct = sgpaTotal > 0 ? (dist.count / sgpaTotal) * 100 : 0
+            {m2.theory_distribution.map((dist) => {
+              const pct = theoryTotal > 0 ? (dist.count / theoryTotal) * 100 : 0
               return (
                 <div key={dist.band} className="space-y-1">
                   <div className="flex justify-between text-xs font-medium">
@@ -180,16 +176,16 @@ export function AcademicPredictionCard({ data }: { data: AcademicPredictionIntel
         </ChartCard>
 
         <ChartCard
-          title="Predicted Next-Semester Percentage Distribution (M2)"
-          subtitle="Forecast percentage band distribution for next semester"
-          status={hasM2Data && m2.percentage_distribution.length > 0 ? "ready" : "empty"}
+          title="Predicted Next-Semester Practical Distribution (M2)"
+          subtitle="Forecast Practical percentage band distribution for next semester"
+          status={hasM2Data && m2.practical_distribution.length > 0 ? "ready" : "empty"}
           emptyIcon={Info}
-          emptyTitle="No Percentage Distribution Data"
-          emptyDescription="No M2 next-semester percentage predictions found for current scope."
+          emptyTitle="No Practical Distribution Data"
+          emptyDescription="No M2-TP next-semester practical predictions found for current scope."
         >
           <div className="space-y-3">
-            {m2.percentage_distribution.map((dist) => {
-              const pct = pctTotal > 0 ? (dist.count / pctTotal) * 100 : 0
+            {m2.practical_distribution.map((dist) => {
+              const pct = practicalTotal > 0 ? (dist.count / practicalTotal) * 100 : 0
               return (
                 <div key={dist.band} className="space-y-1">
                   <div className="flex justify-between text-xs font-medium">
@@ -213,7 +209,7 @@ export function AcademicPredictionCard({ data }: { data: AcademicPredictionIntel
       {/* M2: Department Performance Forecast */}
       <ChartCard
         title="Department Next-Sem Performance Forecast (M2)"
-        subtitle="Predicted average SGPA and Percentage per department"
+        subtitle="Predicted average Theory and Practical percentage per department"
         status={m2.department_performance_distribution.length > 0 ? "ready" : "empty"}
       >
         <div className="space-y-3">
@@ -227,16 +223,18 @@ export function AcademicPredictionCard({ data }: { data: AcademicPredictionIntel
               </div>
               <div className="text-right flex items-center gap-4">
                 <div>
-                  <span className="text-muted-foreground">SGPA: </span>
+                  <span className="text-muted-foreground">Theory: </span>
                   <span className="font-semibold text-foreground">
-                    {dept.predicted_avg_sgpa !== null ? dept.predicted_avg_sgpa.toFixed(2) : "—"}
+                    {dept.predicted_avg_theory_pct !== null
+                      ? `${dept.predicted_avg_theory_pct.toFixed(1)}%`
+                      : "—"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">%: </span>
+                  <span className="text-muted-foreground">Practical: </span>
                   <span className="font-semibold text-foreground">
-                    {dept.predicted_avg_percentage !== null
-                      ? `${dept.predicted_avg_percentage.toFixed(1)}%`
+                    {dept.predicted_avg_practical_pct !== null
+                      ? `${dept.predicted_avg_practical_pct.toFixed(1)}%`
                       : "—"}
                   </span>
                 </div>

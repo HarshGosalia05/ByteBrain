@@ -155,11 +155,11 @@ class M1Explanation:
 @dataclass(frozen=True)
 class M2Explanation:
     prediction_type: str = "m2"
-    semester_no: int = 0
-    predicted_next_semester_sgpa: float = 0.0
-    predicted_next_semester_percentage: float = 0.0
+    source_semester: int = 0
+    target_semester: int = 0
+    theory_prediction_pct: Optional[float] = None
+    practical_prediction_pct: Optional[float] = None
     current_percentage: Optional[float] = None
-    projected_delta_percentage: Optional[float] = None
     inputs: list[ExplanationInput] = field(default_factory=list)
     factors: list[ExplanationFactor] = field(default_factory=list)
     interpretation: str = ""
@@ -220,8 +220,8 @@ _RULE_CONTEXTS = {
     },
     "m2": {
         "pass_percentage": PASS_PERCENTAGE,
-        "targets": ["next_semester_sgpa", "next_semester_percentage"],
-        "documentation": "migrations/18_marks_remarks_derivation.sql",
+        "targets": ["theory_percentage", "practical_percentage"],
+        "documentation": "ml/M2_TP_CampusX_package (validated M2-TP package)",
     },
     "m3": {
         "risk_definition": M3_RISK_RULE,
@@ -490,15 +490,16 @@ def _explain_m1(
 
 
 def _explain_m2(pred: Any, summary: Any, students: Any) -> M2Explanation:
-    sem = _to_scalar(pred.semester_no)
-    row = _match(summary, {"student_id": pred.student_id, "semester_no": pred.semester_no})
+    src_sem = _to_scalar(pred.source_semester)
+    tgt_sem = _to_scalar(pred.target_semester)
+    row = _match(summary, {"student_id": pred.student_id, "semester_no": src_sem})
     pct_present, pct = _extract(row, "semester_percentage")
     sgpa_present, sgpa = _extract(row, "semester_sgpa")
     att_present, att = _extract(row, "semester_attendance_percentage")
     back_present, back = _extract(row, "backlog_count")
 
-    pred_pct = _to_scalar(pred.predicted_next_semester_percentage)
-    delta = round(pred_pct - float(pct), 2) if pct is not None else None
+    theory = _to_scalar(pred.theory_prediction_pct)
+    practical = _to_scalar(pred.practical_prediction_pct)
 
     inputs = [
         ExplanationInput("semester_percentage", pct, pct_present),
@@ -508,13 +509,23 @@ def _explain_m2(pred: Any, summary: Any, students: Any) -> M2Explanation:
     ]
 
     factors: list[ExplanationFactor] = []
-    if pred_pct is not None:
-        if pred_pct >= PASS_PERCENTAGE:
+    for label, value in (("Theory", theory), ("Practical/Lab", practical)):
+        if value is None:
+            factors.append(
+                ExplanationFactor(
+                    "concern",
+                    "input",
+                    f"{label} prediction is unavailable (NO_DATA): the M2-TP model reports no valid "
+                    "forecast for the target semester or insufficient history.",
+                )
+            )
+        elif value >= PASS_PERCENTAGE:
             factors.append(
                 ExplanationFactor(
                     "positive",
                     "business_rule",
-                    f"Predicted next-semester percentage ({_fmt(pred_pct)}%) is at or above the documented pass threshold of {PASS_PERCENTAGE:.0f}%.",
+                    f"Predicted next-semester {label} percentage ({_fmt(value)}%) is at or above the "
+                    f"documented pass threshold of {PASS_PERCENTAGE:.0f}%.",
                 )
             )
         else:
@@ -522,46 +533,34 @@ def _explain_m2(pred: Any, summary: Any, students: Any) -> M2Explanation:
                 ExplanationFactor(
                     "concern",
                     "business_rule",
-                    f"Predicted next-semester percentage ({_fmt(pred_pct)}%) is below the documented pass threshold of {PASS_PERCENTAGE:.0f}%.",
-                )
-            )
-    if delta is not None:
-        if delta >= 0:
-            factors.append(
-                ExplanationFactor(
-                    "positive",
-                    "input",
-                    f"Projected percentage is {delta:+.2f} points relative to the current semester ({_fmt(pct)}%).",
-                )
-            )
-        else:
-            factors.append(
-                ExplanationFactor(
-                    "concern",
-                    "input",
-                    f"Projected percentage is {delta:+.2f} points relative to the current semester ({_fmt(pct)}%).",
+                    f"Predicted next-semester {label} percentage ({_fmt(value)}%) is below the "
+                    f"documented pass threshold of {PASS_PERCENTAGE:.0f}%.",
                 )
             )
 
-    if pct is not None:
-        trend = (
-            f"The predicted next-semester percentage is {delta:+.2f} points "
-            f"relative to the current semester percentage ({_fmt(pct)}%)."
+    parts = [
+        f"M2 predicts the next semester (semester {tgt_sem}) Theory aggregate percentage of {_fmt(theory)}% "
+        f"and Practical/Lab aggregate percentage of {_fmt(practical)}% based on the completed semester "
+        f"{src_sem} data."
+    ]
+    if theory is not None and pct is not None:
+        delta = round(theory - float(pct), 2)
+        parts.append(
+            f"The Theory forecast differs by {delta:+.2f} points from the current semester percentage "
+            f"({_fmt(pct)}%)."
         )
+    elif pct is not None:
+        parts.append(f"The current semester percentage is {_fmt(pct)}%.")
     else:
-        trend = "The current semester percentage is unavailable, so no trend comparison can be made."
-
-    interpretation = (
-        f"M2 predicts a next-semester SGPA of {_fmt(pred.predicted_next_semester_sgpa)} and a percentage of "
-        f"{_fmt(pred_pct)}% based on semester {sem} data. {trend}"
-    )
+        parts.append("The current semester percentage is unavailable, so no trend comparison can be made.")
+    interpretation = " ".join(parts)
 
     return M2Explanation(
-        semester_no=sem,
-        predicted_next_semester_sgpa=float(pred.predicted_next_semester_sgpa),
-        predicted_next_semester_percentage=float(pred_pct) if pred_pct is not None else 0.0,
+        source_semester=src_sem,
+        target_semester=tgt_sem,
+        theory_prediction_pct=float(theory) if theory is not None else None,
+        practical_prediction_pct=float(practical) if practical is not None else None,
         current_percentage=pct,
-        projected_delta_percentage=delta,
         inputs=inputs,
         factors=factors,
         interpretation=interpretation,

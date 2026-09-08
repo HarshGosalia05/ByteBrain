@@ -1,6 +1,6 @@
 ﻿import { getSessionUser, getSessionToken } from "./student-session.ts"
 import type { M1V2PredictionData } from "./m1v2-prediction"
-import type { M2V2PredictionData } from "./m2v2-prediction"
+import type { M2TPPredictionData } from "./m2tp-prediction"
 import type { M3V2PredictionData } from "./m3v2-prediction"
 
 const FASTAPI_URL = (process.env.FASTAPI_URL ?? "http://localhost:8000").replace(/\/+$/, "")
@@ -1114,96 +1114,21 @@ export function getFacultyStudentM1V3(
   return callFacultyPredictM1V3<import("./m1v3-prediction").M1V3PredictionData>(studentId, BFF_TTL_MS)
 }
 
-// M2 V2 â€” Next-Semester Performance Prediction (validated production model).
-// Also a per-student route at /predict/m2v2/{student_id} (not under /faculty/).
-// Reuses the same Faculty role guards + BFF caching as getFacultyStudentM1V2.
+// M2-TP — Next-Semester Theory & Practical Performance Prediction (validated
+// M2-TP package). Per-student route at /predict/m2tp/{student_id} (not under
+// /faculty/). Returns separate Theory % and Practical/Lab % forecasts for the
+// student's next regular semester (model_version m2_tp_v1). Reuses the same
+// Faculty role guards + BFF caching as the other per-student predict routes.
 
-async function callFacultyPredictM2V2<T>(
-  studentId: string,
-  ttlMs: number,
-): Promise<BffResult<T>> {
-  const user = await getSessionUser()
-  if (!user) {
-    return {
-      ok: false,
-      error: {
-        status: 401,
-        code: "unauthorized",
-        message: "You must be signed in to view this.",
-      },
-    }
-  }
-  if (user.role !== "Faculty") {
-    return {
-      ok: false,
-      error: {
-        status: 403,
-        code: "unauthorized",
-        message: "This account is not allowed to view faculty data.",
-      },
-    }
-  }
-  if (!user.faculty_id) {
-    return {
-      ok: false,
-      error: {
-        status: 400,
-        code: "unlinked",
-        message: "This account is not linked to a faculty record yet.",
-      },
-    }
-  }
-
-  const path = `predict/m2v2/${encodeURIComponent(studentId)}`
-  const key = `${user.faculty_id}:${path}`
-  return cached(
-    key,
-    ttlMs,
-    async () => {
-      try {
-        const token = (await getSessionToken()) ?? ""
-        const res = await fetch(`${FASTAPI_URL}/api/v1/${path}`, {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        })
-        if (!res.ok) {
-          let customDetail: string | undefined
-          try {
-            const errBody = await res.json()
-            if (typeof errBody?.detail === "string" && errBody.detail.trim()) {
-              customDetail = errBody.detail
-            } else if (typeof errBody?.message === "string" && errBody.message.trim()) {
-              customDetail = errBody.message
-            }
-          } catch {}
-          return { ok: false, error: toBffError(res.status, customDetail) }
-        }
-        const data = (await res.json()) as T
-        return { ok: true, data, fetchedAt: new Date().toISOString() }
-      } catch {
-        return {
-          ok: false,
-          error: {
-            status: 503,
-            code: "unavailable",
-            message:
-              "The academic service is temporarily unavailable. Please try again later.",
-          },
-        }
-      }
-    },
-  )
-}
-
-export function getFacultyStudentM2V2(
+export function getFacultyStudentM2TP(
   studentId: string
-): Promise<BffResult<M2V2PredictionData>> {
-  return callFacultyPredictM2V2<M2V2PredictionData>(studentId, BFF_TTL_MS)
+): Promise<BffResult<M2TPPredictionData>> {
+  return callFacultyV2PerStudent<M2TPPredictionData>(studentId, BFF_TTL_MS, "predict/m2tp")
 }
 
 // M3 V2 â€” At-Risk Student Prediction (validated production model).
 // Also a per-student route at /predict/m3v2/{student_id} (not under /faculty/).
-// Reuses the same Faculty role guards + BFF caching as getFacultyStudentM2V2.
+// Reuses the same Faculty role guards + BFF caching as the M2-TP route.
 // probability_at_risk is a model ESTIMATE, never a guarantee.
 
 export function getFacultyStudentM3V2(

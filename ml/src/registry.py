@@ -89,18 +89,25 @@ _register(
     )
 )
 
-# ---- M2: Next-Semester Performance Predictor -----------------------------
+# ---- M2: Next-Semester Theory/Practical Predictor (M2-TP) ---------------
+# The legacy V1 M2 artifact (m2_next_semester_performance.joblib) has been
+# retired.  Production M2 predictions are served exclusively by the validated
+# M2-TP package (ml/M2_TP_CampusX_package) through the backend
+# M2TPPredictionService -- it is NOT loadable through this registry.
 _register(
     ModelEntry(
         model_id="m2",
-        display_name="M2 - Next-Semester Performance Predictor",
+        display_name="M2 - Next-Semester Theory/Practical Predictor (M2-TP)",
         model_type=ModelType.JOBLIB,
-        artifact_path=_ARTIFACT_DIR / "m2_next_semester_performance.joblib",
-        algorithm="ridge / hist_gbm / xgboost (best selected per target)",
-        task="multi_target_regression",
-        target=["next_semester_percentage", "next_semester_sgpa"],
+        artifact_path=None,  # served by M2-TP package; no registry artifact
+        algorithm="gradient_boosting (M2-TP validated package)",
+        task="multivariate_regression",
+        target=["theory_percentage", "practical_percentage"],
         feature_count=None,
-        notes="Artifact is a dict of sklearn Pipelines keyed by target name.",
+        notes="Legacy V1 M2 artifact retired. Production M2 is served by the "
+              "validated M2-TP package (ml/M2_TP_CampusX_package / "
+              "M2TPPredictionService); neither this registry nor "
+              "InferenceService.predict_m2 can serve it.",
     )
 )
 
@@ -291,20 +298,6 @@ def _validate_shape(entry: ModelEntry, obj: Any) -> None:
         if missing:
             raise TypeError(
                 f"M1 artifact is missing required keys: {missing}"
-            )
-
-    elif entry.model_id == "m2":
-        if not isinstance(obj, dict):
-            raise TypeError(
-                f"M2 artifact must be a dict of pipelines, "
-                f"got {type(obj).__name__}"
-            )
-        expected_targets = set(entry.target)
-        actual_targets = set(obj.keys())
-        if not expected_targets.issubset(actual_targets):
-            raise TypeError(
-                f"M2 artifact missing expected targets: "
-                f"{expected_targets - actual_targets}"
             )
 
     elif entry.model_id == "m3":

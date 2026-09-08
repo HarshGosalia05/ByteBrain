@@ -141,11 +141,13 @@ class TestAdminMLIntelligenceService(unittest.TestCase):
                 "prediction_id": "p2",
                 "student_id": "STU001",
                 "prediction_type": "m2",
-                "model_version": None,
+                "model_version": "m2_tp_v1",
                 "prediction_value": json.dumps(
                     {
-                        "predicted_next_semester_sgpa": 7.8,
-                        "predicted_next_semester_percentage": 74.0,
+                        "source_semester": 6,
+                        "target_semester": 7,
+                        "theory_prediction_pct": 74.0,
+                        "practical_prediction_pct": 71.0,
                     }
                 ),
                 "input_row_count": 1,
@@ -230,7 +232,8 @@ class TestAdminMLIntelligenceService(unittest.TestCase):
         self.assertEqual(res.academic_predictions.m1.total_subject_predictions, 1)
         self.assertEqual(res.academic_predictions.m1.predicted_avg_subject_mark, 42.5)
         self.assertEqual(len(res.academic_predictions.m1.subjects_needing_attention), 1)
-        self.assertEqual(res.academic_predictions.m2.predicted_avg_next_sgpa, 7.8)
+        self.assertEqual(res.academic_predictions.m2.predicted_avg_theory_pct, 74.0)
+        self.assertEqual(res.academic_predictions.m2.predicted_avg_practical_pct, 71.0)
 
         # 4. Career Readiness (M4)
         self.assertEqual(res.career_readiness.avg_career_readiness_score, 82.0)
@@ -319,11 +322,13 @@ class TestAdminMLIntelligenceFiltersAndScope(unittest.TestCase):
                 "prediction_id": "p2",
                 "student_id": "STU001",
                 "prediction_type": "m2",
-                "model_version": None,
+                "model_version": "m2_tp_v1",
                 "prediction_value": json.dumps(
                     {
-                        "predicted_next_semester_sgpa": 7.8,
-                        "predicted_next_semester_percentage": 74.0,
+                        "source_semester": 6,
+                        "target_semester": 7,
+                        "theory_prediction_pct": 74.0,
+                        "practical_prediction_pct": 71.0,
                     }
                 ),
                 "input_row_count": 1,
@@ -578,17 +583,17 @@ class TestAdminMLIntelligenceMultiRowAggregation(unittest.TestCase):
         self.assertEqual(sorted(codes), ["CS601", "CS602"])
 
     def test_m2_uses_latest_batch_and_max_semester(self):
-        # Older batch (older generated_at) with semesters 1-7.
+        # Older batch (older generated_at) with source semesters 1-7.
         older = [
             {
                 "prediction_id": f"old-sem{s}",
                 "student_id": "STU001",
                 "prediction_type": "m2",
-                "model_version": None,
+                "model_version": "m2_tp_v1",
                 "prediction_value": json.dumps(
-                    {"predictions": [{"semester_no": s,
-                                      "predicted_next_semester_sgpa": 5.5,
-                                      "predicted_next_semester_percentage": 55.0}]}
+                    {"predictions": [{"source_semester": s, "target_semester": s + 1,
+                                      "theory_prediction_pct": 55.0,
+                                      "practical_prediction_pct": 50.0}]}
                 ),
                 "input_row_count": 1,
                 "prediction_count": 1,
@@ -596,16 +601,16 @@ class TestAdminMLIntelligenceMultiRowAggregation(unittest.TestCase):
             }
             for s in range(1, 8)
         ]
-        # Newer batch (sem 8) with a distinct forecast.
+        # Newer batch (source sem 8) with a distinct forecast.
         newer = {
             "prediction_id": "new-sem8",
             "student_id": "STU001",
             "prediction_type": "m2",
-            "model_version": None,
+            "model_version": "m2_tp_v1",
             "prediction_value": json.dumps(
-                {"predictions": [{"semester_no": 8,
-                                  "predicted_next_semester_sgpa": 8.4,
-                                  "predicted_next_semester_percentage": 80.0}]}
+                {"predictions": [{"source_semester": 8, "target_semester": 9,
+                                  "theory_prediction_pct": 80.0,
+                                  "practical_prediction_pct": 76.0}]}
             ),
             "input_row_count": 1,
             "prediction_count": 1,
@@ -614,10 +619,10 @@ class TestAdminMLIntelligenceMultiRowAggregation(unittest.TestCase):
         preds = older + [newer]
         svc = AdminMLService(FakePool(self._conn(preds)))
         res = run(svc.get_admin_ml_intelligence())
-        # Only the latest batch (sem 8) forecast is aggregated.
-        self.assertEqual(res.academic_predictions.m2.predicted_avg_next_sgpa, 8.4)
+        # Only the latest batch (source sem 8) forecast is aggregated.
+        self.assertEqual(res.academic_predictions.m2.predicted_avg_theory_pct, 80.0)
         self.assertEqual(
-            res.academic_predictions.m2.predicted_avg_next_percentage, 80.0
+            res.academic_predictions.m2.predicted_avg_practical_pct, 76.0
         )
 
     def test_m3_uses_latest_batch_and_max_semester(self):

@@ -1,0 +1,43 @@
+{
+  "target": "target_theory_pct",
+  "feature_count": 32,
+  "features": [
+    "target_semester_no",
+    "department_code",
+    "gender",
+    "category",
+    "admission_year",
+    "prev_completed_semesters",
+    "prev_overall_sgpa_mean",
+    "prev_overall_pct_mean",
+    "prev_overall_attendance_mean",
+    "prev_cumulative_backlogs",
+    "latest_sem_sgpa",
+    "latest_sem_pct",
+    "latest_sem_attendance",
+    "target_sem_total_credits",
+    "prev_theory_pct_mean",
+    "prev_theory_pct_std",
+    "prev_theory_pct_min",
+    "prev_theory_pct_max",
+    "latest_sem_theory_pct",
+    "theory_pct_trend",
+    "prev_theory_internal_avg",
+    "prev_theory_midsem_avg",
+    "prev_theory_assignment_avg",
+    "prev_theory_quiz_avg",
+    "prev_theory_submission_delay_avg",
+    "prev_theory_pre_endsem_pct_avg",
+    "prev_theory_count",
+    "target_sem_theory_count",
+    "prev_theory_sessions_sum",
+    "prev_theory_resource_views_sum",
+    "prev_theory_assessment_attempts_sum",
+    "prev_theory_late_submission_rate"
+  ],
+  "categorical_features": [
+    "gender",
+    "category"
+  ],
+  "best_algorithm": "random_forest"
+}

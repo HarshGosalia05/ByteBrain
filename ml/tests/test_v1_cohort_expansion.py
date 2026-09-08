@@ -1,22 +1,23 @@
-"""Focused tests for the M2/M3 multi-department (CSE + BBA) cohort expansion.
+"""Focused tests for the M3 multi-department (CSE + BBA) cohort expansion.
 
-Covers the behaviors introduced/exposed by re-expanding the M2/M3 training
+Covers the behaviors introduced/exposed by re-expanding the M3 training
 population from CSE-only to the full supported cohort (CSE + BBA):
 
 1. CSE+BBA cohort inclusion (80 students, both departments in training rows).
 2. Department one-hot columns present in the 12-column encoded contract
    (including the single-department-subset guarantee -> no silent column drop).
-3. Deterministic feature ordering / shape consistency across M2 and M3.
-4. Target separation (M2/M3 targets not in X) and T+1 temporal relationship.
+3. Deterministic feature ordering / shape consistency for the M3 pipeline.
+4. Target separation (M3 target not in X) and outcome-derived binary labels.
 5. Per-department deployment boundary (CSE at 7, BBA at 5) excluded from CV.
 6. Student grouping + GroupKFold isolation.
 7. M3 positive-class fold coverage (more informative folds than CSE-only;
    absent-positive folds handled as NaN, never fabricated).
 8. Reproducibility and metric calculation.
-9. M2 artifact reload (existing persistence contract).
-10. Regression behavior vs the previous per-student deployment boundary.
 
-Read-only: no DB, no ETL, no writes (except the M2 persistence contract test).
+Note: the M2 V1 regression pathway (v1_m2_regression) has been retired in
+favour of the validated M2-TP package; no M2 tests remain here.
+
+Read-only: no DB, no ETL, no writes.
 """
 from __future__ import annotations
 
@@ -39,12 +40,6 @@ from features.v1_cohort_dataset import (  # noqa: E402
 )
 from features.v1_split_config import V1SplitConfig  # noqa: E402
 from features.v1_split import one_hot_encode_features  # noqa: E402
-from features.v1_m2_regression import (  # noqa: E402
-    TARGETS as M2_TARGETS,
-    build_m2_regression_frames,
-    run_m2_regression,
-    train_and_persist_m2,
-)
 from features.v1_m3_experiment import run_m3_experiment  # noqa: E402
 
 
@@ -139,53 +134,17 @@ class TestDepartmentOneHotGuarantee(unittest.TestCase):
         self.assertEqual(list(x1.columns), list(x2.columns))
         self.assertEqual(list(x1.columns), list(cfg.encoded_feature_columns))
 
-    def test_all_models_share_identical_12_feature_shape(self):
+    def test_m3_encodes_identical_12_feature_shape(self):
         cfg = V1SplitConfig()
         d = _cohort()
         self.assertEqual(len(cfg.encoded_feature_columns), 12)
-        # M2 and M3 both encode to the same 12-column set.
-        m2 = run_m2_regression(d)
-        m3 = run_m3_experiment(d)
-        self.assertEqual(len(m2.encoded_feature_columns), 12)
-        self.assertEqual(len(m3.encoded_feature_columns), 12)
-        self.assertEqual(set(m2.encoded_feature_columns),
-                         set(cfg.encoded_feature_columns))
-        self.assertEqual(set(m3.encoded_feature_columns),
+        res = run_m3_experiment(d)
+        self.assertEqual(len(res.encoded_feature_columns), 12)
+        self.assertEqual(set(res.encoded_feature_columns),
                          set(cfg.encoded_feature_columns))
 
 
 class TestTargetSeparationAndTemporal(unittest.TestCase):
-
-    def test_m2_targets_not_in_feature_contract(self):
-        cfg = V1SplitConfig()
-        for t in M2_TARGETS:
-            self.assertNotIn(t, cfg.feature_columns)
-
-    def test_m2_targets_are_t_plus_one(self):
-        d = _cohort()
-        train, deploy = build_m2_regression_frames(d)
-        # Correct T+1 relationship: target at T == actual feature value at T+1.
-        # Recompute shift(-1) and compare directly for a sample of students.
-        src = pd.concat([d.training_df, d.deployment_df], ignore_index=True)
-        src = src.sort_values(["student_id", "semester_no"])
-        src["expected_next"] = src.groupby("student_id")["semester_percentage"].shift(-1)
-        joined = train.merge(
-            src[["student_id", "semester_no", "expected_next"]],
-            on=["student_id", "semester_no"], how="left",
-        )
-        valid = joined[joined["expected_next"].notna()]
-        self.assertGreater(len(valid), 0)
-        pd.testing.assert_series_equal(
-            valid["next_semester_percentage"].astype(float),
-            valid["expected_next"].astype(float),
-            check_names=False,
-        )
-
-    def test_deployment_rows_have_no_m2_target(self):
-        d = _cohort()
-        _, deploy = build_m2_regression_frames(d)
-        self.assertTrue(deploy["next_semester_percentage"].isna().all())
-        self.assertTrue(deploy["next_semester_sgpa"].isna().all())
 
     def test_m3_target_is_binary_and_outcome_derived(self):
         d = _cohort()
@@ -195,11 +154,6 @@ class TestTargetSeparationAndTemporal(unittest.TestCase):
 
 class TestStudentIsolation(unittest.TestCase):
 
-    def test_m2_student_isolation(self):
-        d = _cohort()
-        res = run_m2_regression(d)
-        self.assertTrue(res.student_isolation_ok)
-
     def test_m3_student_isolation(self):
         d = _cohort()
         res = run_m3_experiment(d)
@@ -207,11 +161,6 @@ class TestStudentIsolation(unittest.TestCase):
 
 
 class TestDeploymentExclusion(unittest.TestCase):
-
-    def test_m2_deployment_excluded(self):
-        d = _cohort()
-        res = run_m2_regression(d)
-        self.assertTrue(res.deployment_excluded_ok)
 
     def test_m3_deployment_excluded(self):
         d = _cohort()
@@ -258,14 +207,6 @@ class TestM3PositiveCoverage(unittest.TestCase):
 
 class TestReproducibility(unittest.TestCase):
 
-    def test_m2_deterministic(self):
-        d = _cohort()
-        r1 = run_m2_regression(d)
-        r2 = run_m2_regression(d)
-        for t1, t2 in zip(r1.targets, r2.targets):
-            self.assertEqual(t1.best_model_id, t2.best_model_id)
-            self.assertAlmostEqual(t1.best_mae, t2.best_mae, places=6)
-
     def test_m3_deterministic(self):
         d = _cohort()
         r1 = run_m3_experiment(d)
@@ -273,48 +214,6 @@ class TestReproducibility(unittest.TestCase):
         self.assertEqual(r1.n_positive_rows, r2.n_positive_rows)
         for m1, m2 in zip(r1.models, r2.models):
             self.assertEqual(m1.n_folds_with_positive, m2.n_folds_with_positive)
-
-
-class TestM2SelectionAndMetrics(unittest.TestCase):
-
-    def test_selection_by_lowest_mae(self):
-        d = _cohort()
-        res = run_m2_regression(d)
-        for t in res.targets:
-            best = min(t.models, key=lambda m: m.aggregate.mae_mean)
-            self.assertEqual(t.best_model_id, best.model_id)
-
-    def test_selected_models_are_hist_gbm(self):
-        # Consistent with prior CSE-only selection; expansion must not flip it
-        # without a credible rule-backed reason.
-        d = _cohort()
-        res = run_m2_regression(d)
-        self.assertEqual(res.targets[0].best_model_id, "hist_gbm")
-        self.assertEqual(res.targets[1].best_model_id, "hist_gbm")
-
-    def test_metric_aggregation_counts(self):
-        d = _cohort()
-        res = run_m2_regression(d)
-        for t in res.targets:
-            for m in t.models:
-                self.assertEqual(m.aggregate.n_folds, 5)
-
-
-class TestArtifactReload(unittest.TestCase):
-    """The existing M2 contract persists one multi-target artifact."""
-
-    def test_reload_selected_m2_artifact(self):
-        import tempfile
-        import joblib
-        d = _cohort()
-        with tempfile.TemporaryDirectory() as tmp:
-            result, model_file, reload_pass, pred_pass = train_and_persist_m2(
-                d, artifact_dir=Path(tmp)
-            )
-            self.assertTrue(reload_pass)
-            self.assertTrue(pred_pass)
-            self.assertEqual(set(joblib.load(model_file).keys()), set(M2_TARGETS))
-            self.assertEqual(result.targets[0].best_model_id, "hist_gbm")
 
 
 if __name__ == "__main__":

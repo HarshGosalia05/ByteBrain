@@ -172,51 +172,6 @@ class PredictionService:
         self._cache[cache_key] = result
         return result
 
-    # ---- M2: Next-Semester Performance Prediction ------------------------
-
-    async def predict_m2_for_student(
-        self, student_id: str, *, raw: tuple | None = None
-    ) -> inference.PredictionResult:
-        """Predict next-semester SGPA and percentage for a student.
-
-        Uses real data from the database via read-only repositories.
-
-        SEMANTICS: M2 predicts semester T+1 from the most recent COMPLETED
-        semester T in student_semester_summary (the models are trained on
-        semester-relative, ordered features). Consumers should present the
-        result as the prediction for the NEXT semester after the student's
-        latest completed semester, never as a value for a past semester.
-        """
-        # Check cache
-        cache_key = self._cache_key("m2", student_id)
-        if cache_key in self._cache:
-            logger.info("Returning cached M2 prediction for student %s", student_id)
-            return self._cache[cache_key]
-
-        # Fetch real data from DB
-        if raw is not None:
-            if not isinstance(raw, (tuple, list)) or len(raw) != 2:
-                raise ValueError("m2 raw data must be (summary, students)")
-            summary, students = raw
-        else:
-            summary = await _fetch_student_semester_summary(self.pool, student_id)
-            students = await _fetch_student_profile(self.pool, student_id)
-
-        # Validate we have data
-        if summary.empty and students.empty:
-            raise ValueError(f"No data found for student {student_id}")
-
-        # Run inference (ML-03)
-        try:
-            result = self._inference.predict_m2(summary, students)
-        except Exception as e:
-            logger.error("M2 inference failed for student %s: %s", student_id, e)
-            raise
-
-        # Cache result
-        self._cache[cache_key] = result
-        return result
-
     # ---- M3: Next-Semester At-Risk Prediction ----------------------------
 
     async def predict_m3_for_student(

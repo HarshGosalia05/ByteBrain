@@ -1,6 +1,5 @@
 import { getSessionUser, getSessionToken, type SessionUser } from "./student-session.ts"
 import type { M1V2PredictionData } from "./m1v2-prediction"
-import type { M2V2PredictionData } from "./m2v2-prediction"
 import type { M3V2PredictionData } from "./m3v2-prediction"
 
 const FASTAPI_URL = (process.env.FASTAPI_URL ?? "http://localhost:8000").replace(/\/+$/, "")
@@ -661,15 +660,12 @@ export function getStudentM1V3(): Promise<BffResult<import("./m1v3-prediction").
   )
 }
 
-// M2 V2 — Next-Semester Performance Prediction (validated production model).
-// README: reuses /predict/m2v2/{student_id}; readiness_status of NO_DATA
-// (including the deployment boundary — the current cohort is in the final /
-// internship semester with no upcoming NORMAL academic semester) is surfaced by
-// the backend as a 404 on this per-student route.
-
-export function getStudentM2V2(): Promise<BffResult<M2V2PredictionData>> {
-  return callApiV1<M2V2PredictionData>(
-    (studentId) => `/predict/m2v2/${encodeURIComponent(studentId)}`,
+// M2-TP — Next-Semester Theory & Practical Performance Prediction (Clean package).
+// Predicts separate performance percentages for Theory and Practical courses in the
+// student's next regular academic semester.
+export function getStudentM2TP(): Promise<BffResult<import("./m2tp-prediction").M2TPPredictionData>> {
+  return callApiV1<import("./m2tp-prediction").M2TPPredictionData>(
+    (studentId) => `/predict/m2tp/${encodeURIComponent(studentId)}`,
     BFF_TTL_MS,
   )
 }

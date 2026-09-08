@@ -100,17 +100,6 @@ from .v1_label_builder import (  # noqa: E402
     audit_labels,
     render_label_report,
 )
-from .v1_m2_regression import (  # noqa: E402
-    FoldMetrics as M2FoldMetrics,
-    AggregateMetrics as M2AggregateMetrics,
-    ModelResult as M2ModelResult,
-    TargetResult,
-    M2RegressionResult,
-    build_m2_regression_frames,
-    run_m2_regression,
-    m2_regression_report,
-    train_and_persist_m2,
-)
 from .v1_ml_readiness_audit import (  # noqa: E402
     IntegratedAuditResult,
     ModelContractAudit,
@@ -182,7 +171,6 @@ from .v1_inference_contract import (  # noqa: E402
     artifact_hash,
     predict,
     predict_m1,
-    predict_m2,
     predict_m3,
 )
 
@@ -224,15 +212,6 @@ __all__ = [
     "build_academic_labels",
     "audit_labels",
     "render_label_report",
-    "M2FoldMetrics",
-    "M2AggregateMetrics",
-    "M2ModelResult",
-    "TargetResult",
-    "M2RegressionResult",
-    "build_m2_regression_frames",
-    "run_m2_regression",
-    "m2_regression_report",
-    "train_and_persist_m2",
     "IntegratedAuditResult",
     "ModelContractAudit",
     "ArtifactAudit",
@@ -292,7 +271,6 @@ __all__ = [
     "artifact_hash",
     "predict",
     "predict_m1",
-    "predict_m2",
     "predict_m3",
     # Re-exported legacy module API
     "FeatureContract",
