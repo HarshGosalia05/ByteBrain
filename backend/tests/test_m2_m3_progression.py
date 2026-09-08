@@ -154,6 +154,24 @@ class MockProgressionConn:
         # M2-TP subject catalog for the target semester (args = dept_code, target_semester).
         if "FROM subjects" in query:
             target_sem = args[1]
+            dept = self.dept
+            # CSE semester 8: pure internship (1 Internship subject, 0 Theory/Lab)
+            if dept == "CSE" and target_sem == 8:
+                return [
+                    {"subject_id": "SUB_CSE801", "subject_type": "Internship", "credits": 12.0},
+                ]
+            # BBA semester 6: mixed academic (5 Theory, 1 Project, 1 Internship, 0 Lab)
+            if dept == "BBA" and target_sem == 6:
+                return [
+                    {"subject_id": "SUB_BBA601", "subject_type": "Theory", "credits": 3.0},
+                    {"subject_id": "SUB_BBA602", "subject_type": "Theory", "credits": 3.0},
+                    {"subject_id": "SUB_BBA603", "subject_type": "Theory", "credits": 3.0},
+                    {"subject_id": "SUB_BBA604", "subject_type": "Theory", "credits": 3.0},
+                    {"subject_id": "SUB_BBA605", "subject_type": "Theory", "credits": 3.0},
+                    {"subject_id": "SUB_BBA606", "subject_type": "Project", "credits": 4.0},
+                    {"subject_id": "SUB_BBA607", "subject_type": "Internship", "credits": 12.0},
+                ]
+            # Default: 3 Theory + 3 Lab for other semesters
             return [
                 {"subject_id": f"SUB_T{target_sem}A", "subject_type": "Theory", "credits": 4.0},
                 {"subject_id": f"SUB_T{target_sem}B", "subject_type": "Theory", "credits": 4.0},
@@ -218,11 +236,21 @@ class TestSemesterProgressionAndBoundaries(unittest.TestCase):
         self.assertEqual(res_m3["prediction_takes_effect_semester"], 7)
 
     def test_case_3_cse_sem_8_final_semester_no_upcoming(self):
-        """TEST 3: CSE Sem 8 student -> correctly shows no upcoming normal semester (NO_DATA)."""
+        """TEST 3: CSE Sem 8 student -> correctly shows NO_DATA.
+
+        CSE semester 8 is a pure internship (1 Internship subject, 0 Theory/Lab).
+        The boundary check now allows target_semester == total_semesters, but the
+        subject-count check (target_t_count <= 0 AND target_l_count <= 0) produces
+        NO_DATA with the appropriate reason.
+        """
         conn = MockProgressionConn(dept="CSE", total_sem=8, current_sem=8, num_summary_sems=8)
         res_m2 = self._m2(conn)
         self.assertEqual(res_m2["readiness_status"], "NO_DATA")
-        self.assertIn("no upcoming regular academic semester", res_m2["reason"].lower())
+        reason = (res_m2.get("reason") or "").lower()
+        self.assertTrue(
+            "no upcoming regular" in reason or "no upcoming theory or practical" in reason,
+            f"Expected NO_DATA reason about missing semester or courses, got: {reason}",
+        )
 
         res_m3 = run(self.m3_predictor.predict_for_student("STU_TEST", conn))
         self.assertEqual(res_m3["readiness_status"], "NO_DATA")
@@ -239,12 +267,18 @@ class TestSemesterProgressionAndBoundaries(unittest.TestCase):
         self.assertEqual(res_m3["readiness_status"], "READY")
         self.assertEqual(res_m3["prediction_takes_effect_semester"], 6)
 
-    def test_case_5_bba_sem_6_final_semester_no_upcoming(self):
-        """TEST 5: BBA Sem 6 student (total 6 semesters) -> correctly shows no upcoming normal semester."""
+    def test_case_5_bba_sem_6_theory_prediction_succeeds(self):
+        """TEST 5: BBA Sem 6 student (total 6 semesters) -> M2-TP predicts theory for Sem 6.
+
+        BBA semester 6 has 5 Theory subjects (Leadership, Investment, Retail,
+        Services Marketing, Banking) plus Project and Internship.  The theory
+        model can predict from prior semesters; practical is NO_DATA (no Lab).
+        """
         conn = MockProgressionConn(dept="BBA", total_sem=6, current_sem=6, num_summary_sems=6)
         res_m2 = self._m2(conn)
-        self.assertEqual(res_m2["readiness_status"], "NO_DATA")
-        self.assertIn("no upcoming regular academic semester", res_m2["reason"].lower())
+        self.assertEqual(res_m2["readiness_status"], "READY")
+        self.assertEqual(res_m2["target_semester"], 6)
+        self.assertIsNotNone(res_m2.get("theory_prediction_pct") or res_m2.get("theory", {}).get("predicted_percentage"))
 
         res_m3 = run(self.m3_predictor.predict_for_student("STU_TEST", conn))
         self.assertEqual(res_m3["readiness_status"], "NO_DATA")

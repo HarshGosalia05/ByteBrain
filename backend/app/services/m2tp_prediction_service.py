@@ -218,8 +218,17 @@ class M2TPPredictionService:
             obs_semester = max(int(r["semester_no"]) for r in finalized_rows)
             target_semester = obs_semester + 1
 
-            # Program boundary check (e.g. final semester 8 in CSE is internship; Sem 6 in BBA)
-            if obs_semester >= total_semesters or target_semester >= total_semesters:
+            # Program boundary check: students at/past the final semester have
+            # no upcoming semester to predict.  ``obs_semester >= total_semesters``
+            # blocks students who have completed all semesters.
+            # ``target_semester > total_semesters`` blocks forecasts for semesters
+            # that don't exist (e.g. CSE sem 9).  Using ``>`` (not ``>=``) for
+            # the target allows the final semester itself to be predicted when it
+            # contains regular academic subjects (e.g. BBA semester 6 has 5 Theory
+            # subjects).  The downstream subject-count check (target_t_count <= 0)
+            # naturally handles final semesters that are pure internships (e.g. CSE
+            # semester 8 has 0 Theory / 0 Lab subjects).
+            if obs_semester >= total_semesters or target_semester > total_semesters:
                 return self._no_data_response(
                     student_id,
                     now_iso,
