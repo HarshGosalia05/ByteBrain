@@ -230,14 +230,14 @@ export function AcademicPredictionCard({ data }: { data: AcademicPredictionIntel
                       : "—"}
                   </span>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">Practical: </span>
-                  <span className="font-semibold text-foreground">
-                    {dept.predicted_avg_practical_pct !== null
-                      ? `${dept.predicted_avg_practical_pct.toFixed(1)}%`
-                      : "—"}
-                  </span>
-                </div>
+                {dept.predicted_avg_practical_pct !== null && dept.predicted_avg_practical_pct !== undefined && (
+                  <div>
+                    <span className="text-muted-foreground">Practical: </span>
+                    <span className="font-semibold text-foreground">
+                      {dept.predicted_avg_practical_pct.toFixed(1)}%
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           ))}

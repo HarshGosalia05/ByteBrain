@@ -108,15 +108,14 @@ export function M3V2Card(props: Props) {
                 Key signals used by the model
               </p>
               <ul className="flex flex-col gap-1.5">
-                {signals.slice(0, 5).map((s) => {
-                  const available = s.raw_value !== null && s.raw_value !== undefined && !Number.isNaN(s.raw_value)
+                {signals.filter((s) => s.raw_value !== null && s.raw_value !== undefined && !Number.isNaN(s.raw_value)).slice(0, 5).map((s) => {
                   return (
                     <li
                       key={s.feature}
                       className="flex items-center justify-between gap-3 rounded-md border border-foreground/10 bg-background/40 px-3 py-2 text-xs"
                     >
                       <span className="font-medium">{m3V2FeatureLabel(s.feature)}</span>
-                      <span className={available ? "tabular-nums text-muted-foreground" : "text-muted-foreground italic"}>
+                      <span className="tabular-nums text-muted-foreground">
                         {m3V2SignalValue(s)}
                       </span>
                     </li>
@@ -124,10 +123,8 @@ export function M3V2Card(props: Props) {
                 })}
               </ul>
               <p className="mt-2 text-[0.6875rem] text-muted-foreground">
-                These are the top factors the model weighed for this estimate. A signal shows&nbsp;
-                &ldquo;Not available&rdquo; when the underlying record is not stored for your
-                cohort — the estimate already accounts for it, so your risk level is not changed
-                by that missing value. Factors are feature values the model used, not a guarantee.
+                These are the top factors the model weighed for this estimate.
+                Factors are feature values the model used, not a guarantee.
               </p>
             </div>
           </div>
