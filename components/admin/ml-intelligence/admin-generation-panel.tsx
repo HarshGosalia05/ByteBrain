@@ -265,7 +265,7 @@ export function AdminGenerationPanel() {
           <div className="grid gap-3 sm:grid-cols-2">
             {job.per_model.map((pm) => {
               const tasks = pm.total
-              const done = pm.completed + pm.failed + pm.skipped
+              const done = pm.completed + pm.failed
               const pct = tasks > 0 ? Math.round((done / tasks) * 100) : 0
               return (
                 <div

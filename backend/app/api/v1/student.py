@@ -292,6 +292,21 @@ async def update_my_goal(
     )
 
 
+@router.delete("/me/goals/{goal_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_my_goal(
+    goal_id: str,
+    user: dict = Depends(require_student_role),
+    service: StudentService = Depends(get_student_service),
+):
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No student_id found in user token",
+        )
+    await service.delete_goal(student_id, goal_id)
+
+
 @router.get("/me/notifications", response_model=NotificationsResponse)
 async def get_my_notifications(
     message_type: Optional[str] = Query(

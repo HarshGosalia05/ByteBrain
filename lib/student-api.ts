@@ -1243,6 +1243,56 @@ export function updateGoal(
   return mutateStudent<StudentGoal>(`goals/${goalId}`, "PATCH", input, ["goals"])
 }
 
+export async function deleteGoal(
+  goalId: string,
+): Promise<BffResult<null>> {
+  const user = await getSessionUser()
+  if (!user) {
+    return {
+      ok: false,
+      error: {
+        status: 401,
+        code: "unauthorized",
+        message: "You must be signed in to make changes.",
+      },
+      fetchedAt: new Date().toISOString(),
+    }
+  }
+  try {
+    const token = (await getSessionToken()) ?? ""
+    const res = await fetch(`${FASTAPI_URL}/api/v1/students/me/goals/${goalId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => null) as { detail?: string } | null
+      return {
+        ok: false,
+        error: {
+          status: res.status,
+          code: "server_error",
+          message: data?.detail ?? "Failed to delete goal.",
+        },
+        fetchedAt: new Date().toISOString(),
+      }
+    }
+    return { ok: true, data: null, fetchedAt: new Date().toISOString() }
+  } catch {
+    return {
+      ok: false,
+      error: {
+        status: 500,
+        code: "unavailable",
+        message: "Could not reach the server. Try again.",
+      },
+      fetchedAt: new Date().toISOString(),
+    }
+  }
+}
+
 export function getNotifications(
   options?: {
     messageType?: NotificationTypeFilter
