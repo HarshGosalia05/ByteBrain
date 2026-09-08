@@ -10,6 +10,11 @@ const VALID_TYPES: FacultyNotificationTypeFilter[] = [
   "STUDENT_ELIGIBILITY_WARNING",
   "STUDENT_PERFORMANCE_CHANGE",
   "SYSTEM",
+  "ANNOUNCEMENT",
+  "ACADEMIC_NOTICE",
+  "HOLIDAY",
+  "EVENT",
+  "SYSTEM_NOTICE",
 ]
 
 export async function GET(request: Request) {

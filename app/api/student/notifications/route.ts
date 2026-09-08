@@ -15,6 +15,11 @@ const VALID_TYPES: NotificationTypeFilter[] = [
   "RISK_ALERT",
   "TIMETABLE_CHANGE",
   "SYSTEM",
+  "ANNOUNCEMENT",
+  "ACADEMIC_NOTICE",
+  "HOLIDAY",
+  "EVENT",
+  "SYSTEM_NOTICE",
 ]
 
 export async function GET(request: Request) {

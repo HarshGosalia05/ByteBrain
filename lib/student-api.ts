@@ -1104,6 +1104,11 @@ export type NotificationTypeFilter =
   | "RISK_ALERT"
   | "TIMETABLE_CHANGE"
   | "SYSTEM"
+  | "ANNOUNCEMENT"
+  | "ACADEMIC_NOTICE"
+  | "HOLIDAY"
+  | "EVENT"
+  | "SYSTEM_NOTICE"
 
 export type NotificationItem = {
   message_id: string

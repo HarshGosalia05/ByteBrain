@@ -14,6 +14,7 @@ where they are semantically meaningful:
   * ``semester``         -> semester-scoped data only.
 """
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import asyncpg
@@ -1728,6 +1729,7 @@ class AdminRepository:
 
         Targets 'students', 'faculty', or 'both'. Optional department_code filter.
         Reuses existing student_messages notification store without modifying schema.
+        Uses fast set-based batch insertion.
         """
         message_type = (message_type or "ANNOUNCEMENT").upper()
         if message_type not in {"ANNOUNCEMENT", "ACADEMIC_NOTICE", "HOLIDAY", "EVENT", "SYSTEM_NOTICE"}:
@@ -1739,58 +1741,71 @@ class AdminRepository:
 
         priority = priority or "Normal"
 
-        inserted_count = 0
         import hashlib
-        content_hash = hashlib.sha256(f"{title}:{target_audience}".encode("utf-8")).hexdigest()[:12]
-        event_id = f"announcement:{int(datetime.now().timestamp())}:{content_hash}"
+        now = datetime.now(timezone.utc)
+        content_hash = hashlib.sha256(f"{title}:{target_audience}:{now.timestamp()}".encode("utf-8")).hexdigest()[:12]
+        dept_tag = f"d{department_code}" if department_code is not None else "all"
+        event_id = f"announcement:{int(now.timestamp())}:{dept_tag}:{content_hash}"
 
+        inserted_count = 0
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 if target_audience in {"students", "both"}:
-                    student_rows = await conn.fetch(
-                        "SELECT student_id FROM students WHERE ($1::int IS NULL OR department_code = $1)",
+                    res_s = await conn.execute(
+                        """
+                        INSERT INTO student_messages (
+                            student_id, faculty_recipient_id, recipient_type, faculty_id,
+                            subject, message_type, title, message_body, priority, status,
+                            event_id, created_at
+                        )
+                        SELECT
+                            student_id, NULL, 'student', NULL,
+                            NULL, $1, $2, $3, $4, 'Unread',
+                            $5, NOW()
+                        FROM students
+                        WHERE ($6::int IS NULL OR department_code = $6)
+                        ON CONFLICT (student_id, event_id) WHERE event_id IS NOT NULL DO NOTHING
+                        """,
+                        message_type,
+                        title,
+                        message_body,
+                        priority,
+                        event_id,
                         department_code,
                     )
-                    for s in student_rows:
-                        await conn.execute(
-                            """
-                            INSERT INTO student_messages (
-                                student_id, faculty_recipient_id, recipient_type, faculty_id,
-                                subject, message_type, title, message_body, priority, status,
-                                event_id, created_at
-                            ) VALUES ($1, NULL, 'student', NULL, NULL, $2, $3, $4, $5, 'Unread', $6, NOW())
-                            """,
-                            s["student_id"],
-                            message_type,
-                            title,
-                            message_body,
-                            priority,
-                            event_id,
-                        )
-                        inserted_count += 1
+                    # e.g. "INSERT 0 1280"
+                    try:
+                        inserted_count += int(res_s.split()[-1])
+                    except (ValueError, IndexError):
+                        pass
 
                 if target_audience in {"faculty", "both"}:
-                    faculty_rows = await conn.fetch(
-                        "SELECT faculty_id FROM faculty WHERE ($1::int IS NULL OR department_code = $1)",
+                    res_f = await conn.execute(
+                        """
+                        INSERT INTO student_messages (
+                            student_id, faculty_recipient_id, recipient_type, faculty_id,
+                            subject, message_type, title, message_body, priority, status,
+                            event_id, created_at
+                        )
+                        SELECT
+                            NULL, faculty_id, 'faculty', NULL,
+                            NULL, $1, $2, $3, $4, 'Unread',
+                            $5, NOW()
+                        FROM faculty
+                        WHERE ($6::int IS NULL OR department_code = $6)
+                        ON CONFLICT (faculty_recipient_id, event_id) WHERE event_id IS NOT NULL AND recipient_type = 'faculty' DO NOTHING
+                        """,
+                        message_type,
+                        title,
+                        message_body,
+                        priority,
+                        event_id,
                         department_code,
                     )
-                    for f in faculty_rows:
-                        await conn.execute(
-                            """
-                            INSERT INTO student_messages (
-                                student_id, faculty_recipient_id, recipient_type, faculty_id,
-                                subject, message_type, title, message_body, priority, status,
-                                event_id, created_at
-                            ) VALUES (NULL, $1, 'faculty', NULL, NULL, $2, $3, $4, $5, 'Unread', $6, NOW())
-                            """,
-                            f["faculty_id"],
-                            message_type,
-                            title,
-                            message_body,
-                            priority,
-                            event_id,
-                        )
-                        inserted_count += 1
+                    try:
+                        inserted_count += int(res_f.split()[-1])
+                    except (ValueError, IndexError):
+                        pass
 
         return {
             "announcement_id": event_id,
@@ -1798,7 +1813,7 @@ class AdminRepository:
             "type": message_type,
             "target_audience": target_audience,
             "recipients_notified": inserted_count,
-            "created_at": datetime.now(),
+            "created_at": now,
         }
 
     async def get_admin_announcements(self) -> List[Dict[str, Any]]:
@@ -1810,16 +1825,17 @@ class AdminRepository:
                 message_body AS message,
                 message_type AS type,
                 CASE
-                    WHEN recipient_type = 'faculty' THEN 'faculty'
-                    WHEN student_id IS NOT NULL THEN 'students'
-                    ELSE 'both'
+                    WHEN COUNT(DISTINCT recipient_type) > 1 THEN 'both'
+                    WHEN MAX(recipient_type) = 'faculty' THEN 'faculty'
+                    ELSE 'students'
                 END AS target_audience,
+                NULL::int AS department_code,
                 priority,
                 COUNT(*) AS recipient_count,
                 MAX(created_at) AS created_at
             FROM student_messages
             WHERE message_type IN ('ANNOUNCEMENT', 'ACADEMIC_NOTICE', 'HOLIDAY', 'EVENT', 'SYSTEM_NOTICE')
-            GROUP BY title, message_body, message_type, recipient_type, priority, event_id, student_id
+            GROUP BY event_id, title, message_body, message_type, priority
             ORDER BY MAX(created_at) DESC
             LIMIT 50
             """

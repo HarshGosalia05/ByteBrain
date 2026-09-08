@@ -1,4 +1,4 @@
-﻿import { getSessionUser, getSessionToken } from "./student-session.ts"
+import { getSessionUser, getSessionToken } from "./student-session.ts"
 import type { M1V2PredictionData } from "./m1v2-prediction"
 import type { M2TPPredictionData } from "./m2tp-prediction"
 import type { M3V2PredictionData } from "./m3v2-prediction"
@@ -3561,6 +3561,11 @@ export type FacultyNotificationTypeFilter =
   | "STUDENT_ELIGIBILITY_WARNING"
   | "STUDENT_PERFORMANCE_CHANGE"
   | "SYSTEM"
+  | "ANNOUNCEMENT"
+  | "ACADEMIC_NOTICE"
+  | "HOLIDAY"
+  | "EVENT"
+  | "SYSTEM_NOTICE"
 
 export type FacultyNotificationItem = {
   message_id: string

@@ -116,39 +116,35 @@ type CacheEntry = { value: unknown; expiresAt: number }
 
 const bffCache = new Map<string, CacheEntry>()
 
-function toBffError(status: number): BffError {
+function toBffError(status: number, customDetail?: string): BffError {
+  let code: BffErrorCode
+  let message: string
   switch (status) {
     case 401:
-      return {
-        status,
-        code: "unauthorized",
-        message: "Your session is no longer valid. Please sign in again.",
-      }
+      code = "unauthorized"
+      message = "Your session is no longer valid. Please sign in again."
+      break
     case 403:
-      return {
-        status,
-        code: "unauthorized",
-        message: "This account is not allowed to view admin analytics.",
-      }
+      code = "unauthorized"
+      message = "This account is not allowed to view admin analytics."
+      break
     case 422:
-      return {
-        status,
-        code: "invalid",
-        message: "The selected filter value is not valid.",
-      }
+      code = "invalid"
+      message = "The selected filter value is not valid."
+      break
     case 503:
-      return {
-        status,
-        code: "unavailable",
-        message: "The academic service is temporarily unavailable.",
-      }
+      code = "unavailable"
+      message = "The academic service is temporarily unavailable."
+      break
     default:
-      return {
-        status,
-        code: "server_error",
-        message: "Something went wrong while loading institution analytics.",
-      }
+      code = "server_error"
+      message = "Something went wrong while loading institution analytics."
+      break
   }
+  if (customDetail && typeof customDetail === "string" && customDetail.trim()) {
+    message = customDetail.trim()
+  }
+  return { status, code, message }
 }
 
 async function callFastapi<T>(
@@ -217,7 +213,16 @@ async function callFastapi<T>(
       signal: AbortSignal.timeout(options?.timeoutMs ?? 10_000),
     })
     if (!res.ok) {
-      return { ok: false, error: toBffError(res.status) }
+      let customDetail: string | undefined
+      try {
+        const errBody = await res.json()
+        if (typeof errBody?.detail === "string" && errBody.detail.trim()) {
+          customDetail = errBody.detail
+        } else if (typeof errBody?.message === "string" && errBody.message.trim()) {
+          customDetail = errBody.message
+        }
+      } catch {}
+      return { ok: false, error: toBffError(res.status, customDetail) }
     }
     const data = (await res.json()) as T
     const result: BffResult<T> = {
@@ -898,6 +903,7 @@ export type ExecutiveSummaryData = {
 export function createAnnouncement(
   input: CreateAnnouncementInput,
 ): Promise<BffResult<CreateAnnouncementResult>> {
+  bffCache.clear()
   return callFastapi<CreateAnnouncementResult>("announcements", 0, {
     method: "POST",
     body: input,

@@ -3,10 +3,12 @@
 import * as React from "react"
 import {
   Bell,
+  BookOpen,
   CalendarCheck,
   CheckCheck,
   ChevronLeft,
   ChevronRight,
+  Megaphone,
   ShieldAlert,
   Trash2,
   TrendingUp,
@@ -25,6 +27,7 @@ import { EmptyState } from "@/components/shared/state/empty-state"
 
 const FILTERS: { value: FacultyNotificationTypeFilter | "ALL"; label: string }[] = [
   { value: "ALL", label: "All" },
+  { value: "ANNOUNCEMENT", label: "Announcements" },
   { value: "STUDENT_ATTENDANCE_WARNING", label: "Attendance" },
   { value: "STUDENT_ELIGIBILITY_WARNING", label: "Eligibility" },
   { value: "STUDENT_PERFORMANCE_CHANGE", label: "Performance" },
@@ -36,6 +39,11 @@ const typeMeta: Record<string, { label: string; icon: typeof Bell }> = {
   STUDENT_ELIGIBILITY_WARNING: { label: "Eligibility", icon: ShieldAlert },
   STUDENT_PERFORMANCE_CHANGE: { label: "Performance", icon: TrendingUp },
   SYSTEM: { label: "System", icon: Bell },
+  ANNOUNCEMENT: { label: "Announcement", icon: Megaphone },
+  ACADEMIC_NOTICE: { label: "Academic Notice", icon: BookOpen },
+  HOLIDAY: { label: "Holiday Notice", icon: CalendarCheck },
+  EVENT: { label: "Event", icon: CalendarCheck },
+  SYSTEM_NOTICE: { label: "System Notice", icon: Bell },
 }
 
 const MONTH_LABELS = [
@@ -254,6 +262,9 @@ export function NotificationsView({
                       )}
                       <p className="text-sm font-medium">{item.title}</p>
                       {item.subject && <Badge variant="outline">{item.subject}</Badge>}
+                      {item.priority && item.priority !== "Normal" && (
+                        <Badge variant="destructive">{item.priority}</Badge>
+                      )}
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{item.message_body}</p>
                     <div className="mt-2 flex items-center gap-3">

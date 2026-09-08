@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eraser,
+  Megaphone,
   PenLine,
   ShieldAlert,
   Trash2,
@@ -27,6 +28,7 @@ import { EmptyState } from "@/components/shared/state/empty-state"
 
 const FILTERS: { value: NotificationTypeFilter | "ALL"; label: string }[] = [
   { value: "ALL", label: "All" },
+  { value: "ANNOUNCEMENT", label: "Announcements" },
   { value: "ATTENDANCE_WARNING", label: "Attendance" },
   { value: "ELIGIBILITY_WARNING", label: "Eligibility" },
   { value: "MARKS_PUBLISHED", label: "Marks published" },
@@ -42,9 +44,16 @@ const typeMeta: Record<string, { label: string; icon: typeof Bell }> = {
   MARKS_CLEARED: { label: "Marks", icon: Eraser },
   RISK_ALERT: { label: "Risk", icon: ShieldAlert },
   TIMETABLE_CHANGE: { label: "Timetable", icon: CalendarCheck },
+  ANNOUNCEMENT: { label: "Announcement", icon: Megaphone },
+  ACADEMIC_NOTICE: { label: "Academic Notice", icon: BookOpen },
+  HOLIDAY: { label: "Holiday Notice", icon: CalendarCheck },
+  EVENT: { label: "Event", icon: CalendarCheck },
+  SYSTEM_NOTICE: { label: "System Notice", icon: Bell },
+  SYSTEM: { label: "System", icon: Bell },
 }
 
 const priorityBadge = {
+  Urgent: "destructive",
   High: "destructive",
   Normal: "muted",
 } as const
