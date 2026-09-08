@@ -36,6 +36,7 @@ from app.schemas.student_career_guidance import (
     AiGuidance,
     AiGuidanceError,
     CareerDirection,
+    CareerPathRecommendation,
     PrioritySkillGap,
     StudentCareerGuidanceResponse,
 )
@@ -46,7 +47,11 @@ from app.services.genai_provider import (
 )
 from app.services.genai_service import GenAIService
 from app.services.student_career_coach import SOURCE_LABEL, StudentCareerCoachTool
-from app.services.student_career_rules import DOMAIN_SUBJECT_KEYWORDS
+from app.services.student_career_rules import (
+    DOMAIN_CAREER_PATHS,
+    DOMAIN_SUBJECT_KEYWORDS,
+    subject_is_relevant,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +73,76 @@ GUIDANCE_USER_MESSAGE = (
 )
 
 _HIGH_PRIORITY_SLOTS = 3
+
+
+def build_career_path(
+    direction: CareerDirection,
+    skill_gaps: list[PrioritySkillGap],
+    skill_strengths: list,
+    career_preferences: list,
+) -> CareerPathRecommendation | None:
+    """Build a domain-specific career path recommendation from verified data.
+
+    Every field is grounded in the student's primary domain and actual academic
+    evidence.  No recommendations are invented for domains without a mapping.
+    """
+    if not direction.available or not direction.domain:
+        return None
+
+    path_data = DOMAIN_CAREER_PATHS.get(direction.domain)
+    if not path_data:
+        return None
+
+    # Extract declared preference values for personalization
+    preferences = {p.field: p.value for p in career_preferences if p.value}
+    declared_role = preferences.get("dream_job_role")
+    declared_industry = preferences.get("preferred_industry")
+
+    # Relevant subjects: subjects that match the domain keywords
+    relevant_subjects = []
+    seen_subjects: set[str] = set()
+    for strength in skill_strengths:
+        subj = strength.source_subject
+        if subj and subj not in seen_subjects and subject_is_relevant(direction.domain, subj):
+            relevant_subjects.append(subj)
+            seen_subjects.add(subj)
+
+    # Skill gaps from the prioritized list
+    gaps = [gap.skill_area for gap in skill_gaps if gap.priority == "High"]
+
+    # Personalize next steps based on actual data
+    personalized_next_steps: list[str] = []
+    if gaps:
+        personalized_next_steps.append(
+            f"Strengthen {', '.join(gaps[:3])} to build a stronger foundation "
+            f"for {direction.domain} roles."
+        )
+    if declared_role:
+        personalized_next_steps.append(
+            f"Explore {declared_role} job descriptions to align your "
+            f"preparation with industry expectations."
+        )
+    if relevant_subjects:
+        personalized_next_steps.append(
+            f"Build projects that apply concepts from {relevant_subjects[0]} "
+            f"to demonstrate practical {direction.domain} skills."
+        )
+    if not personalized_next_steps:
+        personalized_next_steps.append(
+            f"Begin with foundational {direction.domain} coursework and "
+            f"progress to hands-on projects."
+        )
+
+    return CareerPathRecommendation(
+        domain=direction.domain,
+        roles=path_data["roles"],
+        skills=path_data["skills"],
+        relevant_subjects=relevant_subjects,
+        skill_gaps=gaps,
+        certifications=path_data["certifications"],
+        project_suggestions=path_data["project_suggestions"],
+        personalized_next_steps=personalized_next_steps,
+    )
 
 
 def select_career_direction(
@@ -268,6 +343,13 @@ class StudentCareerGuidanceService:
             context = self._coach_tool().to_verified_context(coach_result)
             ai_block = await self._generate_ai_guidance(student_id, context)
 
+        career_path = build_career_path(
+            direction=direction,
+            skill_gaps=gaps,
+            skill_strengths=coach_result.verified_skill_evidence,
+            career_preferences=coach_result.career_preferences,
+        )
+
         return StudentCareerGuidanceResponse(
             student_id=student_id,
             data_available=coach_result.data_available,
@@ -280,6 +362,7 @@ class StudentCareerGuidanceService:
             roadmap=coach_result.roadmap,
             limitations=coach_result.limitations,
             ai_guidance=ai_block,
+            career_path=career_path,
             source=SOURCE_LABEL,
             generated_at=datetime.now(timezone.utc),
         )

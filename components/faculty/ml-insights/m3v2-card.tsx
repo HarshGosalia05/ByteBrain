@@ -89,30 +89,45 @@ export function FacultyM3V2Card({ data }: { data: M3V2PredictionData }) {
           </div>
 
           {signals.length > 0 && (
-            <div>
-              <p className="mb-2 text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
-                Signals contributing to this estimate
-              </p>
-              <ul className="flex flex-col gap-1.5">
-                {signals.slice(0, 5).map((s) => {
-                  const available = s.raw_value !== null && s.raw_value !== undefined && !Number.isNaN(s.raw_value)
-                  return (
-                    <li
-                      key={s.feature}
-                      className="flex items-center justify-between gap-3 rounded-md border border-foreground/10 bg-background/40 px-3 py-2 text-xs"
-                    >
-                      <span className="font-medium">{m3V2FeatureLabel(s.feature)}</span>
-                      <span className={available ? "tabular-nums text-muted-foreground" : "text-muted-foreground italic"}>
-                        {m3V2SignalValue(s)}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-              <p className="mt-2 text-[0.6875rem] text-muted-foreground">
-                These are the top factors the model weighed for this estimate. A signal shows
-                &ldquo;Not available&rdquo; when the underlying source record is not recorded for this student.
-              </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-foreground/10 bg-background/40 px-3 py-3">
+                <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
+                  Recommended next steps
+                </p>
+                <ul className="mt-1.5 flex list-disc flex-col gap-1 ps-4 text-sm">
+                  <li>Review any weak subjects before upcoming coursework.</li>
+                  <li>Aim to keep attendance consistent.</li>
+                  <li>Address any pending backlogs early.</li>
+                  <li>Maintain a steady study routine.</li>
+                </ul>
+                <p className="mt-2 text-[0.6875rem] text-muted-foreground">
+                  These are general suggestions based on the model&apos;s estimate — not a diagnosis.
+                </p>
+              </div>
+
+              <div>
+                <p className="mb-2 text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
+                  Signals contributing to this estimate
+                </p>
+                <ul className="flex flex-col gap-1.5">
+                  {signals.filter((s) => s.raw_value !== null && s.raw_value !== undefined && !Number.isNaN(s.raw_value)).slice(0, 5).map((s) => {
+                    return (
+                      <li
+                        key={s.feature}
+                        className="flex items-center justify-between gap-3 rounded-md border border-foreground/10 bg-background/40 px-3 py-2 text-xs"
+                      >
+                        <span className="font-medium">{m3V2FeatureLabel(s.feature)}</span>
+                        <span className="tabular-nums text-muted-foreground">
+                          {m3V2SignalValue(s)}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+                <p className="mt-2 text-[0.6875rem] text-muted-foreground">
+                  These are the top factors the model weighed for this estimate.
+                </p>
+              </div>
             </div>
           )}
 

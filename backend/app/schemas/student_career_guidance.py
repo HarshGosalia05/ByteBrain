@@ -82,6 +82,25 @@ class AiGuidance(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class CareerPathRecommendation(BaseModel):
+    """Domain-specific career path recommendation derived from verified data."""
+
+    domain: str
+    roles: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    relevant_subjects: list[str] = Field(default_factory=list)
+    skill_gaps: list[str] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
+    project_suggestions: list[str] = Field(default_factory=list)
+    personalized_next_steps: list[str] = Field(default_factory=list)
+    disclaimer: str = (
+        "Recommendations are based on your declared preferences and verified "
+        "academic records, not guaranteed career outcomes."
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class StudentCareerGuidanceResponse(BaseModel):
     """Combined Student career guidance payload for the ML Insights UI.
 
@@ -101,6 +120,7 @@ class StudentCareerGuidanceResponse(BaseModel):
     roadmap: list[RoadmapItem] = Field(default_factory=list)
     limitations: list[LimitationItem] = Field(default_factory=list)
     ai_guidance: AiGuidance = Field(default_factory=AiGuidance)
+    career_path: CareerPathRecommendation | None = None
     source: str
     generated_at: datetime
 

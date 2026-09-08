@@ -738,6 +738,18 @@ export type CareerAiGuidance = {
   error: "unavailable" | "rate_limited" | "timeout" | null
 }
 
+export type CareerPathRecommendation = {
+  domain: string
+  roles: string[]
+  skills: string[]
+  relevant_subjects: string[]
+  skill_gaps: string[]
+  certifications: string[]
+  project_suggestions: string[]
+  personalized_next_steps: string[]
+  disclaimer: string
+}
+
 export type StudentCareerGuidance = {
   student_id: string
   data_available: boolean
@@ -748,6 +760,7 @@ export type StudentCareerGuidance = {
   skill_gaps: PrioritySkillGap[]
   roadmap: CareerRoadmapStep[]
   ai_guidance: CareerAiGuidance
+  career_path: CareerPathRecommendation | null
   source: string
   generated_at: string
 }

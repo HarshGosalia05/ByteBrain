@@ -1,8 +1,9 @@
-import { AlertTriangle, CheckCircle2, Compass, Sparkles } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Compass, Sparkles, Target, BookOpen, Award, Lightbulb } from "lucide-react"
 
 import { ChatMarkdown } from "@/components/shared/chatbot/chat-markdown"
 import { Badge } from "@/components/ui/badge"
 import type {
+  CareerPathRecommendation,
   PrioritySkillGap,
   StudentCareerGuidance,
 } from "@/lib/student-api"
@@ -177,6 +178,167 @@ function NextStepsBlock({ guidance }: { guidance: StudentCareerGuidance }) {
   )
 }
 
+function RecommendedCareerPathBlock({
+  careerPath,
+}: {
+  careerPath: CareerPathRecommendation
+}) {
+  return (
+    <div className="rounded-xl border border-foreground/10 bg-background/40 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Target className="size-4 shrink-0 text-primary" aria-hidden="true" />
+        <p className="text-sm font-semibold">Recommended Career Path</p>
+        <Badge variant="secondary">{careerPath.domain}</Badge>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {/* Career Roles */}
+        {careerPath.roles.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <CheckCircle2 className="size-3.5 text-chart-2" aria-hidden="true" />
+              <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                Recommended Roles
+              </p>
+            </div>
+            <ul className="flex flex-wrap gap-1.5">
+              {careerPath.roles.map((role) => (
+                <Badge key={role} variant="outline" className="text-xs">
+                  {role}
+                </Badge>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Relevant Skills */}
+        {careerPath.skills.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <BookOpen className="size-3.5 text-chart-4" aria-hidden="true" />
+              <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                Relevant Technical Skills
+              </p>
+            </div>
+            <ul className="flex flex-wrap gap-1.5">
+              {careerPath.skills.map((skill) => (
+                <Badge key={skill} variant="outline" className="text-xs">
+                  {skill}
+                </Badge>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Relevant Subjects */}
+        {careerPath.relevant_subjects.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <BookOpen className="size-3.5 text-chart-5" aria-hidden="true" />
+              <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                Relevant Subjects to Strengthen
+              </p>
+            </div>
+            <ul className="flex flex-wrap gap-1.5">
+              {careerPath.relevant_subjects.map((subj) => (
+                <Badge key={subj} variant="success" className="text-xs">
+                  {subj}
+                </Badge>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Skill Gaps */}
+        {careerPath.skill_gaps.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <AlertTriangle className="size-3.5 text-chart-3" aria-hidden="true" />
+              <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                Skill Gaps to Address
+              </p>
+            </div>
+            <ul className="flex flex-wrap gap-1.5">
+              {careerPath.skill_gaps.map((gap) => (
+                <Badge key={gap} variant="warning" className="text-xs">
+                  {titleCase(gap)}
+                </Badge>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Certifications */}
+        {careerPath.certifications.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <Award className="size-3.5 text-primary" aria-hidden="true" />
+              <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                Recommended Certifications
+              </p>
+            </div>
+            <ul className="flex flex-col gap-1">
+              {careerPath.certifications.map((cert) => (
+                <li
+                  key={cert}
+                  className="rounded-md border border-foreground/10 bg-background/40 px-2.5 py-1.5 text-xs"
+                >
+                  {cert}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Project Suggestions */}
+        {careerPath.project_suggestions.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <Lightbulb className="size-3.5 text-chart-1" aria-hidden="true" />
+              <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                Project / Portfolio Ideas
+              </p>
+            </div>
+            <ul className="flex flex-col gap-1">
+              {careerPath.project_suggestions.map((proj) => (
+                <li
+                  key={proj}
+                  className="rounded-md border border-foreground/10 bg-background/40 px-2.5 py-1.5 text-xs"
+                >
+                  {proj}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* Personalized Next Steps */}
+      {careerPath.personalized_next_steps.length > 0 && (
+        <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
+          <p className="mb-1.5 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+            Personalized Next Steps
+          </p>
+          <ul className="flex flex-col gap-1">
+            {careerPath.personalized_next_steps.map((step, idx) => (
+              <li key={idx} className="flex items-start gap-2 text-xs leading-relaxed">
+                <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[0.625rem] font-semibold text-primary">
+                  {idx + 1}
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <p className="mt-3 text-[0.6875rem] text-muted-foreground">
+        {careerPath.disclaimer}
+      </p>
+    </div>
+  )
+}
+
 export function M4CareerGuidanceCard({
   guidance,
 }: {
@@ -228,6 +390,10 @@ export function M4CareerGuidanceCard({
         <AiGuidanceBlock guidance={guidance} />
 
         <NextStepsBlock guidance={guidance} />
+
+        {guidance.career_path && (
+          <RecommendedCareerPathBlock careerPath={guidance.career_path} />
+        )}
       </div>
     </ModelCard>
   )
