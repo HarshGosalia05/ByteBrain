@@ -1819,7 +1819,7 @@ class AdminRepository:
                 MAX(created_at) AS created_at
             FROM student_messages
             WHERE message_type IN ('ANNOUNCEMENT', 'ACADEMIC_NOTICE', 'HOLIDAY', 'EVENT', 'SYSTEM_NOTICE')
-            GROUP BY title, message_body, message_type, recipient_type, priority, event_id
+            GROUP BY title, message_body, message_type, recipient_type, priority, event_id, student_id
             ORDER BY MAX(created_at) DESC
             LIMIT 50
             """
@@ -1857,13 +1857,13 @@ class AdminRepository:
             SELECT
                 sub.subject_code,
                 sub.subject_name,
-                COUNT(DISTINCT sem.student_id) AS student_count,
-                ROUND(AVG(sem.overall_percentage)::numeric, 2) AS avg_percentage
-            FROM student_semester_subject_summary sem
-            JOIN subjects sub ON sub.subject_code = sem.subject_code
-            WHERE sem.overall_percentage IS NOT NULL
+                COUNT(DISTINCT p.student_id) AS student_count,
+                ROUND(AVG(p.percentage)::numeric, 2) AS avg_percentage
+            FROM student_subject_performance p
+            JOIN subjects sub ON sub.subject_id = p.subject_id
+            WHERE p.percentage IS NOT NULL
             GROUP BY sub.subject_code, sub.subject_name
-            ORDER BY AVG(sem.overall_percentage) ASC NULLS LAST
+            ORDER BY AVG(p.percentage) ASC NULLS LAST
             LIMIT 1
             """
         )
@@ -1915,7 +1915,8 @@ class AdminRepository:
             GROUP BY s.department_code, d.department_name, s.department_name
             ORDER BY COUNT(*) DESC
             LIMIT 1
-            """
+            """,
+            (),
         )
 
         # 5. Overall institution health
@@ -1926,7 +1927,8 @@ class AdminRepository:
                 ROUND(AVG(overall_cgpa)::numeric, 2) AS overall_avg_cgpa,
                 ROUND(AVG(overall_attendance_percentage)::numeric, 2) AS overall_attendance_pct
             FROM students
-            """
+            """,
+            (),
         )
 
         # 6. Career internship rate
@@ -1936,7 +1938,8 @@ class AdminRepository:
                 COUNT(*) AS total_career_records,
                 COUNT(*) FILTER (WHERE internship_completed = 'Yes') AS internships_done
             FROM career_preferences
-            """
+            """,
+            (),
         )
         internship_rate = None
         if career_row and career_row.get("total_career_records"):

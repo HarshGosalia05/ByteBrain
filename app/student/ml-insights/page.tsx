@@ -3,6 +3,7 @@ import { Suspense } from "react"
 import { requireRole } from "@/lib/session"
 import { getSessionUser } from "@/lib/student-session"
 import {
+  getGoals,
   getStudentCareerGuidance,
   getStudentM1V3,
   getStudentM2TP,
@@ -43,10 +44,11 @@ async function SemesterTrendSection() {
   const user = await getSessionUser()
   const studentId = user?.student_id ?? null
 
-  const [m1v3Result, semHistoryResult] =
+  const [m1v3Result, semHistoryResult, goalsResult] =
     await Promise.allSettled([
       getStudentM1V3(),
       studentId ? getStudentSemesterHistory(studentId) : Promise.resolve(null),
+      getGoals(),
     ])
 
   const m1v3Data =
@@ -58,6 +60,18 @@ async function SemesterTrendSection() {
     semHistoryResult.status === "fulfilled" && semHistoryResult.value?.ok
       ? semHistoryResult.value.data.semesters
       : []
+
+  const goals =
+    goalsResult.status === "fulfilled" && goalsResult.value.ok
+      ? goalsResult.value.data.goals
+      : []
+
+  const activeSgpaGoal = goals.find(
+    (g) => g.goal_type === "target_sgpa" && g.status === "Active",
+  )
+  const activePercentageGoal = goals.find(
+    (g) => g.goal_type === "target_percentage" && g.status === "Active",
+  )
 
   // Pass the full Clean M1V3 subjects (credit + grade_band + predicted marks) so the
   // chart can compute credit-weighted SGPA via the university formula.
@@ -75,6 +89,8 @@ async function SemesterTrendSection() {
       history={semesterHistory}
       predictedNextSemester={null}
       currentSemester={currentSemester}
+      targetSgpa={activeSgpaGoal?.target_value ?? null}
+      targetPercentage={activePercentageGoal?.target_value ?? null}
     />
   )
 }

@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Optional
 
 import asyncpg
 
-from app.services.prediction_generation_service import PredictionGenerationService
+from app.services.prediction_generation_service import PredictionGenerationService, SkipPrediction
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +215,9 @@ class AdminMLGenerationService:
                 job["per_model"][model]["completed"] += 1
             else:
                 job["per_model"][model]["skipped"] += 1
+        except SkipPrediction as exc:
+            job["per_model"][model]["skipped"] += 1
+            logger.debug("M2-TP skipped for %s: %s", sid, exc)
         except Exception as exc:  # noqa: BLE001 - record and continue
             job["per_model"][model]["failed"] += 1
             if len(job["errors"]) < 100:
@@ -311,11 +314,28 @@ class AdminMLGenerationService:
             return set()
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT DISTINCT student_id, prediction_type FROM ml_predictions "
+                "SELECT DISTINCT student_id, prediction_type, model_version "
+                "FROM ml_predictions "
                 "WHERE student_id = ANY($1::varchar[])",
                 student_ids,
             )
-        return {(r["student_id"], r["prediction_type"]) for r in rows}
+        # Build coverage set, but only count rows whose model_version matches
+        # the current production version. Legacy/retired rows must not prevent
+        # fresh generation — the admin retrieval pipeline filters by the same
+        # production model_version, so stale rows are invisible to the UI.
+        _PRODUCTION_VERSIONS: dict[str, str] = {
+            "m1": "m1_v3_clean",
+            "m2": "m2_tp_v1",
+            # m3 and m4 have no version gating
+        }
+        coverage: set[tuple[str, str]] = set()
+        for r in rows:
+            sid = r["student_id"]
+            ptype = r["prediction_type"]
+            expected = _PRODUCTION_VERSIONS.get(ptype)
+            if expected is None or r["model_version"] == expected:
+                coverage.add((sid, ptype))
+        return coverage
 
     # ------------------------------------------------------------------
     # Serialization

@@ -549,14 +549,6 @@ class AdminMLService:
             dname = sinfo.get("dept_name", "Unknown")
             dcode = sinfo.get("dept_code", 0)
 
-            if dname not in dept_m2:
-                dept_m2[dname] = {
-                    "code": dcode,
-                    "name": dname,
-                    "theories": [],
-                    "practicals": [],
-                }
-
             pval = r["parsed_value"]
             m2_items = (
                 [pval]
@@ -574,6 +566,13 @@ class AdminMLService:
                     try:
                         ftheory = float(theory)
                         m2_theory_list.append(ftheory)
+                        if dname not in dept_m2:
+                            dept_m2[dname] = {
+                                "code": dcode,
+                                "name": dname,
+                                "theories": [],
+                                "practicals": [],
+                            }
                         dept_m2[dname]["theories"].append(ftheory)
                         if ftheory < 40.0:
                             theory_bands["< 40%"] += 1
@@ -590,6 +589,13 @@ class AdminMLService:
                     try:
                         fpractical = float(practical)
                         m2_practical_list.append(fpractical)
+                        if dname not in dept_m2:
+                            dept_m2[dname] = {
+                                "code": dcode,
+                                "name": dname,
+                                "theories": [],
+                                "practicals": [],
+                            }
                         dept_m2[dname]["practicals"].append(fpractical)
                         if fpractical < 40.0:
                             practical_bands["< 40%"] += 1

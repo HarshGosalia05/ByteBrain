@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getGoal, updateGoal, type GoalUpdateInput } from "@/lib/student-api"
+import { getGoal, updateGoal, deleteGoal, type GoalUpdateInput } from "@/lib/student-api"
 
 export async function GET(
   _request: Request,
@@ -55,5 +55,14 @@ export async function PATCH(
     )
   }
   const result = await updateGoal(goalId, body)
+  return NextResponse.json(result, { status: result.ok ? 200 : result.error.status })
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ goalId: string }> },
+) {
+  const { goalId } = await params
+  const result = await deleteGoal(goalId)
   return NextResponse.json(result, { status: result.ok ? 200 : result.error.status })
 }

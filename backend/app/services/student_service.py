@@ -508,6 +508,24 @@ class StudentService:
             )
         return self._decorate_goal(goal, ctx)
 
+    async def delete_goal(self, student_id: str, goal_id: str) -> None:
+        ctx = await self._health_context(student_id)
+        if not ctx:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found"
+            )
+        existing = await self.repo.get_goal(student_id, goal_id)
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found"
+            )
+        deleted = await self.repo.delete_goal(student_id, goal_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete goal",
+            )
+
     # ------------------------------------------------------------------
     # MD-05 notifications
     # ------------------------------------------------------------------

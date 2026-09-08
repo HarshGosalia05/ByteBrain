@@ -255,6 +255,8 @@ export function SemesterTrendChart({
   history,
   predictedNextSemester,
   currentSemester,
+  targetSgpa,
+  targetPercentage,
 }: {
   history: Array<{
     semester_no: number
@@ -271,6 +273,8 @@ export function SemesterTrendChart({
     subjects?: M1V3SubjectPrediction[] | null
     predictedMarks: number[]
   } | null
+  targetSgpa?: number | null
+  targetPercentage?: number | null
 }) {
   const [metric, setMetric] = React.useState<Metric>("sgpa")
   const uid = React.useId()
@@ -482,18 +486,21 @@ export function SemesterTrendChart({
                 cursor={{ fill: "var(--muted)", opacity: 0.4 }}
                 wrapperStyle={{ outline: "none" }}
               />
-              <ReferenceLine
-                y={metric === "sgpa" ? 7 : 70}
-                stroke="var(--muted-foreground)"
-                strokeDasharray="4 4"
-                strokeWidth={1}
-                label={{
-                  value: "Target",
-                  fontSize: 10,
-                  fill: "var(--muted-foreground)",
-                  position: "insideTopLeft",
-                }}
-              />
+              {((metric === "sgpa" && targetSgpa != null && targetSgpa > 0) ||
+                (metric === "percentage" && targetPercentage != null && targetPercentage > 0)) && (
+                <ReferenceLine
+                  y={metric === "sgpa" ? targetSgpa! : targetPercentage!}
+                  stroke="var(--muted-foreground)"
+                  strokeDasharray="4 4"
+                  strokeWidth={1}
+                  label={{
+                    value: "Target",
+                    fontSize: 10,
+                    fill: "var(--muted-foreground)",
+                    position: "insideTopLeft",
+                  }}
+                />
+              )}
               <Bar
                 dataKey={metric}
                 name={metric === "sgpa" ? "SGPA" : "Percentage"}

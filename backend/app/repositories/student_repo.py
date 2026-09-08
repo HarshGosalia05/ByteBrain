@@ -432,6 +432,16 @@ class StudentRepository:
                 )
                 return self._goal(row) if row else None
 
+    async def delete_goal(self, student_id: str, goal_id: str) -> bool:
+        """Delete a goal. Returns True if a row was deleted."""
+        query = """
+            DELETE FROM student_goals
+            WHERE student_id = $1 AND goal_id = $2::uuid
+        """
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(query, student_id, goal_id)
+            return result.endswith("1")
+
     # ------------------------------------------------------------------
     # MD-05 notifications
     # ------------------------------------------------------------------

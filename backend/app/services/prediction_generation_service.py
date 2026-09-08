@@ -35,6 +35,15 @@ from typing import Any, Optional
 
 VALID_PREDICTION_TYPES = ("m1", "m2", "m3", "m4")
 
+
+class SkipPrediction(Exception):
+    """Raised when a prediction cannot be generated for a legitimate reason.
+
+    The caller (AdminMLGenerationService) counts this as a *skip*, not a
+    *failure*.  Typical causes: student in final semester, no theory
+    subjects next semester, etc.
+    """
+
 _GENERATION_METHODS: dict[str, str] = {
     "m1": "predict_m1_for_student",
     "m3": "predict_m3_for_student",
@@ -201,7 +210,7 @@ class PredictionGenerationService:
             theory = payload.get("theory") or {}
             practical = payload.get("practical") or {}
             if payload.get("readiness_status") == "NO_DATA":
-                raise ValueError(
+                raise SkipPrediction(
                     f"M2-TP has no valid prediction for student {student_id}: "
                     f"{payload.get('reason') or 'no upcoming theory/practical courses.'}"
                 )
