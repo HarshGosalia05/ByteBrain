@@ -9,16 +9,17 @@ The Student → ML Insights M3 V2 card showed `—` (missing) for three signals:
 
 | Signal | Before | After |
 |---|---|---|
-| `attendance_aggregate_pct` | NULL | **87.35** (recovered) |
-| `learn_tsem_volume_total` | NULL | still `Not available` — source data absent |
-| `att_tsem_total_pct` | NULL | still `Not available` — source data absent |
+| `attendance_aggregate_pct` | NULL | **87.35** (recovered, prior fix) |
+| `att_tsem_total_pct` | NULL → `Not available` | **87.20** (recovered — training-exact `attendance`-table fallback) |
+| `learn_tsem_volume_total` | NULL → `Not available` | still `Not available` — source data absent |
 
 Root cause: the **real cohort (STU000001…080, the currently authorized students) has no rows in the
 weekly behavioral tables and NULL derived analytics columns** in `student_semester_summary`, while the
-1200-student CSE 6A training cohort has complete rows. One of the three signals is **recoverable** from
-data that exists (plus four more silently-NaN Tier‑1B analytics); the other two are **not** recoverable
-(honestly reported, never zero-fabricated). Model input, feature set, ordering, preprocessing contract,
-and threshold are unchanged.
+1200-student CSE 6A training cohort has complete rows. Two of the three headline signals are now
+**recoverable** from data that exists (plus four more silently-NaN Tier‑1B analytics); the learning-activity
+signal is **not** recoverable — `student_learning_activity` has 0 rows for the real cohort in the database
+*and* in every dataset/CSV export (honestly reported, never zero-fabricated). Model input, feature set,
+ordering, preprocessing contract, and threshold are unchanged.
 
 ## 2. Pipeline trace
 
@@ -57,8 +58,12 @@ Also NULL for the real cohort: `previous_sem_sgpa`, `sgpa_drift`, `sgpa_rolling_
 - **`attendance_aggregate_pct`** — a stored `student_semester_summary` column that is NULL for the whole
   real cohort. It is **recoverable**: production base data `semester_attendance_percentage` exists.
 - **`att_tsem_total_pct`** (and `att_tsem_low_pct_weeks`, `att_tsem_velocity_mean`) — computed per student
-  from `attendance_weekly` (`_INFER_ATTENDANCE_SQL` + `_aggregate_attendance`). **0 rows → NULL**;
-  no weekly source data exists for the cohort, so this is **not recoverable**.
+  from `attendance_weekly` (`_INFER_ATTENDANCE_SQL` + `_aggregate_attendance`). **0 rows → NULL** for the
+  real cohort. However, the underlying per-subject semester totals **do exist** in the `attendance` table
+  and now reproduce the **exact training-time formula** — `100 · Σ(attended_classes)/Σ(total_classes)` at
+  T (a pure ratio-of-sums, grain-invariant) — via the `attendance` fallback. `att_tsem_low_pct_weeks` /
+  `att_tsem_velocity_mean` are weekly-grained fields with no available source for the real cohort and
+  stay NaN.
 - **`learn_tsem_volume_total`** (and `learn_tsem_engagement_mean`, `learn_tsem_completion_mean`,
   `learn_tsem_late_mean`) — computed from `student_learning_activity`. **0 rows → NULL**; **not recoverable**.
 - Also surfaced as missing: `subj_pre_endsem_pct_mean` (and assignment/quiz/delay means) — source column
@@ -78,7 +83,7 @@ att 74.07; `STU6A0500` sem 3-4: backlog_change 1 then −1, cumulative 1):
 | `backlog_change` | `round(backlog_count − previous_sem_backlog_count, 1)` |
 | `cumulative_backlog_events` | cumsum of `backlog_count` up to T |
 | `attendance_aggregate_pct` | the T-semester aggregate attendance % (stored at 3dp; equals `semester_attendance_percentage` to within 0.005 — 2dp rounded value) |
-| `att_tsem_total_pct` | `100 · Σ(classes_attended)/Σ(classes_held)` over `attendance_weekly` at T |
+| `att_tsem_total_pct` | `100 · Σ(classes_attended)/Σ(classes_held)` over `attendance_weekly` at T — reproduced in production for the real cohort from the `attendance` table (`100 · Σ(attended_classes)/Σ(total_classes)` at T), the same ratio-of-sums at a coarser grain; verified equal across sources |
 | `learn_tsem_volume_total` | `Σ(activity_volume)` over `student_learning_activity` at T |
 
 Consistent with `fix_supabase_dataset.fill_analytics()` and the feature builder
@@ -94,7 +99,8 @@ All stays strictly T / ≤T (point-in-time); nothing from T+1.
 | 1B prior history | **sgpa_drift, previous_sem_backlog_count, backlog_change, cumulative_backlog_events, attendance_aggregate_pct** | **now recovered** — training-exact derivation (fill only when stored value missing) |
 | 1C subject | internal/mid/end means+std, failed count | In DB ✓ |
 | 1C subject | assignment/quiz/submission_delay/pre_endsem means | **missing** — source column NULL (kept NULL) |
-| 1D attendance | att_tsem_total_pct, att_tsem_low_pct_weeks, att_tsem_velocity_mean | **missing** — no weekly rows (kept NULL) |
+| 1D attendance | **att_tsem_total_pct** | **now recovered** — training-exact ratio-of-sums via `attendance` fallback (87.2 for STU000001 at T=7; matches `attendance` and `daily_attendance_07`) |
+| 1D attendance | att_tsem_low_pct_weeks, att_tsem_velocity_mean | **missing** — weekly-grained source absent (kept NULL) |
 | 1E learning | learn_tsem_volume_total, engagement, completion, late | **missing** — no weekly rows (kept NULL) |
 | 1F meta | is_male, semester_no, stress_ordinal, study_hours_per_week | In DB ✓ (legacy survey fallback) |
 
@@ -122,15 +128,14 @@ only a data-load gap could change it. Display now reads "Not available" instead 
 
 | File | Change |
 |---|---|
-| `ml/v2/m3_at_risk_prediction/inference/predictor.py` | Added `_recover_prior_history()` (training-exact Tier‑1B recovery, point-in-time, missing-stays-missing) and wired it into `predict_for_student()` to fill only missing Tier‑1B values. Model, features, ordering, preprocessing, threshold untouched. |
-| `ml/v2/m3_at_risk_prediction/tests/test_m3_v2.py` | Added `TestRecoverPriorHistory` (6 tests) and `TestMissingVsZeroAggregates` (5 tests). |
-| `lib/m3v2-prediction.ts` | Added `M3V2_FEATURE_LABELS`, `m3V2FeatureLabel()`, `m3V2SignalValue()` (human units; missing → "Not available"). |
-| `components/student/ml-insights/m3v2-card.tsx` | Signals header → "Key signals used by the model"; human labels + typed values; missing shown as "Not available" with honest note. |
-| `lib/m3v2-prediction.test.ts` | New frontend tests for labels, units, missing-vs-zero, risk tones. |
+| `ml/v2/m3_at_risk_prediction/inference/predictor.py` | `_recover_prior_history()` (prior fix) + **`_aggregate_attendance_fallback()`** and `_INFER_ATTENDANCE_FALLBACK_SQL` (this fix): when `attendance_weekly` yields no `att_tsem_total_pct` at T, fall back to the semester-level `attendance` table and reproduce `100 · Σ(attended)/Σ(held)` at T. Fills only `att_tsem_total_pct`; never overwrites a weekly-derived value; weekly-grained features stay NaN. Model, features, ordering, preprocessing, threshold untouched. |
+| `ml/v2/m3_at_risk_prediction/tests/test_m3_v2.py` | +3 tests: `attendance_fallback` matches the ratio-of-sums training definition, null when no T rows, null (not 0) when held=0. |
+| `lib/m3v2-prediction.ts` | `m3V2SignalValue()` (prior fix) — `att_tsem_total_pct` renders as `%`; 87.2 → "87.20%". |
+| `components/student/ml-insights/m3v2-card.tsx` | (prior fix) — human labels, missing → "Not available". |
 
 ## 9. Tests & verification
 
-- ML M3 module suite: **53 passed** (`ml: .venv/Scripts/python -m pytest v2/m3_at_risk_prediction/tests/`).
+- ML M3 module suite: **56 passed** (`ml: .venv/Scripts/python -m pytest v2/m3_at_risk_prediction/tests/`).
 - Backend M3: `tests/test_m3v2_prediction.py` + `tests/test_m2_m3_progression.py` → **40 passed** (6A end-to-end via the real Supabase pool unchanged).
 - Frontend: **200 passed** (incl. new m3v2 helper tests), `npx tsc --noEmit` clean, `npm run lint` (no new issues; 2 pre-existing errors in `lib/i18n/i18n.test.ts`/`student-api.test.ts`), `npm run build` OK.
 
@@ -143,16 +148,17 @@ STU000001 (observation semester 7 → semester 8), **same artifact (m3_v2_at_ris
 | `probability_at_risk` | 0.0868 | **0.0868** (unchanged) |
 | risk flag (≥ 0.640) | false | false |
 | `attendance_aggregate_pct` | `—` | **87.35** |
+| `att_tsem_total_pct` | `—` → `Not available` | **87.20** (= `100·Σ(attended)/Σ(held)` over `attendance`; matches `daily_attendance_07` 87.2. The 87.35 in `semester_attendance_percentage` is a *mean of per-subject percentages*, a different stored column. Training-time definition of `att_tsem_total_pct` is the ratio-of-sums → 87.20.) |
 | `sgpa_drift` / previous_backlog / backlog_change / cumulative | NaN (median-imputed) | 0 / 0 / 0 / 0 (derived, training-exact) |
-| `learn_tsem_volume_total`, `att_tsem_total_pct`, `subj_pre_endsem_pct_mean`, … | `—` | `Not available` (no source data) |
+| `learn_tsem_volume_total`, `att_tsem_low_pct_weeks`, `att_tsem_velocity_mean`, `subj_pre_endsem_pct_mean`, … | `—` | `Not available` (no source data) |
 
 Why the probability is unchanged for this student: the recovered features carry values very near the
 training medians (backlog analytics ≈ 0; attendance_aggregate ≈ semester_attendance_percentage, already
 near-median) and the RF estimate is not threshold-sensitive here. **All 80 real students** (batch run
 through the production predictor): probabilities 0.000–0.258 (median 0.1005, mean 0.1016), **0 of 80
-flagged at-risk**; `attendance_aggregate_pct` now resolves for all 80. Six of the top-10 signals per
-student remain legitimately "Not available" (weekly/assignment features) until those tables are loaded
-for the real cohort.
+flagged at-risk**; `attendance_aggregate_pct` now resolves for all 80 and `att_tsem_total_pct` resolves for
+all 80 (e.g. 87.2 / 93.6 / 90.0 for STU000001 / 002 / 079). The weekly-grained and learning signals per
+student remain legitimately "Not available" until those tables are loaded for the real cohort.
 
 ## 11. UI output & signal semantics
 
@@ -172,10 +178,7 @@ for the real cohort.
 
 ## 13. Known limits (honest non-fixes)
 
-- `att_tsem_total_pct` / `learn_tsem_volume_total` (and siblings) stay genuinely missing until
-  `attendance_weekly` / `student_learning_activity` rows are loaded for STU0000xx — a **data-load gap**
-  (`backend/etl`), not an inference bug. The persistence path (e.g. `admin_ml_generation_service`) is the
-  right place to backfill those tables for the real cohort.
+- `learn_tsem_volume_total` (and `att_tsem_low_pct_weeks` / `att_tsem_velocity_mean`, learning-activity siblings) stay genuinely missing until `student_learning_activity` / weekly attendance rows are loaded for STU0000xx — a **data-load gap** (`backend/etl`), not an inference bug. `att_tsem_total_pct` is now recovered because the underlying per-subject totals exist in `attendance`. The persistence/ETL path (e.g. `admin_ml_generation_service`) is the right place to backfill the weekly + learning tables for the real cohort.
 - `assignment_score` / `quiz_avg_marks` / `submission_delay_days` / `pre_endsem_assessment_pct` subject
   columns are NULL for the real cohort; subject aggregates for those features therefore stay NaN
   (median-imputed at inference). If these should exist for real students, populate at the ETL layer.

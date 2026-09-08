@@ -376,6 +376,36 @@ class TestMissingVsZeroAggregates:
         assert out["learn_tsem_completion_mean"] == pytest.approx(0.8)
         assert out["learn_tsem_late_mean"] == pytest.approx(0.1)
 
+    ATT_FB_DF = pd.DataFrame([
+        {"semester_no": 1, "total_classes": 40, "attended_classes": 38},
+        {"semester_no": 1, "total_classes": 45, "attended_classes": 35},
+        {"semester_no": 2, "total_classes": 40, "attended_classes": 40},
+    ])
+
+    def test_attendance_fallback_matches_training_definition(self):
+        from v2.m3_at_risk_prediction.inference.predictor import _aggregate_attendance_fallback
+        out = _aggregate_attendance_fallback(self.ATT_FB_DF, 1)
+        # ratio-of-sums 100 * (38+35)/(40+45) = 85.882..., NOT a mean of subject pct
+        assert out["att_tsem_total_pct"] == pytest.approx(100.0 * 73 / 85)
+        # weekly-grained features have no source -> NaN (never fabricated)
+        assert np.isnan(out["att_tsem_low_pct_weeks"])
+        assert np.isnan(out["att_tsem_velocity_mean"])
+
+    def test_attendance_fallback_null_when_no_rows_for_T(self):
+        from v2.m3_at_risk_prediction.inference.predictor import _aggregate_attendance_fallback
+        out = _aggregate_attendance_fallback(self.ATT_FB_DF, 3)
+        assert np.isnan(out["att_tsem_total_pct"])
+        assert np.isnan(out["att_tsem_low_pct_weeks"])
+        assert np.isnan(out["att_tsem_velocity_mean"])
+
+    def test_attendance_fallback_null_when_no_classes_held(self):
+        from v2.m3_at_risk_prediction.inference.predictor import _aggregate_attendance_fallback
+        df = pd.DataFrame([
+            {"semester_no": 1, "total_classes": 0, "attended_classes": 0},
+        ])
+        out = _aggregate_attendance_fallback(df, 1)
+        assert np.isnan(out["att_tsem_total_pct"])  # division undefined -> NOT 0
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Preprocessor

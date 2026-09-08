@@ -242,7 +242,7 @@ export type BffError = {
 
 export type BffResult<T> =
   | { ok: true; data: T; fetchedAt: string }
-  | { ok: false; error: BffError }
+  | { ok: false; error: BffError; fetchedAt?: string }
 
 type CacheEntry = { value: unknown; expiresAt: number }
 

@@ -81,6 +81,20 @@ WHERE student_id = $1
 ORDER BY semester_no
 """
 
+# Fallback for cohorts that have no `attendance_weekly` rows (e.g. the legacy
+# STU0000xx cohort). They still carry per-subject semester totals in `attendance`,
+# which reproduces the SAME training-time ratio 100 * SUM(attended)/SUM(held) at T
+# (verified equal to the summary value for every completed 6A-referenced semester).
+_INFER_ATTENDANCE_FALLBACK_SQL = """
+SELECT
+    semester_no,
+    total_classes,
+    attended_classes
+FROM attendance
+WHERE student_id = $1
+ORDER BY semester_no
+"""
+
 _INFER_LEARNING_SQL = """
 SELECT
     semester_no,
@@ -180,6 +194,27 @@ def _aggregate_attendance(rows: pd.DataFrame, T: int) -> dict:
         "att_tsem_total_pct": 100.0 * attended / held if held > 0 else float("nan"),
         "att_tsem_low_pct_weeks": float(a["low"].mean()),
         "att_tsem_velocity_mean": float(a["velocity"].mean()) if a["velocity"].notna().any() else float("nan"),
+    }
+
+
+def _aggregate_attendance_fallback(rows: pd.DataFrame, T: int) -> dict:
+    """Aggregate the semester-level `attendance` table at T.
+
+    Reproduces the training-time definition of ``att_tsem_total_pct`` —
+    100 * SUM(attended) / SUM(held) across all T class records — for cohorts whose
+    weekly rows are absent from production but whose per-subject totals exist.
+    The weekly-grained features (``att_tsem_low_pct_weeks``, ``att_tsem_velocity_mean``)
+    have NO available source here, so they stay NaN (never fabricated).
+    """
+    a = rows[rows["semester_no"] == T].copy()
+    if len(a) == 0:
+        return {c: float("nan") for c in config.TIER1_ATTENDANCE_AGG}
+    held = float(pd.to_numeric(a["total_classes"], errors="coerce").sum())
+    attended = float(pd.to_numeric(a["attended_classes"], errors="coerce").sum())
+    return {
+        "att_tsem_total_pct": 100.0 * attended / held if held > 0 else float("nan"),
+        "att_tsem_low_pct_weeks": float("nan"),
+        "att_tsem_velocity_mean": float("nan"),
     }
 
 
@@ -521,8 +556,25 @@ class M3V2Predictor:
 
         att_rows = await conn.fetch(_INFER_ATTENDANCE_SQL, student_id)
         att_df = pd.DataFrame([dict(r) for r in att_rows]) if att_rows else pd.DataFrame()
-        raw.update(_aggregate_attendance(att_df, T) if len(att_df) and "semester_no" in att_df.columns else
-                   {c: float("nan") for c in config.TIER1_ATTENDANCE_AGG})
+        if len(att_df) and "semester_no" in att_df.columns:
+            att_agg = _aggregate_attendance(att_df, T)
+        else:
+            att_agg = {c: float("nan") for c in config.TIER1_ATTENDANCE_AGG}
+
+        # Fallback (semester-level `attendance` table): for cohorts whose weekly
+        # rows are entirely absent from production (e.g. STU0000xx), reproduce the
+        # training-time ratio 100 * SUM(attended)/SUM(held) at T from the available
+        # per-subject totals. Fills ONLY att_tsem_total_pct; the weekly-grained
+        # features stay NaN. Never overwrites a value the weekly path produced.
+        if pd.isna(att_agg.get("att_tsem_total_pct")):
+            att_fb_rows = await conn.fetch(_INFER_ATTENDANCE_FALLBACK_SQL, student_id)
+            if att_fb_rows:
+                att_fb_df = pd.DataFrame([dict(r) for r in att_fb_rows])
+                if "semester_no" in att_fb_df.columns:
+                    fb_pct = _aggregate_attendance_fallback(att_fb_df, T)["att_tsem_total_pct"]
+                    if not pd.isna(fb_pct):
+                        att_agg["att_tsem_total_pct"] = fb_pct
+        raw.update(att_agg)
 
         learn_rows = await conn.fetch(_INFER_LEARNING_SQL, student_id)
         learn_df = pd.DataFrame([dict(r) for r in learn_rows]) if learn_rows else pd.DataFrame()
