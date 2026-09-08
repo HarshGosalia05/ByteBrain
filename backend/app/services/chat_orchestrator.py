@@ -1,4 +1,4 @@
-﻿"""Unified authenticated Chat Orchestrator (G0-G2 integration).
+"""Unified authenticated Chat Orchestrator (G0-G2 integration).
 
 Connects:
   Authenticated Role + Identity
@@ -574,6 +574,26 @@ def _m1_prediction_sentence(prediction: dict[str, Any]) -> str:
     return sentence
 
 
+def _m3_prediction_sentence(prediction: dict[str, Any]) -> str:
+    """Render M3 as an academic-risk estimate based on latest completed academic data."""
+    value = prediction.get("predicted_value") or {}
+    prob = value.get("probability_at_risk")
+    if prob is None and prediction.get("uncertainty"):
+        prob = (prediction.get("uncertainty") or {}).get("probability")
+    sem = prediction.get("source_semester") or value.get("observation_semester")
+    sem_str = f" based on your latest completed semester ({sem})" if sem else " based on your latest completed academic data"
+    if prob is not None:
+        pct = round(float(prob) * 100, 1)
+        thresh = float(value.get("threshold") or 0.64)
+        at_risk = bool(value.get("is_estimated_at_risk", False)) or float(prob) >= thresh
+        level = "elevated" if at_risk else "low"
+        return (
+            f"Your M3 academic risk estimate{sem_str} indicates a {level} estimated risk "
+            f"({pct}% risk probability, decision threshold {round(thresh * 100)}%)."
+        )
+    return f"Your M3 academic risk estimate{sem_str} is available."
+
+
 def _m4_prediction_sentence(prediction: dict[str, Any]) -> str:
     """Render M4 as a deterministic readiness score (never invented)."""
     value = prediction.get("predicted_value") or {}
@@ -629,6 +649,8 @@ def _prediction_summary(data: dict[str, Any]) -> str:
             continue
         if pid == "M1":
             sentences.append(_m1_prediction_sentence(prediction))
+        elif pid == "M3":
+            sentences.append(_m3_prediction_sentence(prediction))
         elif pid == "M4":
             sentences.append(_m4_prediction_sentence(prediction))
         else:

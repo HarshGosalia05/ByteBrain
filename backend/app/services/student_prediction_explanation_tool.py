@@ -101,8 +101,47 @@ _TARGETS: dict[str, str] = {
 _UNAVAILABLE_NOTES: dict[str, str] = {
     "m1": "No verified M1 subject end-marks prediction is available for this student.",
     "m2": "No verified M2-TP next-semester Theory/Practical prediction is available for this student.",
-    "m3": "No verified M3 next-semester at-risk prediction is available for this student.",
+    "m3": "No verified M3 academic-risk prediction is available for this student's records.",
     "m4": "No verified M4 career readiness score is available for this student.",
+}
+
+M3_FEATURE_LABELS: dict[str, str] = {
+    "semester_sgpa": "Latest Semester SGPA",
+    "semester_percentage": "Latest Semester Percentage",
+    "semester_total_marks": "Latest Semester Total Marks",
+    "semester_attendance_percentage": "Latest Semester Attendance",
+    "backlog_count": "Current Active Backlogs",
+    "cumulative_backlog_events": "Cumulative Backlog Events",
+    "credits_registered": "Credits Registered",
+    "credits_earned": "Credits Earned",
+    "subjects_registered": "Subjects Registered",
+    "previous_sem_sgpa": "Previous Semester SGPA",
+    "sgpa_drift": "SGPA Drift vs Previous Semester",
+    "sgpa_rolling_mean_3": "Recent 3-Semester SGPA",
+    "previous_sem_backlog_count": "Previous Semester Backlogs",
+    "backlog_change": "Backlog Count Change",
+    "attendance_aggregate_pct": "Aggregate Attendance Percentage",
+    "subj_internal_marks_mean": "Average Internal Marks",
+    "subj_internal_marks_std": "Internal Marks Variation",
+    "subj_mid_sem_marks_mean": "Average Mid-Semester Marks",
+    "subj_end_sem_marks_mean": "Average End-Semester Marks",
+    "subj_end_sem_marks_std": "End-Semester Marks Variation",
+    "subj_assignment_score_mean": "Average Assignment Score",
+    "subj_quiz_avg_marks_mean": "Average Quiz Marks",
+    "subj_submission_delay_mean": "Average Submission Delay (Days)",
+    "subj_pre_endsem_pct_mean": "Pre-End-Sem Assessment %",
+    "subj_failed_subjects_count": "Failed Subjects Count",
+    "att_tsem_total_pct": "Semester Attendance %",
+    "att_tsem_low_pct_weeks": "Low Attendance Weeks Ratio",
+    "att_tsem_velocity_mean": "Attendance Trend Velocity",
+    "learn_tsem_volume_total": "Total Learning Activity Volume",
+    "learn_tsem_engagement_mean": "Learning Engagement Consistency",
+    "learn_tsem_completion_mean": "Assessment Completion Rate",
+    "learn_tsem_late_mean": "Late Submission Rate",
+    "is_male": "Gender (Coded)",
+    "semester_no": "Observation Semester",
+    "stress_ordinal": "Stress Level (Coded)",
+    "study_hours_per_week": "Weekly Study Hours",
 }
 
 _UNCERTAINTY_NOTE = (
@@ -244,7 +283,30 @@ class StudentPredictionExplanationTool:
                     requested,
                 )
                 continue
-            row = await service.get_latest(student_id, prediction_type_id)
+            if prediction_type_id == "m3" and self._pool is not None:
+                try:
+                    from app.services.m3v2_prediction_service import (  # noqa: PLC0415
+                        M3V2PredictionService,
+                    )
+
+                    m3v2_svc = M3V2PredictionService(self._pool)
+                    m3v2_res = await m3v2_svc.predict(student_id)
+                    if m3v2_res.get("readiness_status") == "READY":
+                        row = {
+                            "prediction_type": "m3",
+                            "model_version": m3v2_res.get("model_version", "2.0"),
+                            "generated_at": datetime.now(timezone.utc),
+                            "input_row_count": 1,
+                            "prediction_count": 1,
+                            "prediction_value": m3v2_res,
+                        }
+                    else:
+                        row = None
+                except Exception as exc:
+                    logger.warning("Live M3V2 fetch for %s failed: %s", student_id, exc)
+                    row = await service.get_latest(student_id, prediction_type_id)
+            else:
+                row = await service.get_latest(student_id, prediction_type_id)
             if row is None:
                 if requested != "all_available":
                     # Controlled FALSE state for an explicitly requested type.
@@ -320,11 +382,23 @@ class StudentPredictionExplanationTool:
             common["source_semester"] = _int_or_none(value.get("source_semester"))
             common["target_semester"] = _int_or_none(value.get("target_semester"))
         elif prediction_type_id == "m3":
-            semester = _int_or_none(value.get("semester_no"))
-            common["source_semester"] = semester
-            common["target_semester"] = (
-                None if semester is None else semester + 1
+            source_sem = _int_or_none(value.get("observation_semester")) or _int_or_none(
+                value.get("semester_no")
             )
+            common["source_semester"] = source_sem
+            if "probability_at_risk" in value:
+                common["target_semester"] = None
+                prob = _float_or_none(value.get("probability_at_risk"))
+                thresh = _float_or_none(value.get("threshold")) or 0.64
+                pct_str = f"{round(float(prob) * 100, 1)}%" if prob is not None else "Unknown"
+                thresh_str = f"{round(float(thresh) * 100, 1)}%"
+                common["uncertainty"] = PredictionUncertainty(
+                    available=True,
+                    probability=prob,
+                    note=f"Estimated academic-risk probability: {pct_str} (decision threshold: {thresh_str}).",
+                )
+            else:
+                common["target_semester"] = None if source_sem is None else source_sem + 1
         elif prediction_type_id == "m4":
             common["note"] = _M4_NOTE
 
@@ -349,6 +423,25 @@ class StudentPredictionExplanationTool:
                 part for part in (common.get("note"), _EXPLANATION_UNAVAILABLE_NOTE)
                 if part
             ) or None
+
+        if prediction_type_id == "m3" and isinstance(value.get("signals"), list) and value["signals"]:
+            m3_factors: list[VerifiedFactor] = []
+            at_risk = bool(value.get("is_estimated_at_risk", False)) or ((common.get("uncertainty") and getattr(common["uncertainty"], "probability", None) or 0) >= (value.get("threshold") or 0.64))
+            for s in value["signals"]:
+                if isinstance(s, dict):
+                    f_name = s.get("feature") or ""
+                    lbl = M3_FEATURE_LABELS.get(f_name, f_name)
+                    r_val = s.get("raw_value")
+                    val_str = "Not available" if r_val is None else (f"{r_val}%" if "pct" in f_name or "percentage" in f_name else str(r_val))
+                    m3_factors.append(
+                        VerifiedFactor(
+                            kind="concern" if (at_risk and (s.get("importance") or 0) > 0.05) else "positive",
+                            source="input",
+                            detail=f"{lbl}: {val_str}",
+                        )
+                    )
+            if m3_factors:
+                common["verified_factors"] = m3_factors
 
         return StudentPrediction(**common)
 
@@ -393,8 +486,8 @@ class StudentPredictionExplanationTool:
         elif prediction_type_id == "m3":
             item = M3Prediction(
                 student_id=student_id,
-                semester_no=value.get("semester_no"),
-                is_at_risk_next_sem=int(value.get("is_at_risk_next_sem") or 0),
+                semester_no=value.get("observation_semester") or value.get("semester_no") or 1,
+                is_at_risk_next_sem=1 if value.get("is_estimated_at_risk") else int(value.get("is_at_risk_next_sem") or 0),
             )
         else:
             item = M4Score(

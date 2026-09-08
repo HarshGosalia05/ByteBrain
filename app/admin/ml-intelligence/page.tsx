@@ -4,7 +4,7 @@ import {
   getAdminMlFeedbackHealth,
   type AdminDashboardFilters,
 } from "@/lib/admin-api"
-import { ErrorState } from "@/components/shared/state/error-state"
+import { ErrorStateWithRetry } from "@/components/shared/state/error-state-with-retry"
 import { AdminMlIntelligenceGrid } from "@/components/admin/ml-intelligence/admin-ml-intelligence-grid"
 import { AdminMlFeedbackCard } from "@/components/admin/ml-intelligence/admin-ml-feedback-card"
 
@@ -39,7 +39,7 @@ export default async function AdminMlIntelligencePage(props: {
   ])
   if (!res.ok) {
     return (
-      <ErrorState
+      <ErrorStateWithRetry
         title="Failed to load Admin ML Intelligence"
         description={res.error.message}
       />

@@ -195,6 +195,76 @@ def _aggregate_learning(rows: pd.DataFrame, T: int) -> dict:
     }
 
 
+def _recover_prior_history(ss: pd.DataFrame, T: int) -> dict:
+    """Reproduce the Tier-1B point-in-time analytics at semester T.
+
+    For cohorts whose stored derived columns are NULL (e.g. the legacy STU00
+    cohort) even though the underlying base columns exist, recompute them
+    student-level with the EXACT formulas used for the 6A training cohort
+    (mirrors ``fix_supabase_dataset.fill_analytics``):
+
+      previous_sem_sgpa          = SGPA(T-1)
+      sgpa_drift                 = SGPA(T) - SGPA(T-1)
+      sgpa_rolling_mean_3        = trailing-3 SGPA mean (min_periods=1)
+      previous_sem_backlog_count = backlog_count(T-1)
+      backlog_change             = backlog_count(T) - backlog_count(T-1)
+      cumulative_backlog_events  = sum(backlog_count) up to T
+      attendance_aggregate_pct   = semester_attendance_percentage(T) @ 3 dp
+
+    Point-in-time contract is preserved: every value derives from semester T or
+    earlier, never from T+1. A missing base value stays NaN (never fabricated);
+    an unfinalized SGPA (0.0) is treated as missing and carried forward from the
+    previous completed semester, matching the completed-past logic above.
+    """
+    work = ss.sort_values("semester_no").copy()
+
+    def _num(col: str) -> pd.Series:
+        if col in work.columns:
+            return pd.to_numeric(work[col], errors="coerce")
+        return pd.Series(np.nan, index=work.index, dtype="float64")
+
+    sem = _num("semester_no")
+    sg = _num("semester_sgpa")
+    att = _num("semester_attendance_percentage")
+
+    sg_completed = sg.mask(sg <= 0).ffill()
+    prev_sgpa = sg_completed.shift(1)
+    drift = (sg_completed - prev_sgpa).round(2)
+    roll3 = sg_completed.rolling(3, min_periods=1).mean().round(3)
+
+    has_bc = "backlog_count" in work.columns
+    if has_bc:
+        bc = pd.to_numeric(work["backlog_count"], errors="coerce").fillna(0)
+        prev_bc = bc.shift(1).fillna(0)
+        bc_chg = (bc - prev_bc).round(1)
+        cum_bc = bc.cumsum()
+    else:
+        prev_bc = pd.Series(np.nan, index=work.index, dtype="float64")
+        bc_chg = prev_bc.copy()
+        cum_bc = prev_bc.copy()
+
+    att_agg = att.round(3)
+
+    mask = sem.eq(float(T))
+    idx = mask.idxmax() if mask.any() else None
+    out: dict[str, float] = {}
+    for key, series in [
+        ("previous_sem_sgpa", prev_sgpa),
+        ("sgpa_drift", drift),
+        ("sgpa_rolling_mean_3", roll3),
+        ("previous_sem_backlog_count", prev_bc),
+        ("backlog_change", bc_chg),
+        ("cumulative_backlog_events", cum_bc),
+        ("attendance_aggregate_pct", att_agg),
+    ]:
+        if idx is None:
+            out[key] = float("nan")
+            continue
+        v = series.loc[idx]
+        out[key] = float(v) if not pd.isna(v) else float("nan")
+    return out
+
+
 class M3V2Predictor:
     """Production inference engine for M3 v2 (at-risk classification)."""
 
@@ -433,6 +503,16 @@ class M3V2Predictor:
                 raw["previous_sem_sgpa"] = float(last_comp["semester_sgpa"])
             if pd.isna(raw.get("sgpa_rolling_mean_3")):
                 raw["sgpa_rolling_mean_3"] = float(completed_past["semester_sgpa"].tail(3).astype(float).mean())
+
+        # Point-in-time Tier-1B analytics: some cohorts store the derived columns
+        # as NULL even though the base columns (semester_sgpa, backlog_count,
+        # semester_attendance_percentage) exist. Reproduce them with the exact
+        # training-time formulas so production feature parity is preserved —
+        # fill ONLY when the stored value is missing; never fabricate from T+1.
+        derived_history = _recover_prior_history(ss, T)
+        for c in config.TIER1_PRIOR_HISTORY:
+            if c in raw and pd.isna(raw[c]) and not pd.isna(derived_history.get(c)):
+                raw[c] = derived_history[c]
 
         subj_rows = await conn.fetch(_INFER_SUBJECT_SQL, student_id)
         subj_df = pd.DataFrame([dict(r) for r in subj_rows]) if subj_rows else pd.DataFrame()

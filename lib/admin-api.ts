@@ -158,6 +158,7 @@ async function callFastapi<T>(
     query?: Record<string, string | number | null | undefined>
     method?: string
     body?: unknown
+    timeoutMs?: number
   },
 ): Promise<BffResult<T>> {
   const user = await getSessionUser()
@@ -213,7 +214,7 @@ async function callFastapi<T>(
       headers,
       body: options?.body ? JSON.stringify(options.body) : undefined,
       cache: "no-store",
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(options?.timeoutMs ?? 10_000),
     })
     if (!res.ok) {
       return { ok: false, error: toBffError(res.status) }
@@ -1066,6 +1067,9 @@ export function getAdminMLIntelligence(
 ): Promise<BffResult<AdminMlIntelligenceData>> {
   return callFastapi<AdminMlIntelligenceData>("ml-intelligence", BFF_TTL_MS, {
     query: filters as Record<string, string | number | null | undefined>,
+    // M1-M4 aggregation across the institution can exceed the default 10s
+    // timeout when the Supabase pooler connection is cold.
+    timeoutMs: 90_000,
   })
 }
 
@@ -1478,6 +1482,8 @@ export type AdminMlFeedbackHealth = {
 }
 
 export function getAdminMlFeedbackHealth(): Promise<BffResult<AdminMlFeedbackHealth>> {
-  return callFastapi<AdminMlFeedbackHealth>("ml-feedback", BFF_TTL_MS)
+  return callFastapi<AdminMlFeedbackHealth>("ml-feedback", BFF_TTL_MS, {
+    timeoutMs: 45_000,
+  })
 }
 
