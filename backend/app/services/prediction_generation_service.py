@@ -72,6 +72,8 @@ def resolve_model_version(prediction_type: str) -> Optional[str]:
         return "m1_v3_clean"
     if prediction_type == "m2":
         return "m2_tp_v1"
+    if prediction_type == "m3":
+        return "2.0"
     if prediction_type == "m4":
         try:
             from ml.src import registry  # noqa: PLC0415

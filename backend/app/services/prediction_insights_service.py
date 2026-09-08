@@ -68,11 +68,13 @@ class PredictionInsightsService:
         prediction_service: Any = None,
         explanation_service: Any = None,
         m2tp_service: Any = None,
+        m3v2_service: Any = None,
     ):
         self._pool = pool
         self._prediction = prediction_service
         self._explanation = explanation_service
         self._m2tp = m2tp_service
+        self._m3v2 = m3v2_service
 
     # ------------------------------------------------------------------
     # Lazy dependency resolution (keeps module import dependency-free)
@@ -187,31 +189,11 @@ class PredictionInsightsService:
         prediction_service = self._prediction_service()
         explanation_service = self._explanation_service()
 
-        # M3 readiness is contract-driven: when the unified offline inference
-        # contract reports M3 as BLOCKED (validation gate closed) the bundle
-        # reports it as unavailable so the UI shows the gate state instead of
-        # a risk badge. When the contract reports READY, M3 flows like every
-        # other model. (Persisted legacy M3 predictions remain reviewable
-        # through the separate faculty feedback flow, which labels them.)
-        try:
-            from ml.src.features import v1_inference_contract as _contract  # noqa: PLC0415
-            _m3_blocked = _contract.get_readiness("m3") == _contract.BLOCKED
-            _m3_reason = _contract.readiness_reason("m3") if _m3_blocked else None
-        except Exception:  # pragma: no cover - contract is unobtainable
-            _m3_blocked = True
-            _m3_reason = "M3 validation gate is currently blocked."
-
         models: dict[str, Any] = {}
         for prediction_type in PREDICTION_TYPES:
-            if prediction_type == "m3" and _m3_blocked:
-                models["m3"] = {
-                    "available": False,
-                    "reason": "blocked",
-                    "message": _m3_reason or "M3 validation gate is currently blocked.",
-                }
-                continue
             try:
                 raw = raw_inputs[prediction_type]
+                payload = None
                 if prediction_type == "m2":
                     # M2-TP: the validated M2-TP package serves next-semester
                     # Theory / Practical percentages (read-only, direct dict
@@ -246,6 +228,33 @@ class PredictionInsightsService:
                         input_row_count=1,
                         prediction_count=1,
                     )
+                elif prediction_type == "m3":
+                    # M3 V2: validated at-risk prediction package
+                    if self._m3v2 is None:
+                        from app.services.m3v2_prediction_service import (  # noqa: PLC0415
+                            M3V2PredictionService,
+                        )
+                        self._m3v2 = M3V2PredictionService(self._pool)
+                    from ml.src.inference import M3Prediction, PredictionResult  # noqa: PLC0415
+
+                    payload = await self._m3v2.predict(student_id)
+                    if payload.get("readiness_status") == "NO_DATA":
+                        raise ValueError(
+                            payload.get("reason")
+                            or "M3 V2 has no valid prediction for this student."
+                        )
+                    result = PredictionResult(
+                        model_id="m3",
+                        predictions=[
+                            M3Prediction(
+                                student_id=student_id,
+                                semester_no=payload.get("observation_semester"),
+                                is_at_risk_next_sem=1 if payload.get("is_estimated_at_risk") else 0,
+                            )
+                        ],
+                        input_row_count=1,
+                        prediction_count=1,
+                    )
                 else:
                     method = getattr(prediction_service, _GENERATION_METHODS[prediction_type])
 
@@ -265,9 +274,18 @@ class PredictionInsightsService:
 
                 explanation = await explanation_service.explain(result, **kwargs_exp)
                 
+                pred_dict = as_json_dict(result)
+                if prediction_type == "m3" and payload is not None:
+                    pred_dict["probability_at_risk"] = payload.get("probability_at_risk")
+                    pred_dict["threshold"] = payload.get("threshold")
+                    pred_dict["is_estimated_at_risk"] = payload.get("is_estimated_at_risk")
+                    pred_dict["signals"] = payload.get("signals")
+                    pred_dict["model_version"] = payload.get("model_version")
+                    pred_dict["observation_semester"] = payload.get("observation_semester")
+
                 models[prediction_type] = {
                     "available": True,
-                    "prediction": as_json_dict(result),
+                    "prediction": pred_dict,
                     "explanation": explanation.to_dict(),
                 }
             except ValueError as exc:

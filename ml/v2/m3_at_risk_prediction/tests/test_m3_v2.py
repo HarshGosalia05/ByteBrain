@@ -23,6 +23,7 @@ import pytest
 
 from v2.m3_at_risk_prediction import config
 from v2.m3_at_risk_prediction.preprocessing.pipeline import M3Preprocessor, select_features
+from v2.m3_at_risk_prediction.inference.predictor import _recover_prior_history
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -236,6 +237,174 @@ class TestLeakageGate:
         assert _is_forbidden("backlog_count") is False
         assert _is_forbidden("next_semester_sgpa") is True
         assert _is_forbidden("placement_status") is True
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tier-1B prior-history recovery (production feature parity)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestRecoverPriorHistory:
+    """_recover_prior_history reproduces the training-time Tier-1B analytics."""
+
+    def _summary(self, sgpa, backlog, att):
+        n = len(sgpa)
+        return pd.DataFrame({
+            "student_id": ["STU000001"] * n,
+            "semester_no": list(range(1, n + 1)),
+            "semester_sgpa": sgpa,
+            "semester_attendance_percentage": att,
+            "backlog_count": backlog,
+            # stored derived columns NULL (as in the legacy cohort)
+            "previous_sem_sgpa": np.nan,
+            "sgpa_drift": np.nan,
+            "sgpa_rolling_mean_3": np.nan,
+            "previous_sem_backlog_count": np.nan,
+            "backlog_change": np.nan,
+            "cumulative_backlog_events": np.nan,
+            "attendance_aggregate_pct": np.nan,
+        })
+
+    def test_matches_training_formulas(self):
+        ss = self._summary(
+            sgpa=[8.0, 7.75, 6.85, 7.48, 8.04, 7.77],
+            backlog=[0, 0, 1, 0, 0, 0],
+            att=[71.50, 71.43, 71.78, 70.83, 71.28, 72.73],
+        )
+        out = _recover_prior_history(ss, 6)
+        assert out["previous_sem_sgpa"] == pytest.approx(8.04)
+        assert out["sgpa_drift"] == pytest.approx(-0.27)
+        assert out["sgpa_rolling_mean_3"] == pytest.approx(7.763, abs=1e-3)
+        assert out["previous_sem_backlog_count"] == 0
+        assert out["backlog_change"] == 0
+        assert out["cumulative_backlog_events"] == 1
+        assert out["attendance_aggregate_pct"] == pytest.approx(72.73)
+
+    def test_semester_one_has_nan_prior_sgpa(self):
+        ss = self._summary(sgpa=[7.73, 7.75], backlog=[0, 0], att=[79.03, 79.83])
+        out = _recover_prior_history(ss, 1)
+        assert np.isnan(out["previous_sem_sgpa"])
+        assert np.isnan(out["sgpa_drift"])
+        assert out["attendance_aggregate_pct"] == pytest.approx(79.03)
+        assert out["previous_sem_backlog_count"] == 0
+
+    def test_unfinalized_row_carries_forward(self):
+        # T has unfinalized marks (0.0): previous SGPA/drift must NOT be the raw
+        # zero; the last completed value is carried forward (matching completed-past logic).
+        ss = self._summary(sgpa=[7.73, 7.75, 7.88, 7.87, 8.00, 7.77, 0.0],
+                           backlog=[0] * 7, att=[79] * 7)
+        out = _recover_prior_history(ss, 7)
+        assert out["previous_sem_sgpa"] == pytest.approx(7.77)
+        assert out["sgpa_drift"] == pytest.approx(0.0)
+        assert not np.isnan(out["sgpa_rolling_mean_3"])
+
+    def test_missing_base_stays_nan(self):
+        ss = self._summary(sgpa=[np.nan, np.nan], backlog=[0, 0], att=[np.nan, np.nan])
+        out = _recover_prior_history(ss, 2)
+        assert np.isnan(out["previous_sem_sgpa"])
+        assert np.isnan(out["sgpa_drift"])
+        assert np.isnan(out["sgpa_rolling_mean_3"])
+        assert np.isnan(out["attendance_aggregate_pct"])
+
+    def test_uses_only_present_columns_and_point_in_time(self):
+        # Input may drop attendance column: only base columns drive recovery.
+        ss = self._summary(sgpa=[8.0, 7.75], backlog=[0, 0], att=[80, 81])[["semester_no", "semester_sgpa", "backlog_count"]]
+        out = _recover_prior_history(ss, 2)
+        assert np.isnan(out["attendance_aggregate_pct"])
+        assert out["previous_sem_sgpa"] == pytest.approx(8.0)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tier-1D / 1E aggregates: missing-vs-zero semantics
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestMissingVsZeroAggregates:
+    """Attendance / learning extraction: NULL (not 0) when the source record is
+    absent, and the exact training-time definition when it is present."""
+
+    ATT_DF = pd.DataFrame([
+        {"semester_no": 1, "classes_held": 4, "classes_attended": 4,
+         "attendance_velocity": 0.5, "low_attendance_flag": "True"},
+        {"semester_no": 1, "classes_held": 6, "classes_attended": 3,
+         "attendance_velocity": 0.5, "low_attendance_flag": "False"},
+        {"semester_no": 2, "classes_held": 5, "classes_attended": 1,
+         "attendance_velocity": 0.3, "low_attendance_flag": "True"},
+    ])
+
+    LEARN_DF = pd.DataFrame([
+        {"semester_no": 1, "activity_volume": 5, "engagement_consistency": 0.5,
+         "assessment_completion_rate": 0.8, "late_submission_rate": 0.1},
+        {"semester_no": 1, "activity_volume": 7, "engagement_consistency": 0.5,
+         "assessment_completion_rate": 0.8, "late_submission_rate": 0.1},
+        {"semester_no": 2, "activity_volume": 9, "engagement_consistency": 0.6,
+         "assessment_completion_rate": 0.9, "late_submission_rate": 0.05},
+    ])
+
+    def test_attendance_null_when_no_rows_for_T(self):
+        from v2.m3_at_risk_prediction.inference.predictor import _aggregate_attendance
+        out = _aggregate_attendance(self.ATT_DF, 3)
+        assert np.isnan(out["att_tsem_total_pct"])
+        assert np.isnan(out["att_tsem_velocity_mean"])
+        assert np.isnan(out["att_tsem_low_pct_weeks"])
+
+    def test_attendance_null_when_no_classes_held(self):
+        from v2.m3_at_risk_prediction.inference.predictor import _aggregate_attendance
+        df = pd.DataFrame([
+            {"semester_no": 1, "classes_held": 0, "classes_attended": 0,
+             "attendance_velocity": None, "low_attendance_flag": "False"},
+        ])
+        out = _aggregate_attendance(df, 1)
+        assert np.isnan(out["att_tsem_total_pct"])  # division undefined -> NOT 0
+
+    def test_attendance_matches_training_definition(self):
+        from v2.m3_at_risk_prediction.inference.predictor import _aggregate_attendance
+        out = _aggregate_attendance(self.ATT_DF, 1)
+        assert out["att_tsem_total_pct"] == pytest.approx(70.0)   # 100 * 7/10
+        assert out["att_tsem_low_pct_weeks"] == pytest.approx(0.5)
+        assert out["att_tsem_velocity_mean"] == pytest.approx(0.5)
+
+    def test_learning_null_when_no_rows_for_T(self):
+        from v2.m3_at_risk_prediction.inference.predictor import _aggregate_learning
+        out = _aggregate_learning(self.LEARN_DF, 3)
+        assert np.isnan(out["learn_tsem_volume_total"])
+        assert np.isnan(out["learn_tsem_engagement_mean"])
+
+    def test_learning_volume_is_tsem_sum(self):
+        from v2.m3_at_risk_prediction.inference.predictor import _aggregate_learning
+        out = _aggregate_learning(self.LEARN_DF, 1)
+        assert out["learn_tsem_volume_total"] == pytest.approx(12.0)
+        assert out["learn_tsem_engagement_mean"] == pytest.approx(0.5)
+        assert out["learn_tsem_completion_mean"] == pytest.approx(0.8)
+        assert out["learn_tsem_late_mean"] == pytest.approx(0.1)
+
+    ATT_FB_DF = pd.DataFrame([
+        {"semester_no": 1, "total_classes": 40, "attended_classes": 38},
+        {"semester_no": 1, "total_classes": 45, "attended_classes": 35},
+        {"semester_no": 2, "total_classes": 40, "attended_classes": 40},
+    ])
+
+    def test_attendance_fallback_matches_training_definition(self):
+        from v2.m3_at_risk_prediction.inference.predictor import _aggregate_attendance_fallback
+        out = _aggregate_attendance_fallback(self.ATT_FB_DF, 1)
+        # ratio-of-sums 100 * (38+35)/(40+45) = 85.882..., NOT a mean of subject pct
+        assert out["att_tsem_total_pct"] == pytest.approx(100.0 * 73 / 85)
+        # weekly-grained features have no source -> NaN (never fabricated)
+        assert np.isnan(out["att_tsem_low_pct_weeks"])
+        assert np.isnan(out["att_tsem_velocity_mean"])
+
+    def test_attendance_fallback_null_when_no_rows_for_T(self):
+        from v2.m3_at_risk_prediction.inference.predictor import _aggregate_attendance_fallback
+        out = _aggregate_attendance_fallback(self.ATT_FB_DF, 3)
+        assert np.isnan(out["att_tsem_total_pct"])
+        assert np.isnan(out["att_tsem_low_pct_weeks"])
+        assert np.isnan(out["att_tsem_velocity_mean"])
+
+    def test_attendance_fallback_null_when_no_classes_held(self):
+        from v2.m3_at_risk_prediction.inference.predictor import _aggregate_attendance_fallback
+        df = pd.DataFrame([
+            {"semester_no": 1, "total_classes": 0, "attended_classes": 0},
+        ])
+        out = _aggregate_attendance_fallback(df, 1)
+        assert np.isnan(out["att_tsem_total_pct"])  # division undefined -> NOT 0
 
 
 # ──────────────────────────────────────────────────────────────────────────────

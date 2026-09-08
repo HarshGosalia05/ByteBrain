@@ -57,7 +57,7 @@ _TARGETS: dict[str, str] = {
 _NOTES: dict[str, str] = {
     "m1": "Supervised ML prediction of end-semester subject marks.",
     "m2": "M2-TP supervised ML prediction of next-semester Theory % and Practical/Lab % (m2_tp_v1).",
-    "m3": "Supervised ML binary classification of next-semester future risk (0/1).",
+    "m3": "Supervised ML estimate of academic risk based on the student's latest completed academic records.",
     "m4": "Deterministic rule-based career readiness score (not an ML model; not a placement guarantee).",
 }
 
@@ -104,9 +104,10 @@ class FacultyPredictionInsightsTool:
         # Fetch M1-M4 insights bundle
         raw_insights = await self._insights_service.get_student_insights(target_student_id)
 
+        models_dict = raw_insights.get("models") if isinstance(raw_insights.get("models"), dict) else raw_insights
         prediction_items: list[FacultyModelPredictionItem] = []
         for model_id in ("m1", "m2", "m3", "m4"):
-            model_data = raw_insights.get(model_id) or {}
+            model_data = models_dict.get(model_id) or {}
             available = bool(model_data.get("available", False))
             pred_val = model_data.get("prediction") or {}
             explanation = model_data.get("explanation") or {}
@@ -121,6 +122,39 @@ class FacultyPredictionInsightsTool:
                     if isinstance(f, dict):
                         verified_factors.append(
                             {"kind": f.get("kind"), "source": f.get("source"), "detail": f.get("detail")}
+                        )
+
+            if model_id == "m3" and isinstance(pred_val, dict) and pred_val.get("signals"):
+                from app.services.student_prediction_explanation_tool import (  # noqa: PLC0415
+                    M3_FEATURE_LABELS,
+                )
+
+                at_risk = bool(pred_val.get("is_estimated_at_risk", False)) or (
+                    (pred_val.get("probability_at_risk") or 0)
+                    >= (pred_val.get("threshold") or 0.64)
+                )
+                for s in pred_val.get("signals") or []:
+                    if isinstance(s, dict):
+                        f_name = s.get("feature") or ""
+                        lbl = M3_FEATURE_LABELS.get(f_name, f_name)
+                        r_val = s.get("raw_value")
+                        val_display = (
+                            "Not available"
+                            if r_val is None
+                            else (
+                                f"{r_val}%"
+                                if "pct" in f_name or "percentage" in f_name
+                                else str(r_val)
+                            )
+                        )
+                        verified_factors.append(
+                            {
+                                "kind": "concern"
+                                if (at_risk and (s.get("importance") or 0) > 0.05)
+                                else "positive",
+                                "source": "input",
+                                "detail": f"{lbl}: {val_display}",
+                            }
                         )
 
             prediction_items.append(
