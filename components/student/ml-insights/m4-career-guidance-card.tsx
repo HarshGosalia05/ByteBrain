@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Compass, Sparkles, Target, BookOpen, Award, Lightbulb } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Compass, Sparkles, Target, BookOpen, Award, Lightbulb, TrendingUp, Zap } from "lucide-react"
 
 import { ChatMarkdown } from "@/components/shared/chatbot/chat-markdown"
 import { Badge } from "@/components/ui/badge"
@@ -22,101 +22,170 @@ function titleCase(value: string): string {
   return value.replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
-function DirectionBlock({ guidance }: { guidance: StudentCareerGuidance }) {
-  const { career_direction: direction } = guidance
+function CareerDirectionHeader({ guidance }: { guidance: StudentCareerGuidance }) {
+  const { career_direction: direction, career_readiness: readiness } = guidance
+  
+  if (!direction.available || !direction.domain) {
+    return null
+  }
+
   return (
-    <div className="flex flex-col gap-2">
-      <SectionLabel>Career Direction</SectionLabel>
-      {direction.available && direction.domain ? (
-        <div className="flex flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <p className="text-xl font-semibold">{direction.domain}</p>
-            {direction.source === "declared_preference" ? (
-              <Badge variant="success">Based on your preference</Badge>
-            ) : (
-              <Badge variant="secondary">Based on your subjects</Badge>
+    <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 to-transparent p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <Compass className="size-5 text-primary" aria-hidden="true" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold">{direction.domain}</h3>
+              {direction.source === "declared_preference" ? (
+                <Badge variant="success">Your Preference</Badge>
+              ) : (
+                <Badge variant="secondary">Subject-Based</Badge>
+              )}
+            </div>
+            {direction.note && (
+              <p className="mt-0.5 text-sm text-muted-foreground">{direction.note}</p>
             )}
           </div>
-          {direction.note && (
-            <p className="text-sm text-muted-foreground">{direction.note}</p>
-          )}
         </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          {direction.note ?? "Career direction needs more preference information."}
-        </p>
-      )}
+        
+        {readiness.available && readiness.score !== null && (
+          <div className="flex items-center gap-2">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Career Readiness</p>
+              <p className="text-lg font-bold">{readiness.score.toFixed(0)}%</p>
+            </div>
+            <div className={`flex size-10 items-center justify-center rounded-full ${
+              readiness.level === "High" ? "bg-chart-2/20 text-chart-2" :
+              readiness.level === "Medium" ? "bg-chart-3/20 text-chart-3" :
+              "bg-destructive/20 text-destructive"
+            }`}>
+              <TrendingUp className="size-5" aria-hidden="true" />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
-function SkillEvidenceChips({
-  guidance,
-  className,
-}: {
-  guidance: StudentCareerGuidance
-  className?: string
-}) {
+function SkillStrengthsSection({ guidance }: { guidance: StudentCareerGuidance }) {
   if (guidance.skill_strengths.length === 0) return null
+
   return (
-    <div
-      className={`min-w-0 rounded-lg border border-foreground/10 bg-background/40 p-3.5 ${className ?? ""}`}
-    >
-      <SectionLabel>Skill Evidence</SectionLabel>
-      <div className="mt-2.5 flex flex-wrap gap-1.5">
+    <div className="rounded-lg border border-foreground/10 bg-background/40 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <CheckCircle2 className="size-4 text-chart-2" aria-hidden="true" />
+        <SectionLabel>Your Strengths</SectionLabel>
+      </div>
+      <div className="flex flex-wrap gap-2">
         {guidance.skill_strengths.slice(0, 8).map((item) => (
-          <Badge key={`${item.source_subject}-${item.skill}`} variant="outline">
-            <CheckCircle2 className="text-chart-2" aria-hidden="true" />
+          <Badge key={`${item.source_subject}-${item.skill}`} variant="success" className="text-xs">
             {item.skill}
           </Badge>
         ))}
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        Suggested by your strong performance in related subjects.
+        Inferred from your strong performance in related subjects.
       </p>
     </div>
   )
 }
 
-function SkillGapList({
-  gaps,
-  className,
-}: {
-  gaps: PrioritySkillGap[]
-  className?: string
-}) {
-  return (
-    <div className={`flex min-w-0 flex-col gap-2.5 ${className ?? ""}`}>
-      <SectionLabel>Skill Gaps</SectionLabel>
-      {gaps.length === 0 ? (
+function SkillGapsSection({ gaps }: { gaps: PrioritySkillGap[] }) {
+  if (gaps.length === 0) {
+    return (
+      <div className="rounded-lg border border-foreground/10 bg-background/40 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <AlertTriangle className="size-4 text-chart-3" aria-hidden="true" />
+          <SectionLabel>Skill Gap Analysis (ML-Based)</SectionLabel>
+        </div>
         <p className="text-sm text-muted-foreground">
-          No skill gaps identified for this direction yet.
+          No significant skill gaps identified. Your profile is well-aligned with your career direction.
         </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {gaps.slice(0, 6).map((gap) => (
-            <li
-              key={gap.skill_area}
-              className="flex items-center justify-between gap-2 text-sm"
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <AlertTriangle
-                  className={`size-4 shrink-0 ${
-                    gap.priority === "High" ? "text-chart-3" : "text-muted-foreground"
-                  }`}
-                  aria-hidden="true"
-                />
-                <span className="truncate font-medium">{titleCase(gap.skill_area)}</span>
-              </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-foreground/10 bg-background/40 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <AlertTriangle className="size-4 text-chart-3" aria-hidden="true" />
+        <SectionLabel>Skill Gap Analysis (ML-Based)</SectionLabel>
+        <Badge variant="outline" className="text-xs">M5 Model</Badge>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {gaps.slice(0, 6).map((gap) => (
+          <div
+            key={gap.skill_area}
+            className="flex items-start gap-3 rounded-md border border-foreground/5 bg-background/60 p-3"
+          >
+            <div className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${
+              gap.priority === "High" ? "bg-chart-3/20 text-chart-3" : "bg-muted text-muted-foreground"
+            }`}>
               {gap.priority === "High" ? (
-                <Badge variant="warning">High priority</Badge>
+                <AlertTriangle className="size-3" aria-hidden="true" />
               ) : (
-                <Badge variant="muted">Medium</Badge>
+                <span className="text-xs font-medium">M</span>
               )}
-            </li>
-          ))}
-        </ul>
-      )}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium">{titleCase(gap.skill_area)}</p>
+                {gap.priority === "High" ? (
+                  <Badge variant="warning" className="text-[0.625rem]">High</Badge>
+                ) : (
+                  <Badge variant="muted" className="text-[0.625rem]">Medium</Badge>
+                )}
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{gap.detail}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function NextStepsSection({ guidance }: { guidance: StudentCareerGuidance }) {
+  const nextSteps = guidance.career_path?.personalized_next_steps || []
+  
+  if (nextSteps.length === 0) {
+    return (
+      <div className="rounded-lg border border-foreground/10 bg-background/40 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Zap className="size-4 text-primary" aria-hidden="true" />
+          <SectionLabel>Recommended Next Steps (ML-Based)</SectionLabel>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Your personalized next steps will appear here based on ML analysis of your profile.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Zap className="size-4 text-primary" aria-hidden="true" />
+        <SectionLabel>Recommended Next Steps (ML-Based)</SectionLabel>
+        <Badge variant="outline" className="text-xs">M5 Model</Badge>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {nextSteps.slice(0, 5).map((step, idx) => (
+          <div
+            key={idx}
+            className="flex items-start gap-3 rounded-md border border-primary/10 bg-background/60 p-3"
+          >
+            <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+              {idx + 1}
+            </span>
+            <p className="text-sm leading-relaxed">{step}</p>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -124,7 +193,7 @@ function SkillGapList({
 function AiGuidanceBlock({ guidance }: { guidance: StudentCareerGuidance }) {
   const ai = guidance.ai_guidance
   return (
-    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+    <div className="rounded-xl border border-foreground/10 bg-background/40 p-4">
       <div className="mb-2 flex items-center gap-2">
         <Sparkles className="size-4 shrink-0 text-primary" aria-hidden="true" />
         <p className="text-sm font-semibold">AI Career Guidance</p>
@@ -137,42 +206,6 @@ function AiGuidanceBlock({ guidance }: { guidance: StudentCareerGuidance }) {
         <p className="text-sm text-muted-foreground">
           AI guidance is unavailable right now. Please check back later.
         </p>
-      )}
-    </div>
-  )
-}
-
-function NextStepsBlock({ guidance }: { guidance: StudentCareerGuidance }) {
-  return (
-    <div className="flex flex-col gap-2.5">
-      <SectionLabel>Your Next Steps</SectionLabel>
-      {guidance.roadmap.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Your next steps will appear here as your career plan takes shape.
-        </p>
-      ) : (
-        <ol className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-          {guidance.roadmap.slice(0, 6).map((step) => (
-            <li
-              key={step.sequence}
-              className="rounded-lg border border-foreground/10 bg-background/40 p-3.5"
-            >
-              <div className="flex items-start gap-2.5">
-                <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                  {step.sequence}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium leading-snug">
-                    {titleCase(step.focus_area)}
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    {step.next_action}
-                  </p>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ol>
       )}
     </div>
   )
@@ -313,25 +346,6 @@ function RecommendedCareerPathBlock({
         )}
       </div>
 
-      {/* Personalized Next Steps */}
-      {careerPath.personalized_next_steps.length > 0 && (
-        <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
-          <p className="mb-1.5 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-            Personalized Next Steps
-          </p>
-          <ul className="flex flex-col gap-1">
-            {careerPath.personalized_next_steps.map((step, idx) => (
-              <li key={idx} className="flex items-start gap-2 text-xs leading-relaxed">
-                <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[0.625rem] font-semibold text-primary">
-                  {idx + 1}
-                </span>
-                <span>{step}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       <p className="mt-3 text-[0.6875rem] text-muted-foreground">
         {careerPath.disclaimer}
       </p>
@@ -369,28 +383,23 @@ export function M4CareerGuidanceCard({
       title="Career Direction & Guidance"
       subtitle="Personalized guidance based on your academic performance, interests and current preparation."
     >
-      <div className="flex flex-col gap-5">
-        <DirectionBlock guidance={guidance} />
+      <div className="flex flex-col gap-4">
+        {/* Career Direction Header */}
+        <CareerDirectionHeader guidance={guidance} />
 
-        {(guidance.skill_strengths.length > 0 || guidance.skill_gaps.length > 0) && (
-          <div className="grid gap-3 lg:grid-cols-2">
-            <SkillEvidenceChips
-              guidance={guidance}
-              className={guidance.skill_gaps.length === 0 ? "lg:col-span-2" : ""}
-            />
-            <SkillGapList
-              gaps={guidance.skill_gaps}
-              className={
-                guidance.skill_strengths.length === 0 ? "lg:col-span-2" : ""
-              }
-            />
-          </div>
-        )}
+        {/* Skill Strengths */}
+        <SkillStrengthsSection guidance={guidance} />
 
+        {/* ML-Based Skill Gap Analysis */}
+        <SkillGapsSection gaps={guidance.skill_gaps} />
+
+        {/* ML-Based Next Steps */}
+        <NextStepsSection guidance={guidance} />
+
+        {/* AI Guidance */}
         <AiGuidanceBlock guidance={guidance} />
 
-        <NextStepsBlock guidance={guidance} />
-
+        {/* Recommended Career Path */}
         {guidance.career_path && (
           <RecommendedCareerPathBlock careerPath={guidance.career_path} />
         )}

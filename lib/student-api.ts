@@ -715,7 +715,7 @@ export type PrioritySkillGap = {
   skill_area: string
   priority: "High" | "Medium"
   detail: string
-  evidence: "not_verified"
+  evidence: "not_verified" | "ml_prediction" | "ml_enhanced" | "rule_based"
 }
 
 export type CareerRoadmapStep = {

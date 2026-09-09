@@ -65,7 +65,7 @@ class PrioritySkillGap(BaseModel):
     skill_area: str
     priority: Literal["High", "Medium"]
     detail: str
-    evidence: Literal["not_verified"] = "not_verified"
+    evidence: Literal["not_verified", "ml_prediction", "ml_enhanced", "rule_based"] = "not_verified"
 
     model_config = ConfigDict(extra="forbid")
 
