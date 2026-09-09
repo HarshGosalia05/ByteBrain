@@ -818,3 +818,184 @@ test("getFacultyStudentM3V2 rejects non-faculty / unlinked / anonymous", async (
   }
   assert.equal(getCalls("/predict/m3v2").length, 0)
 })
+
+// ---------------------------------------------------------------------------
+// Subjects teaching assignments â€” Current / Previous Batch / Teaching History
+// ---------------------------------------------------------------------------
+
+const CURRENT_SUBJECTS_BODY = {
+  faculty_id: "FAC-A",
+  semester_no: 7,
+  academic_year: "2026-27",
+  subjects: [
+    {
+      subject_id: "SUB0050",
+      subject_code: "CSE701",
+      subject_name: "Software Engineering",
+      credits: 4,
+      semester_no: 7,
+      academic_year: "2026-27",
+      class_strength: 50,
+      average_attendance: 86.97,
+      average_percentage: 83.2,
+      highest_marks: 98.0,
+      lowest_marks: 35.0,
+      average_grade: "A",
+      pass_percentage: 90.0,
+    },
+  ],
+}
+
+const PREVIOUS_BATCH_BODY = {
+  faculty_id: "FAC-A",
+  has_previous: true,
+  semester_no: 6,
+  academic_year: "2025-26",
+  subjects: [
+    {
+      subject_id: "SUB0044",
+      subject_code: "CSE601",
+      subject_name: "DBMS",
+      credits: 4,
+      semester_no: 6,
+      academic_year: "2025-26",
+      class_strength: 50,
+      average_attendance: 84.12,
+      average_percentage: 81.0,
+      highest_marks: 97.0,
+      lowest_marks: 32.0,
+      average_grade: "B+",
+      pass_percentage: 88.0,
+    },
+  ],
+}
+
+const HISTORY_BODY = {
+  faculty_id: "FAC-A",
+  current_semester: 7,
+  current_academic_year: "2026-27",
+  terms: [
+    {
+      semester_no: 6,
+      academic_year: "2025-26",
+      subjects: 1,
+      students: 50,
+      average_attendance: 84.12,
+      average_performance: 81.0,
+      pass_percentage: 88.0,
+      subject_cards: [PREVIOUS_BATCH_BODY.subjects[0]],
+    },
+    {
+      semester_no: 7,
+      academic_year: "2026-27",
+      subjects: 1,
+      students: 50,
+      average_attendance: 86.97,
+      average_performance: 83.2,
+      pass_percentage: 90.0,
+      subject_cards: [CURRENT_SUBJECTS_BODY.subjects[0]],
+    },
+  ],
+}
+
+test("getFacultyCurrentSubjects fetches subjects/current with faculty auth", async () => {
+  route("/subjects/current", 200, CURRENT_SUBJECTS_BODY)
+
+  const result = await facultyApi.getFacultyCurrentSubjects()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.semester_no, 7)
+  assert.equal(result.data.academic_year, "2026-27")
+  assert.equal(result.data.subjects.length, 1)
+  assert.equal(result.data.subjects[0].class_strength, 50)
+  assert.equal(result.data.subjects[0].average_attendance, 86.97)
+
+  const hit = getCalls("/subjects/current")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/faculty/subjects/current")
+  const headers = hit[0].init?.headers as Record<string, string>
+  assert.equal(headers["Authorization"], `Bearer ${MOCK_TOKEN}`)
+})
+
+test("getFacultyCurrentSubjects caches within TTL per faculty", async () => {
+  route("/subjects/current", 200, CURRENT_SUBJECTS_BODY)
+
+  await facultyApi.getFacultyCurrentSubjects()
+  await facultyApi.getFacultyCurrentSubjects()
+  assert.equal(getCalls("/subjects/current").length, 1)
+})
+
+test("getFacultyPreviousBatch fetches subjects/previous and reports has_previous", async () => {
+  route("/subjects/previous", 200, PREVIOUS_BATCH_BODY)
+
+  const result = await facultyApi.getFacultyPreviousBatch()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.has_previous, true)
+  assert.equal(result.data.semester_no, 6)
+  assert.equal(result.data.academic_year, "2025-26")
+  assert.equal(result.data.subjects[0].subject_code, "CSE601")
+
+  const hit = getCalls("/subjects/previous")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/faculty/subjects/previous")
+})
+
+test("getFacultyPreviousBatch preserves has_previous=false empty state", async () => {
+  route("/subjects/previous", 200, {
+    faculty_id: "FAC-A",
+    has_previous: false,
+    semester_no: null,
+    academic_year: null,
+    subjects: [],
+  })
+
+  const result = await facultyApi.getFacultyPreviousBatch()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.has_previous, false)
+  assert.equal(result.data.semester_no, null)
+  assert.equal(result.data.subjects.length, 0)
+})
+
+test("getFacultyTeachingHistory fetches grouped teaching history", async () => {
+  route("/subjects/history", 200, HISTORY_BODY)
+
+  const result = await facultyApi.getFacultyTeachingHistory()
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.data.current_semester, 7)
+  assert.equal(result.data.terms.length, 2)
+  const term6 = result.data.terms[0]
+  assert.equal(term6.semester_no, 6)
+  assert.equal(term6.subject_cards[0].subject_code, "CSE601")
+
+  const hit = getCalls("/subjects/history")
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].url, "http://localhost:8000/api/v1/faculty/subjects/history")
+})
+
+test("teaching-assignment endpoints reject unlinked / non-faculty sessions", async () => {
+  activeSession = null
+  const anon = await facultyApi.getFacultyCurrentSubjects()
+  assert.equal(anon.ok, false)
+  if (!anon.ok) assert.equal(anon.error.status, 401)
+
+  activeSession = { ...DEFAULT_SESSION, role: "Student", student_id: "STU-A" }
+  const wrongRole = await facultyApi.getFacultyTeachingHistory()
+  assert.equal(wrongRole.ok, false)
+  if (!wrongRole.ok) assert.equal(wrongRole.error.status, 403)
+
+  activeSession = { ...DEFAULT_SESSION, faculty_id: null }
+  const unlinked = await facultyApi.getFacultyPreviousBatch()
+  assert.equal(unlinked.ok, false)
+  if (!unlinked.ok) {
+    assert.equal(unlinked.error.status, 400)
+    assert.equal(unlinked.error.code, "unlinked")
+  }
+  assert.equal(
+    getCalls("/subjects/current").length + getCalls("/subjects/history").length +
+      getCalls("/subjects/previous").length,
+    0,
+  )
+})

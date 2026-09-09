@@ -348,6 +348,38 @@ class FacultySubjectsResponse(BaseModel):
     cards: List[FacultyClassCard]
     pagination: FacultyPagination
 
+class FacultyCurrentSubjectsResponse(BaseModel):
+    """Subjects the authenticated faculty teaches in the current/live term."""
+    faculty_id: str
+    semester_no: Optional[int]
+    academic_year: Optional[str]
+    subjects: List[FacultyClassCard]
+
+class FacultyPreviousBatchResponse(BaseModel):
+    """Subjects the authenticated faculty taught in the preceding batch/term."""
+    faculty_id: str
+    has_previous: bool
+    semester_no: Optional[int]
+    academic_year: Optional[str]
+    subjects: List[FacultyClassCard]
+
+class FacultyHistoryTerm(BaseModel):
+    semester_no: int
+    academic_year: str
+    subjects: int
+    students: int
+    average_attendance: Optional[float]
+    average_performance: Optional[float]
+    pass_percentage: Optional[float]
+    subject_cards: List[FacultyClassCard]
+
+class FacultyTeachingHistoryResponse(BaseModel):
+    """Aggregated teaching history grouped by term for the authenticated faculty."""
+    faculty_id: str
+    current_semester: Optional[int]
+    current_academic_year: Optional[str]
+    terms: List[FacultyHistoryTerm]
+
 class FacultySubjectGradeItem(BaseModel):
     grade: str
     count: int

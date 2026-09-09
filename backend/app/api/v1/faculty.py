@@ -18,6 +18,9 @@ from app.schemas.faculty import (
     FacultyStudentOverview,
     FacultyStudentProfileView,
     FacultySubjectsResponse,
+    FacultyCurrentSubjectsResponse,
+    FacultyPreviousBatchResponse,
+    FacultyTeachingHistoryResponse,
     FacultySubjectDetail,
     FacultySubjectHistory,
     PerformanceSummary,
@@ -410,6 +413,27 @@ async def get_my_subjects(
         _faculty_id_or_error(user),
         semester_no, year, search, page, page_size, sort, order, all_terms, batch_val,
     )
+
+@router.get("/subjects/current", response_model=FacultyCurrentSubjectsResponse)
+async def get_current_subjects(
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_current_subjects(_faculty_id_or_error(user))
+
+@router.get("/subjects/previous", response_model=FacultyPreviousBatchResponse)
+async def get_previous_batch_subjects(
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_previous_batch(_faculty_id_or_error(user))
+
+@router.get("/subjects/history", response_model=FacultyTeachingHistoryResponse)
+async def get_teaching_history(
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_teaching_history(_faculty_id_or_error(user))
 
 @router.get("/subjects/{subject_id}/history", response_model=FacultySubjectHistory)
 async def get_subject_history(

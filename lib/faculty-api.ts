@@ -352,6 +352,39 @@ export type FacultySubjectsResponse = {
   pagination: FacultyPagination
 }
 
+export type FacultyCurrentSubjectsResponse = {
+  faculty_id: string
+  semester_no: number | null
+  academic_year: string | null
+  subjects: FacultyClassCard[]
+}
+
+export type FacultyPreviousBatchResponse = {
+  faculty_id: string
+  has_previous: boolean
+  semester_no: number | null
+  academic_year: string | null
+  subjects: FacultyClassCard[]
+}
+
+export type FacultyHistoryTerm = {
+  semester_no: number
+  academic_year: string
+  subjects: number
+  students: number
+  average_attendance: number | null
+  average_performance: number | null
+  pass_percentage: number | null
+  subject_cards: FacultyClassCard[]
+}
+
+export type FacultyTeachingHistoryResponse = {
+  faculty_id: string
+  current_semester: number | null
+  current_academic_year: string | null
+  terms: FacultyHistoryTerm[]
+}
+
 export type FacultySubjectGradeItem = {
   grade: string
   count: number
@@ -1270,6 +1303,18 @@ export function getFacultySubjects(params?: {
   const query = searchParams.toString()
   const path = query ? `subjects?${query}` : "subjects"
   return callFastapi<FacultySubjectsResponse>(path, BFF_TTL_MS)
+}
+
+export function getFacultyCurrentSubjects(): Promise<BffResult<FacultyCurrentSubjectsResponse>> {
+  return callFastapi<FacultyCurrentSubjectsResponse>("subjects/current", BFF_TTL_MS)
+}
+
+export function getFacultyPreviousBatch(): Promise<BffResult<FacultyPreviousBatchResponse>> {
+  return callFastapi<FacultyPreviousBatchResponse>("subjects/previous", BFF_TTL_MS)
+}
+
+export function getFacultyTeachingHistory(): Promise<BffResult<FacultyTeachingHistoryResponse>> {
+  return callFastapi<FacultyTeachingHistoryResponse>("subjects/history", BFF_TTL_MS)
 }
 
 export function getFacultySubjectDetail(

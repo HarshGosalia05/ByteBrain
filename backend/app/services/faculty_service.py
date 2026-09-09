@@ -1,5 +1,6 @@
 import asyncpg
 import math
+from collections import OrderedDict
 from datetime import date
 from typing import Any, Dict, List, Optional
 from app.core.config import (
@@ -58,6 +59,10 @@ from app.schemas.faculty import (
     FacultySubjectDetail,
     FacultySubjectHistoryItem,
     FacultySubjectHistory,
+    FacultyCurrentSubjectsResponse,
+    FacultyPreviousBatchResponse,
+    FacultyHistoryTerm,
+    FacultyTeachingHistoryResponse,
     PerformanceFilters,
     PerformanceAppliedFilters,
     PerformanceKpi,
@@ -1148,6 +1153,95 @@ class FacultyService:
                 )
                 for r in rows
             ],
+        )
+
+    async def get_current_subjects(self, faculty_id: str) -> FacultyCurrentSubjectsResponse:
+        """Subjects the authenticated faculty teaches in the current/live term."""
+        await self._ensure_profile(faculty_id)
+        term = await self.repo.get_current_term(faculty_id)
+        if not term:
+            return FacultyCurrentSubjectsResponse(
+                faculty_id=faculty_id, semester_no=None, academic_year=None, subjects=[]
+            )
+        rows = await self.repo.get_subject_cards(
+            faculty_id, term["semester_no"], term["academic_year"], None, "sse.subject_name ASC"
+        )
+        return FacultyCurrentSubjectsResponse(
+            faculty_id=faculty_id,
+            semester_no=term["semester_no"],
+            academic_year=term["academic_year"],
+            subjects=[self._class_card_from_row(r) for r in rows],
+        )
+
+    async def get_previous_batch(self, faculty_id: str) -> FacultyPreviousBatchResponse:
+        """Subjects taught in the term immediately preceding the current term.
+
+        The previous term is resolved dynamically from the faculty's actual
+        teaching sequence rather than hardcoding a semester/year, so the
+        semantics hold at every semester boundary (e.g. sem 1 -> no previous).
+        """
+        await self._ensure_profile(faculty_id)
+        term = await self.repo.get_current_term(faculty_id)
+        if not term:
+            return FacultyPreviousBatchResponse(
+                faculty_id=faculty_id, has_previous=False, semester_no=None, academic_year=None,
+                subjects=[],
+            )
+        seq = await self.repo.get_term_sequence(faculty_id)
+        cursor = (term["academic_year"], term["semester_no"])
+        prev = None
+        for t in seq:
+            if (t["academic_year"], t["semester_no"]) >= cursor:
+                break
+            prev = t
+        if prev is None:
+            return FacultyPreviousBatchResponse(
+                faculty_id=faculty_id, has_previous=False, semester_no=None, academic_year=None,
+                subjects=[],
+            )
+        rows = await self.repo.get_subject_cards(
+            faculty_id, prev["semester_no"], prev["academic_year"], None, "sse.subject_name ASC"
+        )
+        return FacultyPreviousBatchResponse(
+            faculty_id=faculty_id,
+            has_previous=True,
+            semester_no=prev["semester_no"],
+            academic_year=prev["academic_year"],
+            subjects=[self._class_card_from_row(r) for r in rows],
+        )
+
+    async def get_teaching_history(self, faculty_id: str) -> FacultyTeachingHistoryResponse:
+        """Teaching history grouped by term (oldest first) for the faculty."""
+        await self._ensure_profile(faculty_id)
+        term = await self.repo.get_current_term(faculty_id)
+        rows = await self.repo.get_subject_cards(
+            faculty_id, None, None, None, "sse.academic_year ASC, sse.semester_no ASC"
+        )
+        groups: "OrderedDict[tuple[str, int], List[FacultyClassCard]]" = OrderedDict()
+        for r in rows:
+            card = self._class_card_from_row(r)
+            key = (card.academic_year, card.semester_no)
+            groups.setdefault(key, []).append(card)
+
+        terms: List[FacultyHistoryTerm] = []
+        for (year, sem), cards in groups.items():
+            terms.append(
+                FacultyHistoryTerm(
+                    semester_no=sem,
+                    academic_year=year,
+                    subjects=len(cards),
+                    students=sum(c.class_strength for c in cards),
+                    average_attendance=self._average([c.average_attendance for c in cards]),
+                    average_performance=self._average([c.average_percentage for c in cards]),
+                    pass_percentage=self._average([c.pass_percentage for c in cards]),
+                    subject_cards=cards,
+                )
+            )
+        return FacultyTeachingHistoryResponse(
+            faculty_id=faculty_id,
+            current_semester=term["semester_no"] if term else None,
+            current_academic_year=term["academic_year"] if term else None,
+            terms=terms,
         )
 
     def _find_previous_term(

@@ -76,6 +76,20 @@ class FacultyRepository:
             row = await conn.fetchrow(query, faculty_id)
             return dict(row) if row else None
 
+    async def get_term_sequence(self, faculty_id: str) -> List[Dict[str, Any]]:
+        """Distinct terms taught by the faculty in chronological order
+        (oldest first). Used to resolve the term immediately preceding the
+        current term without hardcoding semester/year values."""
+        query = """
+            SELECT DISTINCT semester_no, academic_year
+            FROM student_subject_enrollment
+            WHERE faculty_id = $1 AND enrollment_status = 'Active'
+            ORDER BY academic_year ASC, semester_no ASC
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, faculty_id)
+            return [dict(row) for row in rows]
+
     async def get_term_overview(self, faculty_id: str, semester_no: int) -> Dict[str, Any]:
         query = """
             SELECT 

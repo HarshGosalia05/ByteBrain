@@ -17,9 +17,10 @@ const pool =
             process.env.DB_PORT === "6543"
           ? { rejectUnauthorized: false }
           : undefined,
-    connectionTimeoutMillis: 10000,
-    max: 5,
+    connectionTimeoutMillis: 15000,
+    max: 10,
     idleTimeoutMillis: 30000,
+    connectionRetryErrorCodes: ["ECONNRESET", "ETIMEDOUT", "57P01", "57P02"],
   })
 
 if (process.env.NODE_ENV !== "production") {
@@ -35,4 +36,6 @@ export async function query(text: string, params?: unknown[]) {
     client.release()
   }
 }
+
+export { pool }
 

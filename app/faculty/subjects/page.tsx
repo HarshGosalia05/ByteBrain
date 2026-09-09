@@ -1,7 +1,12 @@
 import { requireRole } from "@/lib/session"
-import { getFacultySubjects } from "@/lib/faculty-api"
+import {
+  getFacultySubjects,
+  getFacultyCurrentSubjects,
+  getFacultyPreviousBatch,
+  getFacultyTeachingHistory,
+} from "@/lib/faculty-api"
 import { ErrorState } from "@/components/shared/state/error-state"
-import { SubjectsView } from "@/components/faculty/subjects/subjects-view"
+import { SubjectsTabsView } from "@/components/faculty/subjects/subjects-tabs-view"
 
 export default async function SubjectsPage(props: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -22,20 +27,58 @@ export default async function SubjectsPage(props: {
     typeof searchParams.order === "string" ? (searchParams.order as "asc" | "desc") : undefined
   const all_terms = searchParams.all_terms === "true"
 
-  const res = await getFacultySubjects({ page, search, semester, academic_year, batch, sort, order, all_terms })
-  if (!res.ok) {
-    return <ErrorState title="Failed to load subjects" description={res.error.message} />
+  const [allResult, currentResult, previousResult, historyResult] = await Promise.allSettled([
+    getFacultySubjects({ page, search, semester, academic_year, batch, sort, order, all_terms }),
+    getFacultyCurrentSubjects(),
+    getFacultyPreviousBatch(),
+    getFacultyTeachingHistory(),
+  ])
+
+  if (allResult.status !== "fulfilled" || !allResult.value.ok) {
+    const error = allResult.status === "fulfilled" ? allResult.value : allResult.reason
+    return (
+      <ErrorState
+        title="Failed to load subjects"
+        description={error?.error?.message ?? "Unable to load subjects right now."}
+      />
+    )
   }
+  const allData = allResult.value.data
+
+  const current =
+    currentResult.status === "fulfilled" && currentResult.value.ok
+      ? currentResult.value.data
+      : null
+  const previous =
+    previousResult.status === "fulfilled" && previousResult.value.ok
+      ? previousResult.value.data
+      : null
+  const history =
+    historyResult.status === "fulfilled" && historyResult.value.ok
+      ? historyResult.value.data
+      : null
 
   return (
     <div className="flex flex-col gap-6 p-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Subjects</h1>
         <p className="text-muted-foreground mt-2">
-          Subjects you teach, with enrollment, performance and attendance per subject.
+          Current-semester subjects, previous-batch teaching history and your full teaching record.
         </p>
       </div>
-      <SubjectsView data={res.data} />
+      <SubjectsTabsView
+        allData={allData}
+        currentData={current}
+        previousData={previous}
+        historyData={history}
+        initialTab={
+          typeof searchParams.tab === "string"
+            ? searchParams.tab
+            : current
+              ? "current"
+              : "all"
+        }
+      />
     </div>
   )
 }
