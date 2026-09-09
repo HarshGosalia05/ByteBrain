@@ -85,8 +85,9 @@ export function AdminMlIntelligenceGrid({ data }: { data: AdminMlIntelligenceDat
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Institution-level academic forecasts, future risk predictions, and career readiness analytics
+            Institution-level academic forecasts, same-semester end-term risk predictions, and career readiness analytics
           </p>
+
         </div>
 
         {/* Filter Bar */}

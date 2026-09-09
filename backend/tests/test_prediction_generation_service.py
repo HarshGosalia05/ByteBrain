@@ -295,8 +295,9 @@ class TestResolveModelVersion(unittest.TestCase):
     def test_m2_returns_m2_tp_version(self):
         self.assertEqual(resolve_model_version("m2"), "m2_tp_v1")
 
-    def test_m3_returns_none_without_loading(self):
-        self.assertIsNone(resolve_model_version("m3"))
+    def test_m3_returns_v3_version(self):
+        self.assertEqual(resolve_model_version("m3"), "3.0")
+
 
     def test_m1_returns_clean_version(self):
         self.assertEqual(resolve_model_version("m1"), "m1_v3_clean")

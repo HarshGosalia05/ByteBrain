@@ -232,9 +232,14 @@ class AdminMLService:
                 if isinstance(val, dict):
                     if val.get("source_semester") is not None:
                         return int(val.get("source_semester"))
+                    if val.get("observation_semester") is not None:
+                        return int(val.get("observation_semester"))
+                    if val.get("prediction_target_semester") is not None:
+                        return int(val.get("prediction_target_semester"))
                     if val.get("semester_no") is not None:
                         return int(val.get("semester_no"))
                 return 0
+
             except (TypeError, ValueError):
                 return 0
 
@@ -344,6 +349,87 @@ class AdminMLService:
         dept_m3_risk: Dict[str, Dict[str, Any]] = {}
         sem_m3_risk: Dict[int, Dict[str, Any]] = {}
 
+        # --- Heuristic risk supplement ---
+        # The M3 ML model was trained on synthetic data with extreme class
+        # imbalance, causing it to predict near-zero risk for all production
+        # students.  We apply deterministic heuristics on top of the ML
+        # predictions so the dashboard surfaces real risk signals.
+        m3_student_ids = [r["student_id"] for r in m3_rows]
+        heuristic_risk_map: Dict[str, List[str]] = {}  # student_id -> [reasons]
+        if m3_student_ids:
+            try:
+                async with self._pool.acquire() as hs_conn:
+                    hs_rows = await hs_conn.fetch(
+                        """
+                        SELECT student_id, semester_no, semester_sgpa,
+                               semester_attendance_percentage, backlog_count
+                        FROM student_semester_summary
+                        WHERE student_id = ANY($1::varchar[])
+                        ORDER BY student_id, semester_no
+                        """,
+                        m3_student_ids,
+                    )
+                from collections import defaultdict
+                ss_by_student: Dict[str, list] = defaultdict(list)
+                for sr in hs_rows:
+                    ss_by_student[sr["student_id"]].append(dict(sr))
+
+                for sid, sems in ss_by_student.items():
+                    sems.sort(key=lambda x: x["semester_no"])
+                    if not sems:
+                        continue
+                    reasons: List[str] = []
+                    latest = sems[-1]
+
+                    # 1. Attendance risk: current semester < 85%
+                    att = latest.get("semester_attendance_percentage")
+                    if att is not None:
+                        try:
+                            if float(att) < 85.0:
+                                reasons.append(f"Attendance {float(att):.1f}% < 85%")
+                        except (ValueError, TypeError):
+                            pass
+
+                    # 2. Backlog risk: any current backlogs
+                    bl = latest.get("backlog_count")
+                    if bl is not None:
+                        try:
+                            if int(bl) > 0:
+                                reasons.append(f"{int(bl)} active backlog(s)")
+                        except (ValueError, TypeError):
+                            pass
+
+                    # 3. SGPA decline: dropped > 0.5 from previous semester
+                    if len(sems) >= 2:
+                        try:
+                            cur_sgpa = float(sems[-1].get("semester_sgpa") or 0)
+                            prev_sgpa = float(sems[-2].get("semester_sgpa") or 0)
+                            if cur_sgpa > 0 and prev_sgpa > 0:
+                                drop = prev_sgpa - cur_sgpa
+                                if drop > 0.5:
+                                    reasons.append(f"SGPA dropped {drop:.2f} (from {prev_sgpa:.2f} to {cur_sgpa:.2f})")
+                        except (ValueError, TypeError):
+                            pass
+
+                    # 4. Rolling SGPA < 7.0 across completed semesters
+                    sgpa_vals = []
+                    for s in sems:
+                        try:
+                            v = float(s.get("semester_sgpa") or 0)
+                            if v > 0:
+                                sgpa_vals.append(v)
+                        except (ValueError, TypeError):
+                            pass
+                    if sgpa_vals:
+                        rolling_avg = sum(sgpa_vals) / len(sgpa_vals)
+                        if rolling_avg < 7.0:
+                            reasons.append(f"Rolling avg SGPA {rolling_avg:.2f} < 7.0")
+
+                    if reasons:
+                        heuristic_risk_map[sid] = reasons
+            except Exception as exc:
+                logger.warning("Heuristic risk query failed (non-fatal): %s", exc)
+
         for r in m3_rows:
             sid = r["student_id"]
             sinfo = student_map.get(sid, {})
@@ -371,15 +457,29 @@ class AdminMLService:
             pval = r["parsed_value"]
             m3_items = (
                 [pval]
-                if isinstance(pval, dict) and "is_at_risk_next_sem" in pval
+                if isinstance(pval, dict)
+                and (
+                    "is_at_risk_next_sem" in pval
+                    or "is_estimated_at_risk" in pval
+                    or "is_at_risk_end_sem" in pval
+                )
                 else (pval.get("predictions", []) if isinstance(pval, dict) else [])
             )
 
             student_at_risk = False
             for item in m3_items:
-                if isinstance(item, dict) and item.get("is_at_risk_next_sem") == 1:
-                    student_at_risk = True
-                    break
+                if isinstance(item, dict):
+                    if (
+                        item.get("is_at_risk_next_sem") == 1
+                        or item.get("is_estimated_at_risk") is True
+                        or item.get("is_at_risk_end_sem") == 1
+                    ):
+                        student_at_risk = True
+                        break
+
+            # Supplement with heuristic risk if ML model says "safe"
+            if not student_at_risk and sid in heuristic_risk_map:
+                student_at_risk = True
 
             if student_at_risk:
                 future_at_risk_count += 1
@@ -427,8 +527,10 @@ class AdminMLService:
             future_risk_by_department=future_risk_dept_items,
             future_risk_by_semester=future_risk_sem_items,
             disclaimer=(
-                "M3 is a machine learning future-risk prediction model forecasting next-semester risk. "
-                "It is strictly separate from the current deterministic Risk Register (risk_predictions)."
+                "M3 is a machine learning future-risk prediction model forecasting next-semester risk, "
+                "supplemented by deterministic risk heuristics (attendance < 85%, SGPA decline > 0.5, "
+                "active backlogs, rolling SGPA < 7.0). It is strictly separate from the current "
+                "deterministic Risk Register (risk_predictions)."
             ),
         )
 
@@ -775,7 +877,8 @@ class AdminMLService:
                 title="M3 Future-Risk Forecast vs Deterministic Risk Register",
                 detail=(
                     f"The M3 machine learning model forecasts {future_at_risk_count} student(s) at "
-                    f"future academic risk for next semester ({future_at_risk_pct or 0.0}% of evaluated students). "
+                    f"future academic risk for next semester ({future_at_risk_pct or 0.0}% of evaluated students), "
+                    f"including heuristic-based flags (attendance, SGPA decline, backlogs). "
                     f"In comparison, {current_high_critical_count} student(s) are currently in High or Critical "
                     "status in the deterministic Risk Register."
                 ),

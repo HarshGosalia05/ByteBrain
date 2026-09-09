@@ -25,11 +25,13 @@ from app.services.m1v2_prediction_service import M1V2PredictionService
 from app.services.m1v3_prediction_service import M1V3PredictionService
 from app.services.m2tp_prediction_service import M2TPPredictionService
 from app.services.m3v2_prediction_service import M3V2PredictionService
+from app.services.m3v3_prediction_service import M3V3PredictionService
 from app.services.faculty_service import FacultyService
 from app.schemas import m1v2 as schemas
 from app.schemas import m1v3 as m1v3_schemas
 from app.schemas import m2tp as m2tp_schemas
 from app.schemas import m3v2 as m3v2_schemas
+from app.schemas import m3v3 as m3v3_schemas
 
 router = APIRouter(prefix="/predict", tags=["predictions"])
 
@@ -73,6 +75,12 @@ def get_m3v2_prediction_service(
     pool: asyncpg.Pool = Depends(get_db_pool),
 ) -> M3V2PredictionService:
     return M3V2PredictionService(pool)
+
+
+def get_m3v3_prediction_service(
+    pool: asyncpg.Pool = Depends(get_db_pool),
+) -> M3V3PredictionService:
+    return M3V3PredictionService(pool)
 
 
 def get_generation_service(pool: asyncpg.Pool = Depends(get_db_pool)) -> PredictionGenerationService:
@@ -359,6 +367,62 @@ async def predict_m3_v2(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="M3 V2 service is temporarily unavailable",
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Prediction service temporarily unavailable",
+        )
+    return result
+
+
+@router.get(
+    "/m3v3/{student_id}",
+    response_model=m3v3_schemas.M3V3PredictionResponse,
+    responses={
+        404: {"model": m3v3_schemas.M3V3Error},
+        503: {"model": m3v3_schemas.M3V3Error},
+        500: {"model": m3v3_schemas.M3V3Error},
+    },
+    tags=["predictions"],
+)
+
+async def predict_m3_v3(
+    student_id: str,
+    service: M3V3PredictionService = Depends(get_m3v3_prediction_service),
+    faculty_service: FacultyService = Depends(get_faculty_service),
+    user: dict = Depends(get_current_user),
+):
+    """Estimate a student's same-semester end-term risk with M3 V3.
+
+    M3 V3 predicts whether a student is likely to enter an academic-risk
+    state in the SAME semester's end-term, using mid-semester features only.
+
+    Business requirement:
+        BBA: Semester 5 Mid-Sem → Semester 5 End-Term
+        CSE: Semester 7 Mid-Sem → Semester 7 End-Term
+
+    Observation semester == Target semester (same-semester prediction).
+    Uses the same authorization rule as every other /predict route.
+    """
+    await authorize_prediction_access(user, student_id, faculty_service)
+
+    try:
+        result = await service.predict(student_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found or no data available for prediction",
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="M3 V3 model artifact is not available",
+        )
+    except (ConnectionError, RuntimeError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="M3 V3 service is temporarily unavailable",
         )
     except Exception:
         raise HTTPException(

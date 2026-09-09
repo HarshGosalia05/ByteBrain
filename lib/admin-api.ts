@@ -102,11 +102,14 @@ export type AdminDashboardFilters = {
   target_package?: string | null
 }
 
+export type BffErrorCode = "unauthorized" | "invalid" | "unavailable" | "server_error"
+
 export type BffError = {
   status: number
-  code: "unauthorized" | "invalid" | "unavailable" | "server_error"
+  code: BffErrorCode
   message: string
 }
+
 
 export type BffResult<T> =
   | { ok: true; data: T; fetchedAt: string }

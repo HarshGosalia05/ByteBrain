@@ -36,13 +36,15 @@ from typing import Any, Optional
 VALID_PREDICTION_TYPES = ("m1", "m2", "m3", "m4")
 
 
-class SkipPrediction(Exception):
+class SkipPrediction(ValueError):
     """Raised when a prediction cannot be generated for a legitimate reason.
 
-    The caller (AdminMLGenerationService) counts this as a *skip*, not a
-    *failure*.  Typical causes: student in final semester, no theory
+    Inherits from ValueError for API/caller compatibility, while allowing
+    AdminMLGenerationService to distinguish deliberate skips from unexpected
+    failures. Typical causes: student in final semester, no theory
     subjects next semester, etc.
     """
+
 
 _GENERATION_METHODS: dict[str, str] = {
     "m1": "predict_m1_for_student",
@@ -73,8 +75,9 @@ def resolve_model_version(prediction_type: str) -> Optional[str]:
     if prediction_type == "m2":
         return "m2_tp_v1"
     if prediction_type == "m3":
-        return "2.0"
+        return "3.0"
     if prediction_type == "m4":
+
         try:
             from ml.src import registry  # noqa: PLC0415
 
@@ -108,11 +111,13 @@ class PredictionGenerationService:
         generation_service: Any = None,
         persistence_service: Any = None,
         m2tp_service: Any = None,
+        m3v3_service: Any = None,
     ):
         self._pool = pool
         self._generation = generation_service
         self._persistence = persistence_service
         self._m2tp = m2tp_service
+        self._m3v3 = m3v3_service
 
     # ------------------------------------------------------------------
     # Lazy dependency resolution (keeps module import dependency-free)
@@ -228,10 +233,53 @@ class PredictionGenerationService:
                 input_row_count=1,
                 prediction_count=1,
             )
+        elif prediction_type == "m3":
+            from ml.src.inference import M3Prediction, PredictionResult  # noqa: PLC0415
+
+            if self._m3v3 is None and self._pool is not None:
+                from app.services.m3v3_prediction_service import (  # noqa: PLC0415
+                    M3V3PredictionService,
+                )
+                self._m3v3 = M3V3PredictionService(self._pool)
+            if self._m3v3 is not None:
+                try:
+                    payload = await self._m3v3.predict(student_id)
+                except (ValueError, FileNotFoundError) as exc:
+                    raise SkipPrediction(
+                        f"M3 V3 has no valid prediction for student {student_id}: {exc}"
+                    ) from exc
+                if payload.get("readiness_status") == "NO_DATA":
+                    raise SkipPrediction(
+                        f"M3 V3 has no valid prediction for student {student_id}: "
+                        f"{payload.get('reason') or 'insufficient data'}"
+                    )
+                obs_sem = (
+                    payload.get("observation_semester")
+                    or payload.get("prediction_target_semester")
+                    or 1
+                )
+                at_risk = 1 if payload.get("is_estimated_at_risk") else 0
+                result = PredictionResult(
+                    model_id="m3",
+                    predictions=[
+                        M3Prediction(
+                            student_id=student_id,
+                            semester_no=obs_sem,
+                            is_at_risk_next_sem=at_risk,
+                        )
+                    ],
+                    input_row_count=1,
+                    prediction_count=1,
+                )
+            else:
+                generation = self._generation_service()
+                method = getattr(generation, _GENERATION_METHODS[prediction_type])
+                result = await method(student_id)
         else:
             generation = self._generation_service()
             method = getattr(generation, _GENERATION_METHODS[prediction_type])
             result = await method(student_id)  # real DB data -> features -> inference
+
 
         rows = to_persistence_rows(result)  # validates model_id + item types
         version = (

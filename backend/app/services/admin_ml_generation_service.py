@@ -326,8 +326,9 @@ class AdminMLGenerationService:
         _PRODUCTION_VERSIONS: dict[str, str] = {
             "m1": "m1_v3_clean",
             "m2": "m2_tp_v1",
-            # m3 and m4 have no version gating
+            "m3": "3.0",
         }
+
         coverage: set[tuple[str, str]] = set()
         for r in rows:
             sid = r["student_id"]

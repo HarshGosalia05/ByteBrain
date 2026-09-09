@@ -18,11 +18,12 @@ export function FutureRiskCard({ data }: { data: FutureRiskIntelligence }) {
       <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4 text-xs text-indigo-950 dark:text-indigo-200">
         <div className="flex items-center gap-2 font-semibold text-sm text-indigo-900 dark:text-indigo-300">
           <AlertOctagon className="size-4 text-indigo-600 dark:text-indigo-400" />
-          <span>FUTURE RISK PREDICTION (M3 ML Model)</span>
+          <span>END-TERM RISK PREDICTION (M3 v3 ML Model)</span>
           <span className="ml-auto rounded-md bg-indigo-500/20 px-2 py-0.5 text-xs text-indigo-700 dark:text-indigo-300">
-            ML Forecast (Next Semester)
+            ML Forecast (Mid-Sem → End-Term)
           </span>
         </div>
+
         <p className="mt-1 text-muted-foreground">{data.disclaimer}</p>
       </div>
 
@@ -34,7 +35,7 @@ export function FutureRiskCard({ data }: { data: FutureRiskIntelligence }) {
           icon={AlertOctagon}
           hint={
             hasM3Data
-              ? "M3 ML forecast for next-semester academic risk"
+              ? "M3 v3 ML forecast for same-semester end-term academic risk"
               : "No M3 prediction data for current scope"
           }
         />
@@ -50,7 +51,7 @@ export function FutureRiskCard({ data }: { data: FutureRiskIntelligence }) {
           icon={ShieldCheck}
           hint={
             hasM3Data
-              ? "Students predicted safe for next semester"
+              ? "Students predicted safe for current semester end-term"
               : "No M3 prediction data for current scope"
           }
         />
@@ -65,8 +66,8 @@ export function FutureRiskCard({ data }: { data: FutureRiskIntelligence }) {
       {/* Department & Semester Breakdowns */}
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard
-          title="Future Risk by Department (M3 ML Model)"
-          subtitle="Count and percentage of next-semester risk forecasts per department"
+          title="End-Term Risk by Department (M3 v3 ML Model)"
+          subtitle="Count and percentage of same-semester end-term risk forecasts per department"
           status={data.future_risk_by_department.length > 0 ? "ready" : "empty"}
           emptyIcon={Info}
           emptyTitle="No Department Risk Data"
@@ -95,8 +96,9 @@ export function FutureRiskCard({ data }: { data: FutureRiskIntelligence }) {
         </ChartCard>
 
         <ChartCard
-          title="Future Risk by Semester (M3 ML Model)"
-          subtitle="Next-semester risk forecast broken down by current student semester"
+          title="End-Term Risk by Semester (M3 v3 ML Model)"
+          subtitle="Same-semester end-term risk forecast broken down by student semester"
+
           status={data.future_risk_by_semester.length > 0 ? "ready" : "empty"}
           emptyIcon={Info}
           emptyTitle="No Semester Risk Data"

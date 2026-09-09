@@ -18,9 +18,10 @@ import { cn } from "@/lib/utils"
 const MODEL_LABELS: Record<string, string> = {
   m1: "M1 - Subject Marks",
   m2: "M2 - Next-Sem Performance",
-  m3: "M3 - Next-Sem At-Risk",
+  m3: "M3 v3 - End-Term Risk (Mid-Sem → End-Term)",
   m4: "M4 - Career Readiness (rule-based)",
 }
+
 
 const TERMINAL = new Set(["completed", "failed", "cancelled"])
 
