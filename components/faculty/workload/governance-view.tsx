@@ -143,7 +143,7 @@ export function GovernanceView({
   const visibleItems = shownItems.slice(0, MAX_ROWS)
 
   return (
-    <section id="governance" className="flex scroll-mt-6 flex-col gap-5">
+    <section id="governance" className="flex scroll-mt-6 flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Governance &amp; workload review</h2>
@@ -172,7 +172,7 @@ export function GovernanceView({
       {healthScore.error ? (
         <ErrorState title="Failed to load workload health" description={healthScore.error} />
       ) : health ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10">
             <Badge variant={healthVariant(health.scope_band)} className="capitalize">
               {health.scope_band}
@@ -182,7 +182,7 @@ export function GovernanceView({
             </span>
             <p className="text-sm text-muted-foreground">{health.scope_reason}</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {health.subjects
               .filter((s) => s.subject_id !== null)
               .map((s, idx) => (
@@ -209,7 +209,7 @@ export function GovernanceView({
       {governance.error ? (
         <ErrorState title="Failed to load governance" description={governance.error} />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap items-center gap-1 rounded-md border border-input bg-background p-0.5">
               {STATUSES.map((status) => (

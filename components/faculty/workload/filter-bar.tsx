@@ -101,7 +101,7 @@ export function WorkloadFilterBar({ filters, hasPreviousTerm }: WorkloadFilterBa
       : "No previous term available"
 
   return (
-    <div className="flex flex-col gap-4 print:hidden">
+    <div className="flex flex-col gap-3 print:hidden">
       <div className="flex flex-wrap items-center gap-3">
         <select
           className={selectClassName}

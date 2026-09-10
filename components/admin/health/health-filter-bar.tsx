@@ -122,7 +122,7 @@ export function HealthFilterBar({ filters }: { filters?: DashboardFilterOptions 
 
   const handleResetFilters = () => {
     setSearchDraft("")
-    router.push(pathname)
+    router.push(`${pathname}?batch=2023`)
   }
 
   const activeFiltersCount =
@@ -145,7 +145,7 @@ export function HealthFilterBar({ filters }: { filters?: DashboardFilterOptions 
           onChange={(e) => setParam("batch", e.target.value)}
           aria-label="Starting Batch"
         >
-          <option value="">All Starting Batches</option>
+          <option value="all">All Starting Batches</option>
           {availableBatches.map((b) => (
             <option key={b} value={b}>
               {b}

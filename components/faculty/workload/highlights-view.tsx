@@ -37,7 +37,7 @@ export function HighlightsView({ data }: { data: HighlightsResult }) {
   }
 
   return (
-    <section id="highlights" className="flex scroll-mt-6 flex-col gap-4">
+    <section id="highlights" className="flex scroll-mt-6 flex-col gap-3">
       <div>
         <h2 className="text-lg font-semibold tracking-tight">Performance Highlights</h2>
         <p className="text-sm text-muted-foreground">

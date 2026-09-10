@@ -16,10 +16,14 @@ export default async function AdminHealthPage(props: {
 
   const batch =
     typeof searchParams.batch === "string" && searchParams.batch
-      ? searchParams.batch
+      ? searchParams.batch === "all"
+        ? null
+        : searchParams.batch
       : typeof searchParams.academic_year === "string" && searchParams.academic_year
-        ? searchParams.academic_year
-        : null
+        ? searchParams.academic_year === "all"
+          ? null
+          : searchParams.academic_year
+        : "2023"
 
   // Handle department_code: can be string | string[] | undefined
   const dp = searchParams.department_code

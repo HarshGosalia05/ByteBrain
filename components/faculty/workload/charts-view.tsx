@@ -196,7 +196,7 @@ export function ChartsView({
   }))
 
   return (
-    <section id="workload-charts" className="flex scroll-mt-6 flex-col gap-5">
+    <section id="workload-charts" className="flex scroll-mt-6 flex-col gap-4">
       <div>
         <h2 className="text-lg font-semibold tracking-tight">Teaching workload charts</h2>
         <p className="text-sm text-muted-foreground">
@@ -205,7 +205,7 @@ export function ChartsView({
         </p>
       </div>
 
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4">
         <div>
           <h3 className="mb-3 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
             Teaching load

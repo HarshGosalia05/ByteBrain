@@ -77,7 +77,7 @@ export function CareerFilterBar({
 
   const handleResetFilters = () => {
     setSearchDraft("")
-    router.push(pathname)
+    router.push(`${pathname}?batch=2023`)
   }
 
   const currentBatch = searchParams.get("batch") || searchParams.get("academic_year") || ""
@@ -169,7 +169,7 @@ export function CareerFilterBar({
           onChange={(e) => applyParams("batch", e.target.value)}
           aria-label="Starting Batch"
         >
-          <option value="">All Starting Batches</option>
+          <option value="all">All Starting Batches</option>
           {availableBatches.map((b) => (
             <option key={b} value={b}>
               {b}

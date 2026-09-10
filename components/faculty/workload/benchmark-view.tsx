@@ -22,7 +22,7 @@ export function BenchmarkView({ data }: { data: SectionResult<WorkloadBenchmark>
   const benchmark = data.data
 
   return (
-    <section id="benchmark" className="flex scroll-mt-6 flex-col gap-4">
+    <section id="benchmark" className="flex scroll-mt-6 flex-col gap-3">
       <div>
         <h2 className="text-lg font-semibold tracking-tight">Department resource summary</h2>
         <p className="text-sm text-muted-foreground">

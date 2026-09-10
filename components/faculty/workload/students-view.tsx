@@ -222,7 +222,7 @@ export function StudentsView({
 
   if (data.error) {
     return (
-      <section id="students" className="flex scroll-mt-6 flex-col gap-4">
+    <section id="students" className="flex scroll-mt-6 flex-col gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Students</h2>
           <p className="text-sm text-muted-foreground">

@@ -21,10 +21,14 @@ export default async function AdminCareerPage(props: {
 
   const batch =
     typeof searchParams.batch === "string" && searchParams.batch
-      ? searchParams.batch
+      ? searchParams.batch === "all"
+        ? null
+        : searchParams.batch
       : typeof searchParams.academic_year === "string" && searchParams.academic_year
-        ? searchParams.academic_year
-        : null
+        ? searchParams.academic_year === "all"
+          ? null
+          : searchParams.academic_year
+        : "2023"
   const preferred_domain = typeof searchParams.preferred_domain === "string" ? searchParams.preferred_domain : null
   const dream_job_role = typeof searchParams.dream_job_role === "string" ? searchParams.dream_job_role : null
   const internship_status = typeof searchParams.internship_status === "string" ? searchParams.internship_status : null
