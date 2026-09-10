@@ -1,17 +1,22 @@
+"use client"
+
 import {
   AlertTriangle,
   BookOpen,
   CalendarCheck,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ShieldAlert,
   TrendingUp,
   Users,
   XCircle,
 } from "lucide-react"
 
+import * as React from "react"
+
 import type {
   AttendanceIntelligenceData,
-  ShortageStudentRow,
   SubjectAttendanceRow,
 } from "@/lib/admin-api"
 
@@ -19,6 +24,7 @@ import { StatCard } from "@/components/shared/data/stat-card"
 import { ChartCard } from "@/components/shared/data/chart-card"
 import { SubjectBarChart } from "@/components/shared/charts/bar-chart"
 import { AttendanceFilterBar } from "@/components/admin/attendance/attendance-filter-bar"
+import { ShortageStudentsGrouped } from "@/components/admin/attendance/shortage-students-grouped"
 
 const ATTENDANCE_COLORS: Record<string, string> = {
   Excellent: "var(--chart-2)",
@@ -132,6 +138,8 @@ function AttendanceDistributionCard({
   )
 }
 
+const SUBJECT_PAGE_SIZE = 10
+
 function SubjectAttendanceTable({
   rows,
   total,
@@ -139,6 +147,12 @@ function SubjectAttendanceTable({
   rows: SubjectAttendanceRow[]
   total: number
 }) {
+  const [page, setPage] = React.useState(1)
+  const totalPages = Math.max(1, Math.ceil(rows.length / SUBJECT_PAGE_SIZE))
+  const safePage = Math.min(Math.max(1, page), totalPages)
+  const start = (safePage - 1) * SUBJECT_PAGE_SIZE
+  const pageRows = rows.slice(start, start + SUBJECT_PAGE_SIZE)
+
   return (
     <ChartCard
       title="Subject Attendance"
@@ -162,46 +176,57 @@ function SubjectAttendanceTable({
       ]}
       exportRows={rows as unknown as Array<Record<string, unknown>>}
     >
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-200 text-left text-sm">
+      <div className="overflow-hidden">
+        <table className="w-full text-left text-xs" style={{ tableLayout: "fixed" }}>
+          <colgroup>
+            <col style={{ width: "22%" }} />
+            <col style={{ width: "22%" }} />
+            <col style={{ width: "6%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "7%" }} />
+            <col style={{ width: "7%" }} />
+          </colgroup>
           <thead>
-            <tr className="border-b text-xs text-muted-foreground uppercase">
-              <th className="py-2 pr-4 font-medium">Subject</th>
-              <th className="py-2 pr-4 font-medium">Department</th>
-              <th className="py-2 pr-4 text-right font-medium">Sem</th>
-              <th className="py-2 pr-4 text-right font-medium">Students</th>
-              <th className="py-2 pr-4 text-right font-medium">Avg %</th>
-              <th className="py-2 pr-4 text-right font-medium">Below Target</th>
-              <th className="py-2 pr-4 text-right font-medium">Critical</th>
-              <th className="py-2 pr-4 text-right font-medium">Eligible</th>
-              <th className="py-2 text-right font-medium">Not Eligible</th>
+            <tr className="border-b bg-muted/50 text-[10px] text-muted-foreground uppercase">
+              <th className="whitespace-normal px-2 py-2 font-medium leading-tight">Subject</th>
+              <th className="whitespace-normal px-2 py-2 font-medium leading-tight">Department</th>
+              <th className="whitespace-normal px-2 py-2 text-center font-medium leading-tight">Sem</th>
+              <th className="whitespace-normal px-2 py-2 text-center font-medium leading-tight">Students</th>
+              <th className="whitespace-normal px-2 py-2 text-center font-medium leading-tight">Avg %</th>
+              <th className="whitespace-normal px-2 py-2 text-center font-medium leading-tight">Below Target</th>
+              <th className="whitespace-normal px-2 py-2 text-center font-medium leading-tight">Critical</th>
+              <th className="whitespace-normal px-2 py-2 text-center font-medium leading-tight">Eligible</th>
+              <th className="whitespace-normal px-2 py-2 text-center font-medium leading-tight">Not Eligible</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {pageRows.map((row) => (
               <tr key={`${row.subject_code}-${row.semester}`} className="border-b last:border-0">
-                <td className="py-2.5 pr-4">
-                  <p className="max-w-56 truncate font-medium" title={`${row.subject_name} (${row.subject_code})`}>
+                <td className="px-2 py-2">
+                  <p className="font-medium leading-snug break-words" title={`${row.subject_name} (${row.subject_code})`}>
                     {row.subject_name}
                   </p>
-                  <p className="text-xs text-muted-foreground">{row.subject_code}</p>
+                  <p className="text-[10px] text-muted-foreground">{row.subject_code}</p>
                 </td>
-                <td className="py-2.5 pr-4 text-xs">{row.department_name}</td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{row.semester}</td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{row.student_count}</td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">
+                <td className="px-2 py-2 leading-snug break-words">{row.department_name}</td>
+                <td className="px-2 py-2 text-center tabular-nums">{row.semester}</td>
+                <td className="px-2 py-2 text-center tabular-nums">{row.student_count}</td>
+                <td className="px-2 py-2 text-center tabular-nums">
                   {withSuffix(row.avg_attendance, "%")}
                 </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums text-chart-3">
+                <td className="px-2 py-2 text-center tabular-nums text-chart-3">
                   {row.below_target_count}
                 </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums text-destructive">
+                <td className="px-2 py-2 text-center tabular-nums text-destructive">
                   {row.critical_shortage_count}
                 </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums text-chart-2">
+                <td className="px-2 py-2 text-center tabular-nums text-chart-2">
                   {row.eligible_count}
                 </td>
-                <td className="py-2.5 text-right tabular-nums text-chart-5">
+                <td className="px-2 py-2 text-center tabular-nums text-chart-5">
                   {row.not_eligible_count}
                 </td>
               </tr>
@@ -209,122 +234,37 @@ function SubjectAttendanceTable({
           </tbody>
         </table>
       </div>
+      {totalPages > 1 && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            Page {safePage} of {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={safePage <= 1}
+              aria-label="Previous page"
+              className="flex h-8 items-center gap-1 rounded-md border border-input bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+            >
+              <ChevronLeft className="size-3.5" />
+              Prev
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage >= totalPages}
+              aria-label="Next page"
+              className="flex h-8 items-center gap-1 rounded-md border border-input bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 flex-row-reverse"
+            >
+              <ChevronRight className="size-3.5" />
+              Next
+            </button>
+          </div>
+        </div>
+      )}
       <p className="mt-2 text-xs text-muted-foreground">
         {total} subject{total === 1 ? "" : "s"} in the selected scope
-      </p>
-    </ChartCard>
-  )
-}
-
-function EligibilityBadge({ status }: { status: string | null }) {
-  if (status === "Eligible") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-chart-2/15 px-2 py-0.5 text-xs font-medium text-chart-2">
-        <CheckCircle2 className="size-3.5" />
-        Eligible
-      </span>
-    )
-  }
-  if (status === "Not Eligible") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
-        <XCircle className="size-3.5" />
-        Not Eligible
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-      {status ?? "—"}
-    </span>
-  )
-}
-
-function ShortageStudentsTable({
-  rows,
-  total,
-  requiredTarget,
-}: {
-  rows: ShortageStudentRow[]
-  total: number
-  requiredTarget: number
-}) {
-  return (
-    <ChartCard
-      title="Shortage Students"
-      subtitle={`Students below the ${toFixed(requiredTarget)}% attendance target`}
-      status={rows.length > 0 ? "ready" : "empty"}
-      emptyIcon={AlertTriangle}
-      emptyTitle="No shortage students"
-      emptyDescription="No students are below the attendance target in the current selection."
-      exportFileName="admin_shortage_students.csv"
-      exportColumns={[
-        { key: "student_id", label: "Student ID" },
-        { key: "student_name", label: "Student" },
-        { key: "enrollment_no", label: "Enrollment" },
-        { key: "department_name", label: "Department" },
-        { key: "semester", label: "Semester" },
-        { key: "subject_code", label: "Subject Code" },
-        { key: "subject_name", label: "Subject" },
-        { key: "attendance_percentage", label: "Attendance" },
-        { key: "required_target", label: "Required Target" },
-        { key: "shortage", label: "Shortage" },
-        { key: "eligibility_status", label: "Eligibility" },
-      ]}
-      exportRows={rows as unknown as Array<Record<string, unknown>>}
-    >
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-200 text-left text-sm">
-          <thead>
-            <tr className="border-b text-xs text-muted-foreground uppercase">
-              <th className="py-2 pr-4 font-medium">Student</th>
-              <th className="py-2 pr-4 font-medium">Enrollment</th>
-              <th className="py-2 pr-4 font-medium">Department</th>
-              <th className="py-2 pr-4 text-right font-medium">Sem</th>
-              <th className="py-2 pr-4 font-medium">Subject</th>
-              <th className="py-2 pr-4 text-right font-medium">Attendance</th>
-              <th className="py-2 pr-4 text-right font-medium">Target</th>
-              <th className="py-2 pr-4 text-right font-medium">Shortage</th>
-              <th className="py-2 text-right font-medium">Eligibility</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={`${row.student_id}-${row.subject_code}`} className="border-b last:border-0">
-                <td className="py-2.5 pr-4">
-                  <p className="max-w-48 truncate font-medium">{row.student_name}</p>
-                  <p className="text-xs text-muted-foreground">{row.student_id}</p>
-                </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{row.enrollment_no}</td>
-                <td className="py-2.5 pr-4 text-xs">{row.department_name}</td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{row.semester}</td>
-                <td className="py-2.5 pr-4">
-                  <p className="max-w-44 truncate text-xs" title={row.subject_name}>
-                    {row.subject_name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{row.subject_code}</p>
-                </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">
-                  <span className="font-medium text-destructive">
-                    {withSuffix(row.attendance_percentage, "%")}
-                  </span>
-                </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">
-                  {toFixed(row.required_target)}%
-                </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums text-chart-3">
-                  {toFixed(row.shortage)}%
-                </td>
-                <td className="py-2.5 text-right">
-                  <EligibilityBadge status={row.eligibility_status} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        {total} student-subject record{total === 1 ? "" : "s"} below target
       </p>
     </ChartCard>
   )
@@ -396,11 +336,12 @@ export function AttendanceIntelligenceView({
         <AttendanceDistributionCard data={data.distribution} />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <SubjectAttendanceTable rows={data.subjects} total={data.subjects_total} />
-        <ShortageStudentsTable
+      <div className="flex flex-col gap-6">
+        <SubjectAttendanceTable key={data.subjects_total} rows={data.subjects} total={data.subjects_total} />
+        <ShortageStudentsGrouped
           rows={data.shortage_students}
           total={data.shortage_total}
+          studentsTotal={data.shortage_students_total}
           requiredTarget={data.required_target}
         />
       </div>

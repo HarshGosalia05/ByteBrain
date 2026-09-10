@@ -86,6 +86,7 @@ class AttendanceIntelligenceResponse(BaseModel):
     subjects: List[SubjectAttendanceRow] = []
     subjects_total: int = 0
     shortage_total: int = 0
+    shortage_students_total: int = 0
     shortage_students: List[ShortageStudentRow] = []
     limit: int = 100
     offset: int = 0

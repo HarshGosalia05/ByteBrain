@@ -925,13 +925,64 @@ class AdminRepository:
         limit: int,
         offset: int,
     ) -> Dict[str, Any]:
-        """MD-04 students with subject-level attendance below the target."""
+        """MD-04 students with subject-level attendance below the target.
+
+        Pagination is on UNIQUE STUDENTS (not subject-level rows) so that
+        grouping the result set never silently drops students.
+        """
+        batch_sql = self._batch_sql("$2", "st")
+        base_where = f"""
+            ($1::int IS NULL OR e.department_code = $1)
+            AND {batch_sql}
+            AND ($3::int IS NULL OR e.semester_no = $3)
+            AND a.attendance_percentage IS NOT NULL
+            AND a.attendance_percentage < $4
+            AND ($5::text IS NULL OR st.full_name ILIKE '%' || $5 || '%'
+                 OR CAST(st.enrollment_no AS text) ILIKE '%' || $5 || '%'
+                 OR e.subject_code ILIKE '%' || $5 || '%'
+                 OR e.subject_name ILIKE '%' || $5 || '%')
+        """
+        params: tuple = (department_code, academic_year, semester, target, search)
+
+        # 1. Count unique shortage students
+        total_row = await self._fetchrow(
+            f"""
+            SELECT COUNT(*) AS total
+            FROM (
+                SELECT DISTINCT st.student_id
+                FROM attendance a
+                JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
+                JOIN students st ON st.student_id = e.student_id
+                WHERE {base_where}
+            ) sub
+            """,
+            params,
+        )
+        student_total = int((total_row or {}).get("total") or 0)
+
+        # 2. Paginate unique students, then fetch ALL their shortage subjects
         items = await self._fetch(
             f"""
+            WITH filtered_students AS (
+                SELECT DISTINCT st.student_id,
+                       st.full_name AS student_name,
+                       st.enrollment_no,
+                       e.department_code,
+                       e.department_name,
+                       ROW_NUMBER() OVER (
+                           ORDER BY MIN(a.attendance_percentage) ASC, st.full_name ASC
+                       ) AS rn
+                FROM attendance a
+                JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
+                JOIN students st ON st.student_id = e.student_id
+                WHERE {base_where}
+                GROUP BY st.student_id, st.full_name, st.enrollment_no,
+                         e.department_code, e.department_name
+            )
             SELECT
-                st.student_id,
-                st.full_name AS student_name,
-                st.enrollment_no,
+                fs.student_id,
+                fs.student_name,
+                fs.enrollment_no,
                 e.department_code,
                 e.department_name,
                 e.semester_no AS semester,
@@ -939,42 +990,18 @@ class AdminRepository:
                 e.subject_name,
                 a.attendance_percentage,
                 a.eligibility_status
-            FROM attendance a
+            FROM filtered_students fs
+            JOIN attendance a ON a.attendance_percentage IS NOT NULL AND a.attendance_percentage < $4
             JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
-            JOIN students st ON st.student_id = e.student_id
-            WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND {self._batch_sql("$2", "st")}
-              AND ($3::int IS NULL OR e.semester_no = $3)
-              AND a.attendance_percentage IS NOT NULL
-              AND a.attendance_percentage < $4
-              AND ($5::text IS NULL OR st.full_name ILIKE '%' || $5 || '%'
-                   OR CAST(st.enrollment_no AS text) ILIKE '%' || $5 || '%'
-                   OR e.subject_code ILIKE '%' || $5 || '%'
-                   OR e.subject_name ILIKE '%' || $5 || '%')
-            ORDER BY a.attendance_percentage ASC, st.full_name ASC
-            LIMIT $6::int OFFSET $7::int
+                               AND e.student_id = fs.student_id
+            WHERE fs.rn > $6::int
+              AND fs.rn <= $6::int + $7::int
+            ORDER BY fs.student_name ASC, a.attendance_percentage ASC
             """,
-            (department_code, academic_year, semester, target, search, limit, offset,),
+            (*params, offset, limit),
         )
-        total = await self._fetchrow(
-            f"""
-            SELECT COUNT(*) AS total
-            FROM attendance a
-            JOIN student_subject_enrollment e ON e.enrollment_record_id = a.enrollment_record_id
-            JOIN students st ON st.student_id = e.student_id
-            WHERE ($1::int IS NULL OR e.department_code = $1)
-              AND {self._batch_sql("$2", "st")}
-              AND ($3::int IS NULL OR e.semester_no = $3)
-              AND a.attendance_percentage IS NOT NULL
-              AND a.attendance_percentage < $4
-              AND ($5::text IS NULL OR st.full_name ILIKE '%' || $5 || '%'
-                   OR CAST(st.enrollment_no AS text) ILIKE '%' || $5 || '%'
-                   OR e.subject_code ILIKE '%' || $5 || '%'
-                   OR e.subject_name ILIKE '%' || $5 || '%')
-            """,
-            (department_code, academic_year, semester, target, search,),
-        )
-        return {"items": items, "total": total}
+
+        return {"items": items, "total": {"total": student_total}}
 
 
     # --- MD-04 Risk Intelligence ----------------------------------------------

@@ -2354,6 +2354,42 @@ class FacultyService:
             band=band,
         )
 
+    async def get_shortage_students(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        search: Optional[str],
+        attendance_range: Optional[str],
+        sort: str,
+        order: str,
+        page: int,
+        page_size: int,
+    ) -> Dict[str, Any]:
+        await self._ensure_profile(faculty_id)
+        compliance = settings.FACULTY_ATTENDANCE_THRESHOLD
+        return await self.repo.get_shortage_students(
+            faculty_id, semester_no, academic_year, subject_id,
+            search, attendance_range, sort, order, page, page_size, compliance
+        )
+
+    async def get_shortage_students_export(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        search: Optional[str],
+        attendance_range: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        await self._ensure_profile(faculty_id)
+        compliance = settings.FACULTY_ATTENDANCE_THRESHOLD
+        return await self.repo.get_shortage_students_export(
+            faculty_id, semester_no, academic_year, subject_id,
+            search, attendance_range, compliance
+        )
+
     async def get_attendance_health_score(
         self,
         faculty_id: str,

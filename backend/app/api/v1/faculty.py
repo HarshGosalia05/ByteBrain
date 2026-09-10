@@ -39,6 +39,8 @@ from app.schemas.faculty import (
     AttendanceStudentsResponse,
     AttendanceHighlightsResponse,
     AttendanceCorrelation,
+    ShortageStudentsResponse,
+    ShortageStudentItem,
     WorkloadSummary,
     WorkloadSubjectBreakdown,
     WorkloadTrends,
@@ -721,6 +723,78 @@ async def get_attendance_highlights(
 ):
     return await service.get_attendance_highlights(
         _faculty_id_or_error(user), semester, academic_year, subject_id,
+    )
+
+@router.get("/attendance/shortage-students", response_model=ShortageStudentsResponse)
+async def get_attendance_shortage_students(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=100),
+    attendance_range: Optional[str] = Query(None),
+    sort: str = Query("attendance"),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_shortage_students(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+        search, attendance_range, sort, order, page, page_size,
+    )
+
+@router.get("/attendance/shortage-students/export")
+async def export_attendance_shortage_students(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=100),
+    attendance_range: Optional[str] = Query(None),
+    student_ids: Optional[str] = Query(None),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    ids: List[str] = [s for s in (student_ids.split(",") if student_ids else []) if s]
+    rows = await service.get_shortage_students_export(
+        _faculty_id_or_error(user), semester, academic_year, subject_id, search, attendance_range,
+    )
+
+    def _cell(value: str) -> str:
+        if "," in value or '"' in value or "\n" in value:
+            return f'"{value.replace(chr(34), chr(34) * 2)}"'
+        return value
+
+    header = [
+        "Enrollment No", "Student Name", "Department", "Semester",
+        "Subject Code", "Subject Name", "Attendance %", "Classes Attended",
+        "Classes Conducted", "Attendance Status", "Eligibility", "Shortage Flag",
+    ]
+    lines = [",".join(header)]
+    for r in rows:
+        att = f"{float(r['attendance_percentage']):.1f}" if r.get("attendance_percentage") is not None else ""
+        attended = str(r["attended_classes"]) if r.get("attended_classes") is not None else ""
+        conducted = str(r["total_classes"]) if r.get("total_classes") is not None else ""
+        lines.append(",".join(
+            _cell(str(v)) for v in [
+                r["enrollment_no"],
+                f"{r['first_name']} {r['last_name']}",
+                r.get("department_name") or "",
+                r["semester_no"],
+                r["subject_code"],
+                r["subject_name"],
+                att,
+                attended,
+                conducted,
+                r.get("attendance_status") or "",
+                r.get("eligibility_status") or "",
+                r.get("shortage_flag") or "",
+            ]
+        ))
+    return Response(
+        content="\r\n".join(lines),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="faculty_shortage_students.csv"'},
     )
 
 @router.get("/attendance/correlation", response_model=AttendanceCorrelation)

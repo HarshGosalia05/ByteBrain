@@ -799,6 +799,9 @@ class AdminService:
                 )
             )
         shortage_total = int((shortage_data.get("total") or {}).get("total") or 0)
+        shortage_students_total = len(set(
+            row["student_id"] for row in (shortage_data.get("items") or [])
+        ))
 
         return AttendanceIntelligenceResponse(
             kpis=kpis,
@@ -810,6 +813,7 @@ class AdminService:
             subjects=subjects,
             subjects_total=subjects_total,
             shortage_total=shortage_total,
+            shortage_students_total=shortage_students_total,
             shortage_students=shortage_students,
             limit=limit,
             offset=offset,

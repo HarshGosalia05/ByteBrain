@@ -689,6 +689,40 @@ class AttendanceGovernance(BaseModel):
     healthy_count: int
     band: Optional[str] = None
 
+
+class ShortageSubjectItem(BaseModel):
+    subject_id: str
+    subject_code: str
+    subject_name: str
+    semester_no: int
+    attendance_percentage: Optional[float] = None
+    attendance_status: Optional[str] = None
+    eligibility_status: Optional[str] = None
+    shortage_flag: Optional[str] = None
+    total_classes: Optional[int] = None
+    attended_classes: Optional[int] = None
+
+
+class ShortageStudentItem(BaseModel):
+    student_id: str
+    enrollment_no: int
+    first_name: str
+    last_name: str
+    department_name: Optional[str] = None
+    semester_no: int
+    lowest_attendance: Optional[float] = None
+    shortage_count: int
+    shortage_subjects: List[ShortageSubjectItem] = []
+
+
+class ShortageStudentsResponse(BaseModel):
+    students: List[ShortageStudentItem]
+    total: int
+    has_more: bool
+    page: int
+    page_size: int
+
+
 class AttendanceHealthScoreItem(BaseModel):
     subject_id: Optional[str] = None
     subject_code: Optional[str] = None

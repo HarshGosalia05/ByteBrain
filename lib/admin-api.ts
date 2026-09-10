@@ -465,6 +465,7 @@ export type AttendanceIntelligenceData = {
   subjects: SubjectAttendanceRow[]
   subjects_total: number
   shortage_total: number
+  shortage_students_total: number
   shortage_students: ShortageStudentRow[]
   limit: number
   offset: number
