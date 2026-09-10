@@ -90,21 +90,31 @@ class FacultyRepository:
             rows = await conn.fetch(query, faculty_id)
             return [dict(row) for row in rows]
 
-    async def get_term_overview(self, faculty_id: str, semester_no: int) -> Dict[str, Any]:
-        query = """
+    async def get_term_overview(self, faculty_id: str, semester_no: int, academic_year: Optional[str] = None) -> Dict[str, Any]:
+        params: List[Any] = [faculty_id, semester_no]
+        extra = ""
+        if academic_year is not None:
+            params.append(academic_year)
+            extra = f" AND sse.academic_year = ${len(params)}"
+        query = f"""
             SELECT 
                 count(DISTINCT sse.subject_id) AS subjects,
                 count(DISTINCT sse.student_id) AS students
             FROM student_subject_enrollment sse
             WHERE sse.faculty_id = $1 AND sse.semester_no = $2
-                AND sse.enrollment_status = 'Active'
+                AND sse.enrollment_status = 'Active'{extra}
         """
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(query, faculty_id, semester_no)
+            row = await conn.fetchrow(query, *params)
             return dict(row) if row else {"subjects": 0, "students": 0}
 
-    async def get_term_subjects(self, faculty_id: str, semester_no: int) -> List[Dict[str, Any]]:
-        query = """
+    async def get_term_subjects(self, faculty_id: str, semester_no: int, academic_year: Optional[str] = None) -> List[Dict[str, Any]]:
+        params: List[Any] = [faculty_id, semester_no]
+        extra = ""
+        if academic_year is not None:
+            params.append(academic_year)
+            extra = f" AND sse.academic_year = ${len(params)}"
+        query = f"""
             SELECT 
                 sse.subject_id, sse.subject_code, sse.subject_name, sse.credits,
                 count(DISTINCT sse.student_id) AS students,
@@ -124,12 +134,12 @@ class FacultyRepository:
             LEFT JOIN student_subject_performance sp 
                 ON sp.enrollment_record_id = sse.enrollment_record_id
             WHERE sse.faculty_id = $1 AND sse.semester_no = $2
-                AND sse.enrollment_status = 'Active'
+                AND sse.enrollment_status = 'Active'{extra}
             GROUP BY sse.subject_id, sse.subject_code, sse.subject_name, sse.credits
             ORDER BY sse.subject_name ASC
         """
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch(query, faculty_id, semester_no)
+            rows = await conn.fetch(query, *params)
             return [dict(row) for row in rows]
 
     async def get_mentee_count(self, faculty_id: str) -> int:
