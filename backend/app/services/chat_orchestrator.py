@@ -43,9 +43,12 @@ from app.services.admin_ml_insights_tool import AdminMlInsightsTool
 from app.services.admin_trends_analytics_tool import AdminTrendsAnalyticsTool
 from app.services.faculty_department_analytics_tool import FacultyDepartmentAnalyticsTool
 from app.services.faculty_flagged_students_tool import FacultyFlaggedStudentsTool
+from app.services.faculty_mentees_tool import FacultyMenteesTool
 from app.services.faculty_prediction_insights_tool import FacultyPredictionInsightsTool
 from app.services.faculty_student_analytics_tool import FacultyStudentAnalyticsTool
 from app.services.faculty_subject_analytics_tool import FacultySubjectAnalyticsTool
+from app.services.faculty_timetable_tool import FacultyTimetableTool
+from app.services.chat_context_preloader import ChatContextPreloader
 from app.services.genai_provider import (
     GenAIError,
     GenAIRateLimitError,
@@ -830,6 +833,53 @@ def _timetable_summary(data: dict[str, Any]) -> str:
     return data.get("note") or "Your timetable information is currently unavailable."
 
 
+def _faculty_timetable_summary(data: dict[str, Any]) -> str:
+    if not isinstance(data, dict) or not data.get("data_available"):
+        return data.get("note") or "Your teaching timetable information is currently unavailable."
+    days = [
+        d for d in (data.get("days") or []) if isinstance(d, dict)
+    ]
+    if not days:
+        return data.get("note") or "Your teaching timetable information is currently unavailable."
+    semester = data.get("semester_no")
+    academic_year = data.get("academic_year")
+    header = "Here is your teaching timetable"
+    if semester and academic_year:
+        header += f" for Semester {semester} ({academic_year})"
+    elif semester:
+        header += f" for Semester {semester}"
+    header += ":"
+    lines: list[str] = [header]
+    for day in days:
+        sessions = [s for s in (day.get("sessions") or []) if isinstance(s, dict)]
+        if not sessions:
+            continue
+        day_label = str(day.get("day_name") or "Held")
+        for session in sessions:
+            subject = session.get("subject_name") or session.get("subject_code") or "Class"
+            when = f"{day_label}"
+            if session.get("start_time") and session.get("end_time"):
+                when += f" {str(session['start_time'])[:5]}-{str(session['end_time'])[:5]}"
+            lines.append(f"{subject} on {when}.")
+    if len(lines) > 1:
+        return " ".join(lines)
+    return data.get("note") or "Your teaching timetable information is currently unavailable."
+
+
+def _faculty_mentees_summary(data: dict[str, Any]) -> str:
+    if not isinstance(data, dict) or not data.get("data_available"):
+        return data.get("note") or "Mentee information is currently unavailable."
+    total = data.get("total_mentees") or 0
+    needs = data.get("needs_attention") or 0
+    good = data.get("good_standing") or 0
+    parts = [f"You have {total} mentee(s)."]
+    if good:
+        parts.append(f"{good} in good standing")
+    if needs:
+        parts.append(f"{needs} needing attention")
+    return " ".join(parts) + "."
+
+
 def _format_fallback_response(
     intent: str | None,
     data: dict[str, Any],
@@ -843,6 +893,8 @@ def _format_fallback_response(
     if intent == "student_profile":
         return _profile_summary(data, message=message)
     if intent == "timetable":
+        if data.get("tool_name") == "faculty_timetable_tool":
+            return _faculty_timetable_summary(data)
         return _timetable_summary(data)
     if intent == "academic_performance":
         if _is_name_query(message):
@@ -860,6 +912,8 @@ def _format_fallback_response(
         return _prediction_summary(data)
     if intent in ("career_readiness", "career_guidance", "skill_gap", "roadmap"):
         return _career_summary(data, intent)
+    if intent == "mentee_analytics":
+        return _faculty_mentees_summary(data)
     # Faculty / Admin / any generic tool: never dump raw verified data.
     return (
         "The requested information is available, but the AI-generated explanation "
@@ -888,6 +942,31 @@ class ChatOrchestrator:
         self._genai_service = genai_service or GenAIService()
         self._student_resolver = student_resolver or StudentResolver(pool)
         self._tools = tools or {}
+        self._context_preloader = ChatContextPreloader(pool=pool)
+
+    async def _load_portal_context(
+        self, role: UserRole, user_context_id: str
+    ) -> VerifiedContext | None:
+        """Load the role-specific portal context snapshot for the LLM prompt.
+
+        This is fetched SERVER-SIDE from the authoritative database (never
+        from client-supplied data). It gives the LLM a rich overview of the
+        user's portal so answers can reference profile, subjects, predictions,
+        class/interinstitution metrics even for conversational questions.
+        Detailed/tool-backed answers still come from the allowlisted tools.
+        """
+        if not self._pool:
+            return None
+        try:
+            ctx = await self._context_preloader.load(role, user_context_id)
+        except Exception as exc:
+            logger.warning("Portal context load skipped: %s", exc)
+            return None
+        return VerifiedContext(
+            source="portal_context_snapshot",
+            data=ctx.model_dump(mode="json", exclude_none=True),
+            scope="own_portal" if role == "Student" else "portal_context",
+        )
 
     def _get_tool(self, tool_name: str) -> Any:
         """Instantiate or retrieve the requested tool service."""
@@ -920,6 +999,10 @@ class ChatOrchestrator:
             return FacultyPredictionInsightsTool(pool)
         if tool_name == "faculty_department_analytics_tool":
             return FacultyDepartmentAnalyticsTool(pool)
+        if tool_name == "faculty_timetable_tool":
+            return FacultyTimetableTool(pool)
+        if tool_name == "faculty_mentees_tool":
+            return FacultyMenteesTool(pool)
 
         if tool_name == "admin_institution_analytics_tool":
             return AdminInstitutionAnalyticsTool(pool)
@@ -1092,8 +1175,16 @@ class ChatOrchestrator:
                 "faculty_subject_analytics_tool",
                 "faculty_flagged_students_tool",
                 "faculty_department_analytics_tool",
+                "faculty_mentees_tool",
             ):
                 result = await tool_instance.execute(faculty_id=user_context_id)
+                return tool_instance.to_verified_context(result)
+
+            if tool_name == "faculty_timetable_tool":
+                result = await tool_instance.execute(
+                    faculty_id=user_context_id,
+                    day_filter=_extract_day_filter(request.message),
+                )
                 return tool_instance.to_verified_context(result)
 
         # 3. Admin tools (institution scope)
@@ -1178,11 +1269,12 @@ class ChatOrchestrator:
 
         # 2. Handle non-ROUTED outcomes
         if decision.status == "GENERAL_CONVERSATION":
+            portal_ctx = await self._load_portal_context(role, user_context_id)
             genai_req = GenAIRequest(
                 role=role,
                 user_context_id=user_context_id,
                 intent=None,
-                verified_context=[],
+                verified_context=[portal_ctx] if portal_ctx else [],
                 conversation_history=request.conversation_history,
                 user_message=clean_message,
                 page_context=page_context_label(page_context, role),
@@ -1353,11 +1445,15 @@ class ChatOrchestrator:
         )
 
         # 4. Generate Grounded GenAI Response
+        portal_ctx = await self._load_portal_context(role, user_context_id)
+        verified_contexts = (
+            [portal_ctx, verified_ctx] if portal_ctx else [verified_ctx]
+        )
         genai_req = GenAIRequest(
             role=role,
             user_context_id=user_context_id,
             intent=decision.intent,
-            verified_context=[verified_ctx],
+            verified_context=verified_contexts,
             conversation_history=request.conversation_history,
             user_message=clean_message,
             page_context=page_context_label(page_context, role),

@@ -87,22 +87,24 @@ class TestDefaultCatalogRoleMatrix(unittest.TestCase):
     def setUpClass(cls):
         cls.registry = build_default_registry()
 
-    def test_catalog_has_15_tools_all_implemented(self):
+    def test_catalog_has_19_tools_all_implemented(self):
         names = self.registry.tool_names
-        self.assertEqual(len(names), 15)
+        self.assertEqual(len(names), 19)
         all_tools = [
             tool
             for role in ("Student", "Faculty", "Admin")
             for tool in self.registry.tools_for_role(role)
         ]
-        self.assertEqual(len(all_tools), 15)
+        self.assertEqual(len(all_tools), 19)
         implemented = [tool for tool in all_tools if tool.implemented]
-        self.assertEqual(len(implemented), 15)
+        self.assertEqual(len(implemented), 19)
 
-    def test_student_gets_own_5_tools_only(self):
+    def test_student_gets_own_7_tools_only(self):
         names = {t.tool_name for t in self.registry.tools_for_role("Student")}
-        self.assertEqual(len(names), 5)
+        self.assertEqual(len(names), 7)
         for expected in (
+            "student_profile_tool",
+            "student_timetable_tool",
             "student_academic_performance_tool",
             "student_attendance_tool",
             "student_subject_analysis_tool",
@@ -111,15 +113,17 @@ class TestDefaultCatalogRoleMatrix(unittest.TestCase):
         ):
             self.assertIn(expected, names)
 
-    def test_faculty_gets_5_tools_only(self):
+    def test_faculty_gets_7_tools_only(self):
         names = {t.tool_name for t in self.registry.tools_for_role("Faculty")}
-        self.assertEqual(len(names), 5)
+        self.assertEqual(len(names), 7)
         for expected in (
             "faculty_student_analytics_tool",
             "faculty_subject_analytics_tool",
             "faculty_flagged_students_tool",
             "faculty_prediction_insights_tool",
             "faculty_department_analytics_tool",
+            "faculty_timetable_tool",
+            "faculty_mentees_tool",
         ):
             self.assertIn(expected, names)
 

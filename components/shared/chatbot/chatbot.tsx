@@ -6,8 +6,64 @@ import { ChatbotPanel } from "./chatbot-panel"
 import { ChatHeader } from "./chat-header"
 import { ChatMessageList } from "./chat-message-list"
 import { ChatInput } from "./chat-input"
-import type { ChatbotProps, UIMessage } from "./types"
-import type { ChatApiRequest } from "@/lib/chat-api"
+import type { ChatbotProps, PortalSnapshot, UIMessage } from "./types"
+import type { ChatApiRequest, PortalContextResponse } from "@/lib/chat-api"
+
+function mapPortalContext(raw: PortalContextResponse | null): PortalSnapshot {
+  if (!raw) {
+    return { role: "Student", available: false }
+  }
+  const base: PortalSnapshot = { role: raw.role, available: raw.data_available }
+
+  if (raw.student) {
+    base.student = {
+      name: raw.student.name,
+      department: raw.student.department,
+      currentSemester: raw.student.current_semester,
+      academicYear: raw.student.academic_year,
+      cgpa: raw.student.cgpa,
+      sgpa: raw.student.sgpa,
+      percentage: raw.student.percentage,
+      backlogs: raw.student.backlogs,
+      academicStanding: raw.student.academic_standing,
+      overallAttendance: raw.student.overall_attendance,
+      topSubjects: (raw.student.top_subjects ?? []).map((s) => s.name ?? s.percentage?.toString() ?? "Subject").slice(0, 3),
+      weakSubjects: (raw.student.weak_subjects ?? []).map((s) => s.name ?? "Subject").slice(0, 3),
+      predictionsAvailable: raw.student.prediction_summary?.available ?? false,
+      careerDomain: raw.student.career_readiness?.domain ?? null,
+      nextClasses: (raw.student.upcoming_classes ?? []).map((c) => c.subject ?? "").filter(Boolean).slice(0, 3),
+      notificationCount: (raw.student.recent_notifications ?? []).length,
+    }
+  }
+
+  if (raw.faculty) {
+    base.faculty = {
+      name: raw.faculty.name,
+      department: raw.faculty.department,
+      designation: raw.faculty.designation,
+      subjectsTaught: (raw.faculty.subjects_taught ?? []).map((s) => s.name ?? s.code ?? "").filter(Boolean).slice(0, 5),
+      menteeCount: raw.faculty.total_mentees,
+      flaggedCount: (raw.faculty.flagged_students ?? []).length,
+      totalStudents: raw.faculty.class_summary?.total_students ?? null,
+      avgCgpa: raw.faculty.class_summary?.avg_cgpa ?? null,
+      avgAttendance: raw.faculty.class_summary?.avg_attendance ?? null,
+    }
+  }
+
+  if (raw.admin) {
+    base.admin = {
+      totalStudents: raw.admin.total_students,
+      totalFaculty: raw.admin.total_faculty,
+      totalDepartments: raw.admin.total_departments,
+      overallCgpa: raw.admin.overall_cgpa,
+      overallAttendance: raw.admin.overall_attendance,
+      flaggedCount: raw.admin.flagged_count ?? 0,
+      departmentNames: (raw.admin.department_performance ?? []).map((d) => d.name ?? "").filter(Boolean).slice(0, 4),
+    }
+  }
+
+  return base
+}
 
 export function Chatbot({
   role = "Student",
@@ -17,23 +73,58 @@ export function Chatbot({
 }: ChatbotProps) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [isMinimized, setIsMinimized] = React.useState(false)
+  const [isExpanded, setIsExpanded] = React.useState(false)
   const [messages, setMessages] = React.useState<UIMessage[]>([])
   const [input, setInput] = React.useState("")
   const [isLoading, setIsLoading] = React.useState(false)
+  const [portal, setPortal] = React.useState<PortalSnapshot>({ role, available: false })
+  const [contextLoaded, setContextLoaded] = React.useState(false)
   const isSendingRef = React.useRef(false)
 
+  // Fetch role-specific portal context (ETL snapshot) once when opened. This
+  // goes through the server-side Next.js route so session cookies never reach
+  // the client bundle.
+  const ensureContext = React.useCallback(async () => {
+    if (contextLoaded) return
+    setContextLoaded(true)
+    try {
+      const res = await fetch("/api/chat/context", {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(20000),
+      })
+      if (!res.ok) {
+        setPortal({ role, available: false })
+        return
+      }
+      const data: PortalContextResponse = await res.json()
+      setPortal(mapPortalContext(data))
+    } catch {
+      setPortal({ role, available: false })
+    }
+  }, [contextLoaded, role])
+
   const handleToggle = () => {
-    setIsOpen((prev) => !prev)
-    setIsMinimized(false)
+    setIsOpen((prev) => {
+      const next = !prev
+      setIsMinimized(false)
+      if (next) ensureContext()
+      return next
+    })
   }
 
   const handleClose = () => {
     setIsOpen(false)
     setIsMinimized(false)
+    setIsExpanded(false)
   }
 
   const handleMinimize = () => {
     setIsMinimized((prev) => !prev)
+  }
+
+  const handleExpandToggle = () => {
+    setIsExpanded((prev) => !prev)
   }
 
   const handleClear = () => {
@@ -43,6 +134,8 @@ export function Chatbot({
   const sendMessage = async (rawMessage: string) => {
     const text = rawMessage.trim()
     if (!text || isLoading || isSendingRef.current) return
+
+    if (!contextLoaded) ensureContext()
 
     isSendingRef.current = true
     setIsLoading(true)
@@ -150,12 +243,15 @@ export function Chatbot({
     <>
       <ChatbotLauncher isOpen={isOpen} onClick={handleToggle} className={className} />
 
-      <ChatbotPanel isOpen={isOpen} isMinimized={isMinimized} onClose={handleClose}>
+      <ChatbotPanel isOpen={isOpen} isMinimized={isMinimized} isExpanded={isExpanded} onClose={handleClose}>
         <ChatHeader
           role={role}
+          portal={portal}
           onClose={handleClose}
           onMinimize={handleMinimize}
           onClear={handleClear}
+          onExpandToggle={handleExpandToggle}
+          isExpanded={isExpanded}
           messageCount={messages.length}
         />
 
@@ -165,6 +261,7 @@ export function Chatbot({
               messages={messages}
               isLoading={isLoading}
               role={role}
+              portal={portal}
               onSelectSuggestion={(prompt) => sendMessage(prompt)}
               onRetry={(lastPrompt) => sendMessage(lastPrompt)}
             />

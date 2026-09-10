@@ -1,11 +1,7 @@
-"""Authenticated unified Chat API endpoint (POST /api/v1/chat).
+"""Authenticated unified Chat API endpoints.
 
-Handles:
-  * Mandatory authentication via get_current_user.
-  * Per-user/IP rate limiting to protect the GenAI-backed endpoint.
-  * Role and context ID extraction.
-  * Delegating execution to ChatOrchestrator.
-  * Returning structured ChatResponse.
+  POST /api/v1/chat       - Send a message, get a grounded AI response
+  GET  /api/v1/chat/context - Load role-specific portal data snapshot (ETL preload)
 """
 from __future__ import annotations
 
@@ -17,6 +13,8 @@ from app.api.dependencies import get_db_pool
 from app.core.ratelimit import chat_limiter, chat_rate_limit_key
 from app.core.security import get_current_user
 from app.schemas.chat import ChatRequest, ChatResponse
+from app.schemas.chat_context import ChatContextResponse
+from app.services.chat_context_preloader import ChatContextPreloader
 from app.services.chat_orchestrator import ChatOrchestrator
 
 router = APIRouter()
@@ -60,3 +58,34 @@ async def chat_endpoint(
     if limited is not None:
         return limited
     return await orchestrator.process_chat(user=user, request=request)
+
+
+@router.get("/context", response_model=ChatContextResponse)
+async def chat_context_endpoint(
+    http_request: Request,
+    user: dict = Depends(get_current_user),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+) -> ChatContextResponse | JSONResponse:
+    """Load role-specific portal data snapshot for the chatbot (ETL preload).
+
+    Runs at chat-open time. Returns a compact summary of the authenticated
+    user's portal data (student / faculty / admin) so the AI assistant can
+    give richer, context-aware answers without per-message data queries.
+    """
+    limited = await _enforce_rate_limit(http_request, user)
+    if limited is not None:
+        return limited
+    role = user.get("role")
+    if role == "Student":
+        context_id = user.get("student_id") or user.get("user_id")
+    elif role == "Faculty":
+        context_id = user.get("faculty_id") or user.get("user_id")
+    else:
+        context_id = "admin"
+    if not context_id:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "Authenticated user identity is not available in the token."},
+        )
+    preloader = ChatContextPreloader(pool=pool)
+    return await preloader.load(role=role, user_context_id=str(context_id))

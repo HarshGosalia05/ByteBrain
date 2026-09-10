@@ -843,6 +843,155 @@ class TestFacultyScope(unittest.TestCase):
         self.assertEqual(decision.status, "ROUTED")
         self.assertEqual(decision.intent, "flagged_students")
 
+    def test_faculty_flagged_at_risk_students_routes_to_flagged_tool(self):
+        router = IntentRouter(build_default_registry())
+        decision = router.route(
+            IntentRequest(
+                role="Faculty",
+                user_context_id="FAC001",
+                message="Show flagged at-risk students",
+            )
+        )
+        self.assertEqual(decision.status, "ROUTED")
+        self.assertEqual(decision.intent, "flagged_students")
+        self.assertEqual(decision.tool_name, "faculty_flagged_students_tool")
+
+    def test_faculty_timetable_routes_to_faculty_timetable_tool(self):
+        router = IntentRouter(build_default_registry())
+        decision = router.route(
+            IntentRequest(
+                role="Faculty",
+                user_context_id="FAC001",
+                message="tell me today timetable",
+            )
+        )
+        self.assertEqual(decision.status, "ROUTED")
+        self.assertEqual(decision.intent, "timetable")
+        self.assertEqual(decision.tool_name, "faculty_timetable_tool")
+
+    def test_faculty_mentee_count_routes_to_mentee_tool(self):
+        router = IntentRouter(build_default_registry())
+        decision = router.route(
+            IntentRequest(
+                role="Faculty",
+                user_context_id="FAC001",
+                message="how many student under my mentors",
+            )
+        )
+        self.assertEqual(decision.status, "ROUTED")
+        self.assertEqual(decision.intent, "mentee_analytics")
+        self.assertEqual(decision.tool_name, "faculty_mentees_tool")
+
+    def test_faculty_lowest_performance_routes_to_flagged_tool(self):
+        router = IntentRouter(build_default_registry())
+        decision = router.route(
+            IntentRequest(
+                role="Faculty",
+                user_context_id="FAC001",
+                message="show the lowest student performance",
+            )
+        )
+        self.assertEqual(decision.status, "ROUTED")
+        self.assertEqual(decision.intent, "flagged_students")
+        self.assertEqual(decision.tool_name, "faculty_flagged_students_tool")
+        self.assertNotIn("lowest", str(decision.scope_requirements.target_student_id or ""))
+
+    def test_faculty_worst_performing_routes_to_flagged_tool(self):
+        router = IntentRouter(build_default_registry())
+        decision = router.route(
+            IntentRequest(
+                role="Faculty",
+                user_context_id="FAC001",
+                message="show me the worst performing students",
+            )
+        )
+        self.assertEqual(decision.status, "ROUTED")
+        self.assertEqual(decision.intent, "flagged_students")
+
+    def test_faculty_lecture_query_routes_to_timetable_tool(self):
+        router = IntentRouter(build_default_registry())
+        decision = router.route(
+            IntentRequest(
+                role="Faculty",
+                user_context_id="FAC001",
+                message="tell me to dat lectrue",
+            )
+        )
+        self.assertEqual(decision.status, "ROUTED")
+        self.assertEqual(decision.intent, "timetable")
+        self.assertEqual(decision.tool_name, "faculty_timetable_tool")
+
+    def test_faculty_today_present_routes_to_subject_analytics(self):
+        router = IntentRouter(build_default_registry())
+        decision = router.route(
+            IntentRequest(
+                role="Faculty",
+                user_context_id="FAC001",
+                message="how many student today present",
+            )
+        )
+        self.assertEqual(decision.status, "ROUTED")
+        self.assertEqual(decision.intent, "subject_analytics")
+        self.assertEqual(decision.tool_name, "faculty_subject_analytics_tool")
+
+    def test_faculty_prediction_in_subject_routes_to_subject_analytics(self):
+        router = IntentRouter(build_default_registry())
+        decision = router.route(
+            IntentRequest(
+                role="Faculty",
+                user_context_id="FAC001",
+                message="tell me predicted student performance in my subject",
+            )
+        )
+        self.assertEqual(decision.status, "ROUTED")
+        self.assertEqual(decision.intent, "subject_analytics")
+
+    def test_faculty_average_attendance_in_subject_routes_to_subject_analytics(self):
+        router = IntentRouter(build_default_registry())
+        decision = router.route(
+            IntentRequest(
+                role="Faculty",
+                user_context_id="FAC001",
+                message="In this subject give me average attandace of thos student",
+            )
+        )
+        self.assertEqual(decision.status, "ROUTED")
+        self.assertEqual(decision.intent, "subject_analytics")
+        self.assertEqual(decision.tool_name, "faculty_subject_analytics_tool")
+
+    def test_faculty_targeted_attendance_still_needs_student(self):
+        provider = FakeProvider()
+        genai = GenAIService(provider=provider)
+        orch = ChatOrchestrator(
+            pool=None,
+            genai_service=genai,
+            tools={"faculty_student_analytics_tool": FakeTool("fcsa", {})},
+        )
+        user = {"role": "Faculty", "faculty_id": "FAC001"}
+        req = ChatRequest(message="show student performance")
+        resp = run(orch.process_chat(user=user, request=req))
+        self.assertEqual(resp.status, "clarification")
+        self.assertIn("Which student", resp.message)
+
+    def test_table_layout_grounding_rule_present(self):
+        provider = FakeProvider()
+        service = GenAIService(provider=provider)
+        request = GenAIRequest(
+            role="Faculty",
+            user_context_id="FAC001",
+            verified_context=[
+                VerifiedContext(
+                    source="faculty/timetable",
+                    data={"days": [{"day": "Monday", "sessions": []}]},
+                )
+            ],
+            user_message="show my timetable",
+        )
+        run(service.generate(request))
+        sys_inst = provider.recorded_requests[0]["system_instruction"]
+        self.assertIn("proper Markdown table", sys_inst)
+        self.assertIn("header row", sys_inst)
+
 
 # ---------------------------------------------------------------------------
 # 14. Admin scope

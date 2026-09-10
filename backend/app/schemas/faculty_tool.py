@@ -336,3 +336,92 @@ class FacultyDepartmentAnalyticsResult(BaseModel):
     note: str | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# 6. Faculty Timetable
+# ---------------------------------------------------------------------------
+
+
+class FacultyTimetableSessionItem(BaseModel):
+    """One verified teaching session in the faculty's own timetable."""
+
+    slot_no: int
+    start_time: str | None = None
+    end_time: str | None = None
+    subject_code: str | None = None
+    subject_name: str
+    lecture_type: str | None = None
+    department_code: int | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FacultyTimetableDayItem(BaseModel):
+    """Sessions grouped under a day for the faculty's own timetable."""
+
+    day_name: str
+    sessions: list[FacultyTimetableSessionItem] = []
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FacultyTimetableResult(BaseModel):
+    """Verified teaching timetable for the authenticated faculty."""
+
+    tool_name: str
+    intent: str
+    faculty_id: str
+    data_available: bool
+    semester_no: int | None = None
+    academic_year: str | None = None
+    total_sessions: int = 0
+    slots: list[dict[str, Any]] = []
+    days: list[FacultyTimetableDayItem] = []
+    source: str
+    generated_at: datetime
+    note: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# 7. Faculty Mentees
+# ---------------------------------------------------------------------------
+
+
+class FacultyMenteeItem(BaseModel):
+    """A mentee (assigned student) of the authenticated faculty."""
+
+    student_id: str
+    enrollment_no: int | None = None
+    name: str
+    semester: int | None = None
+    attendance_percentage: float | None = None
+    latest_sgpa: float | None = None
+    backlogs: int | None = None
+    academic_standing: str | None = None
+    flagged: bool = False
+    flag_reasons: list[str] = []
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FacultyMenteesResult(BaseModel):
+    """Verified mentee summary and list for the authenticated faculty."""
+
+    tool_name: str
+    intent: str
+    faculty_id: str
+    data_available: bool
+    total_mentees: int = 0
+    needs_attention: int = 0
+    good_standing: int = 0
+    average_attendance: float | None = None
+    average_sgpa: float | None = None
+    mentees: list[FacultyMenteeItem] = []
+    source: str
+    generated_at: datetime
+    note: str | None = None
+
+    model_config = ConfigDict(extra="forbid")

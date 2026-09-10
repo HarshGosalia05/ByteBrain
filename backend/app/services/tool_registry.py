@@ -244,6 +244,28 @@ def build_default_registry() -> ToolRegistry:
         analytics_backed=True,
         implemented=True,
     )
+    _register(
+        registry,
+        tool_name="faculty_timetable_tool",
+        description="Own teaching timetable (current term, grouped by day).",
+        intents=["timetable"],
+        allowed_roles=["Faculty"],
+        category="analytics",
+        scope="department_scope",
+        analytics_backed=True,
+        implemented=True,
+    )
+    _register(
+        registry,
+        tool_name="faculty_mentees_tool",
+        description="Mentee summary and list for the authenticated faculty.",
+        intents=["mentee_analytics"],
+        allowed_roles=["Faculty"],
+        category="analytics",
+        scope="department_scope",
+        analytics_backed=True,
+        implemented=True,
+    )
 
     # --- Admin tools (existing admin RBAC) ---------------------------------
     _register(
