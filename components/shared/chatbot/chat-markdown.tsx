@@ -2,7 +2,8 @@ import * as React from "react"
 
 /**
  * Pure React safe Markdown renderer without dangerouslySetInnerHTML.
- * Parses headings, lists, bold, italics, inline code, code blocks, and blockquotes.
+ * Parses headings, lists, bold, italics, inline code, code blocks,
+ * blockquotes, and markdown tables.
  */
 export function ChatMarkdown({ content }: { content: string }) {
   const lines = content.split("\n")
@@ -11,13 +12,18 @@ export function ChatMarkdown({ content }: { content: string }) {
   let codeBlockBuffer: string[] = []
   let codeBlockLang = ""
 
-  lines.forEach((line, idx) => {
+  let idx = 0
+  while (idx < lines.length) {
+    const line = lines[idx]
+
     // Code block start/end
     if (line.startsWith("```")) {
       if (!inCodeBlock) {
         inCodeBlock = true
         codeBlockLang = line.slice(3).trim()
         codeBlockBuffer = []
+        idx++
+        continue
       } else {
         inCodeBlock = false
         elements.push(
@@ -34,13 +40,15 @@ export function ChatMarkdown({ content }: { content: string }) {
           </div>
         )
         codeBlockBuffer = []
+        idx++
+        continue
       }
-      return
     }
 
     if (inCodeBlock) {
       codeBlockBuffer.push(line)
-      return
+      idx++
+      continue
     }
 
     const trimmed = line.trim()
@@ -48,7 +56,50 @@ export function ChatMarkdown({ content }: { content: string }) {
     // Empty line
     if (!trimmed) {
       elements.push(<div key={`blank-${idx}`} className="h-1.5" />)
-      return
+      idx++
+      continue
+    }
+
+    // Markdown table detection: look for a header row followed by a separator row
+    const tableMatch = tryParseTable(lines, idx)
+    if (tableMatch) {
+      elements.push(
+        <div key={`table-wrap-${idx}`} className="my-2 overflow-x-auto rounded-lg border border-border/60">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-muted/60 border-b border-border/60">
+                {tableMatch.headers.map((h, ci) => (
+                  <th
+                    key={ci}
+                    className="px-3 py-2 text-left font-semibold text-foreground whitespace-nowrap"
+                  >
+                    {renderInline(h)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {tableMatch.rows.map((row, ri) => (
+                <tr
+                  key={ri}
+                  className={ri % 2 === 0 ? "bg-background/60" : "bg-muted/20"}
+                >
+                  {row.map((cell, ci) => (
+                    <td
+                      key={ci}
+                      className="px-3 py-2 text-foreground border-t border-border/40"
+                    >
+                      {renderInline(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+      idx = tableMatch.nextIndex
+      continue
     }
 
     // Headings
@@ -58,7 +109,8 @@ export function ChatMarkdown({ content }: { content: string }) {
           {renderInline(trimmed.slice(4))}
         </h4>
       )
-      return
+      idx++
+      continue
     }
     if (trimmed.startsWith("## ")) {
       elements.push(
@@ -66,7 +118,8 @@ export function ChatMarkdown({ content }: { content: string }) {
           {renderInline(trimmed.slice(3))}
         </h3>
       )
-      return
+      idx++
+      continue
     }
     if (trimmed.startsWith("# ")) {
       elements.push(
@@ -74,7 +127,8 @@ export function ChatMarkdown({ content }: { content: string }) {
           {renderInline(trimmed.slice(2))}
         </h2>
       )
-      return
+      idx++
+      continue
     }
 
     // Blockquote
@@ -87,7 +141,8 @@ export function ChatMarkdown({ content }: { content: string }) {
           {renderInline(trimmed.slice(2))}
         </blockquote>
       )
-      return
+      idx++
+      continue
     }
 
     // Unordered List (- or *)
@@ -98,7 +153,8 @@ export function ChatMarkdown({ content }: { content: string }) {
           <span className="text-xs leading-5 flex-1">{renderInline(trimmed.replace(/^[-*]\s+/, ""))}</span>
         </div>
       )
-      return
+      idx++
+      continue
     }
 
     // Ordered List (1. 2. etc)
@@ -112,7 +168,8 @@ export function ChatMarkdown({ content }: { content: string }) {
           <span className="text-xs leading-5 flex-1">{renderInline(numMatch[2])}</span>
         </div>
       )
-      return
+      idx++
+      continue
     }
 
     // Regular paragraph
@@ -121,7 +178,8 @@ export function ChatMarkdown({ content }: { content: string }) {
         {renderInline(trimmed)}
       </p>
     )
-  })
+    idx++
+  }
 
   // Flush any unclosed code block
   if (inCodeBlock && codeBlockBuffer.length > 0) {
@@ -139,10 +197,58 @@ export function ChatMarkdown({ content }: { content: string }) {
 }
 
 /**
+ * Attempts to parse a markdown table starting at `startIdx`.
+ * Returns the parsed table data or null if the lines don't form a valid table.
+ */
+function tryParseTable(
+  lines: string[],
+  startIdx: number,
+): { headers: string[]; rows: string[][]; nextIndex: number } | null {
+  const headerLine = lines[startIdx]?.trim()
+  if (!headerLine || !isTableRow(headerLine)) return null
+
+  const separatorIdx = startIdx + 1
+  const separatorLine = lines[separatorIdx]?.trim()
+  if (!separatorLine || !isTableSeparator(separatorLine)) return null
+
+  const headers = parseTableCells(headerLine)
+  if (headers.length === 0) return null
+
+  const dataRows: string[][] = []
+  let currentIdx = separatorIdx + 1
+
+  while (currentIdx < lines.length) {
+    const rowLine = lines[currentIdx]?.trim()
+    if (!rowLine || !isTableRow(rowLine)) break
+    dataRows.push(parseTableCells(rowLine))
+    currentIdx++
+  }
+
+  if (dataRows.length === 0) return null
+
+  return { headers, rows: dataRows, nextIndex: currentIdx }
+}
+
+function isTableRow(line: string): boolean {
+  return line.startsWith("|") && line.endsWith("|")
+}
+
+function isTableSeparator(line: string): boolean {
+  if (!isTableRow(line)) return false
+  const inner = line.slice(1, -1)
+  const cells = inner.split("|")
+  return cells.every((cell) => /^\s*:?-{1,}:?\s*$/.test(cell))
+}
+
+function parseTableCells(line: string): string[] {
+  const inner = line.slice(1, -1)
+  return inner.split("|").map((cell) => cell.trim())
+}
+
+/**
  * Parses inline formatting: **bold**, *italic*, and `code`
  */
 function renderInline(text: string): React.ReactNode[] {
-  // Regex to token split on inline code (`...`), bold (**...**), italic (*...*)
   const tokens = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g)
 
   return tokens.map((token, i) => {

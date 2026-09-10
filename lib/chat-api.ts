@@ -27,6 +27,61 @@ export interface ChatApiResponse {
   generated_at?: string
 }
 
+// --- Portal context (ETL preload) -------------------------------------------
+
+export interface StudentPortalContext {
+  name?: string | null
+  enrollment_no?: number | null
+  department?: string | null
+  current_semester?: number | null
+  academic_year?: string | null
+  cgpa?: number | null
+  sgpa?: number | null
+  percentage?: number | null
+  backlogs?: number | null
+  academic_standing?: string | null
+  overall_attendance?: number | null
+  top_subjects?: { name?: string | null; percentage?: number | null; grade?: string | null }[]
+  weak_subjects?: { name?: string | null; percentage?: number | null; grade?: string | null }[]
+  prediction_summary?: { available?: boolean; predictions?: { type?: string; status?: string }[] }
+  career_readiness?: { available?: boolean; domain?: string | null; dream_role?: string | null }
+  upcoming_classes?: { day?: string | null; time?: string | null; subject?: string | null; type?: string | null }[]
+  recent_notifications?: { title?: string | null; body?: string | null; priority?: string | null }[]
+}
+
+export interface FacultyPortalContext {
+  name?: string | null
+  department?: string | null
+  designation?: string | null
+  subjects_taught?: { name?: string | null; code?: string | null; semester?: number | null }[]
+  total_mentees?: number | null
+  flagged_students?: { id?: string | null; name?: string | null; cgpa?: number | null; backlogs?: number | null; standing?: string | null }[]
+  class_summary?: { total_students?: number | null; avg_cgpa?: number | null; avg_attendance?: number | null }
+  department_summary?: Record<string, unknown>
+}
+
+export interface AdminPortalContext {
+  institution_name?: string | null
+  total_students?: number | null
+  total_faculty?: number | null
+  total_departments?: number | null
+  overall_cgpa?: number | null
+  overall_attendance?: number | null
+  flagged_count?: number | null
+  department_performance?: { name?: string | null; students?: number | null; avg_cgpa?: number | null; avg_attendance?: number | null }[]
+  recent_trends?: Record<string, unknown>[]
+}
+
+export interface PortalContextResponse {
+  role: "Student" | "Faculty" | "Admin"
+  student?: StudentPortalContext | null
+  faculty?: FacultyPortalContext | null
+  admin?: AdminPortalContext | null
+  generated_at?: string
+  data_available: boolean
+  note?: string | null
+}
+
 export interface ChatBffError {
   status: number
   code: string
@@ -171,6 +226,56 @@ export async function sendChatMessage(req: ChatApiRequest): Promise<ChatBffResul
     return {
       success: false,
       error: toChatBffError(503, `Unable to reach chat service: ${message}`),
+    }
+  }
+}
+
+export type FetchPortalContextResult =
+  | { success: true; data: PortalContextResponse }
+  | { success: false; error: ChatBffError }
+
+export async function fetchPortalContext(): Promise<FetchPortalContextResult> {
+  const session = await getSessionUser()
+  if (!session) {
+    return { success: false, error: toChatBffError(401) }
+  }
+
+  const token = await getSessionToken()
+  if (!token) {
+    return { success: false, error: toChatBffError(401) }
+  }
+
+  try {
+    const res = await fetch(`${FASTAPI_URL}/api/v1/chat/context`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      signal: AbortSignal.timeout(15000),
+    })
+
+    if (!res.ok) {
+      let errorDetail = ""
+      try {
+        const errJson = await res.json()
+        errorDetail = errJson.detail || errJson.message || ""
+      } catch {
+        // ignore parsing error
+      }
+      return {
+        success: false,
+        error: toChatBffError(res.status, errorDetail || undefined),
+      }
+    }
+
+    const data: PortalContextResponse = await res.json()
+    return { success: true, data }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error"
+    return {
+      success: false,
+      error: toChatBffError(503, `Unable to load portal context: ${message}`),
     }
   }
 }

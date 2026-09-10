@@ -20,7 +20,6 @@ const pool =
     connectionTimeoutMillis: 15000,
     max: 10,
     idleTimeoutMillis: 30000,
-    connectionRetryErrorCodes: ["ECONNRESET", "ETIMEDOUT", "57P01", "57P02"],
   })
 
 if (process.env.NODE_ENV !== "production") {

@@ -5,18 +5,77 @@ import { Bot } from "lucide-react"
 import { ChatMessageItem } from "./chat-message"
 import { ChatSuggestions } from "./chat-suggestions"
 import { useTranslation } from "@/lib/i18n"
-import type { UIMessage, UserRole } from "./types"
+import type { PortalSnapshot, UIMessage, UserRole } from "./types"
+
+function welcomeText(role: UserRole, portal: PortalSnapshot): string {
+  if (role === "Student") {
+    const s = portal.student
+    if (!s?.name) {
+      return "Ask me about your academic performance, attendance, subjects, predictions, or career readiness."
+    }
+    const parts = [`Hi ${s.name}, you've got full access to your academic portal.`]
+    const chips: string[] = []
+    if (s.cgpa != null) chips.push(`CGPA ${s.cgpa}`)
+    if (s.overallAttendance != null) chips.push(`attendance ${s.overallAttendance}%`)
+    if (s.academicStanding) chips.push(`standing: ${s.academicStanding}`)
+    if (chips.length) parts.push(`Right now: ${chips.join(" · ")}.`)
+    if (s.weakSubjects && s.weakSubjects.length) {
+      parts.push(`I can help you with ${s.weakSubjects.slice(0, 2).join(" and ")}.`)
+    }
+    parts.push("Ask me anything about your data below.")
+    return parts.join(" ")
+  }
+
+  if (role === "Faculty") {
+    const f = portal.faculty
+    if (!f?.name) {
+      return "Ask me about your students, subjects, flagged at-risk students, or department analytics."
+    }
+    const parts = [`Hi ${f.name}, your faculty portal is loaded.`]
+    const chips: string[] = []
+    if (f.subjectsTaught && f.subjectsTaught.length) {
+      chips.push(`teaching ${f.subjectsTaught.length} subject(s)`)
+    }
+    if (f.menteeCount != null) chips.push(`${f.menteeCount} mentees`)
+    if (f.totalStudents != null) chips.push(`${f.totalStudents} students in scope`)
+    if (chips.length) parts.push(`You're currently ${chips.join(", ")}.`)
+    if (f.flaggedCount != null && f.flaggedCount > 0) {
+      parts.push(`Note: ${f.flaggedCount} student(s) in your scope need attention.`)
+    }
+    parts.push("How can I help you with your students today?")
+    return parts.join(" ")
+  }
+
+  // Admin
+  const a = portal.admin
+  if (!a || a.totalStudents == null) {
+    return "Ask me about institution-wide analytics, departments, academic trends, attendance, or ML insights."
+  }
+  const parts = ["Your institutional portal is loaded."]
+  const chips: string[] = []
+  if (a.totalStudents != null) chips.push(`${a.totalStudents} students`)
+  if (a.totalFaculty != null) chips.push(`${a.totalFaculty} faculty`)
+  if (a.totalDepartments != null) chips.push(`${a.totalDepartments} departments`)
+  if (chips.length) parts.push(`Institution snapshot: ${chips.join(", ")}.`)
+  if (a.flaggedCount != null && a.flaggedCount > 0) {
+    parts.push(`${a.flaggedCount} flagged/at-risk students institution-wide.`)
+  }
+  parts.push("What would you like to drill into?")
+  return parts.join(" ")
+}
 
 export function ChatMessageList({
   messages,
   isLoading,
   role = "Student",
+  portal,
   onSelectSuggestion,
   onRetry,
 }: {
   messages: UIMessage[]
   isLoading: boolean
   role?: UserRole
+  portal?: PortalSnapshot
   onSelectSuggestion: (prompt: string) => void
   onRetry?: (lastUserMessage: string) => void
 }) {
@@ -46,11 +105,11 @@ export function ChatMessageList({
           <div className="space-y-1 max-w-xs">
             <h4 className="text-sm font-semibold text-foreground">{t("CampusX Assistant")}</h4>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              {t("Ask me about your academic performance, attendance, subjects, predictions, or career readiness.")}
+              {t(welcomeText(role, portal ?? { role, available: false }))}
             </p>
           </div>
           <div className="w-full pt-2">
-            <ChatSuggestions role={role} onSelect={onSelectSuggestion} disabled={isLoading} />
+            <ChatSuggestions role={role} portal={portal} onSelect={onSelectSuggestion} disabled={isLoading} />
           </div>
         </div>
       )}

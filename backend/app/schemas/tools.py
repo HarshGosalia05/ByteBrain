@@ -45,6 +45,8 @@ FACULTY_INTENTS = (
     "flagged_students",
     "prediction_insights",
     "department_analytics",
+    "timetable",
+    "mentee_analytics",
 )
 
 ADMIN_INTENTS = (
@@ -77,6 +79,7 @@ IntentType = Literal[
     "academic_trends",
     "attendance_trends",
     "ml_insights",
+    "mentee_analytics",
 ]
 
 INTENTS_BY_ROLE: dict[UserRole, tuple[str, ...]] = {

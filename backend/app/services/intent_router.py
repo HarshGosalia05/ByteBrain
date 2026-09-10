@@ -165,9 +165,13 @@ _KEYWORDS: dict[IntentType, tuple[str, ...]] = {
         "next class", "mera timetable", "mara timetable", "timetable dikhao",
         "classes list", "weekly schedule", "monday class", "daily schedule",
         "classtimes", "class timings batao", "class schedule kya hai",
+        "lecture", "lectures", "lecture schedule", "today lecture", "today's lecture",
+        "todays lecture", "aaj ka lecture", "today class", "today's class",
+        "todays class", "next lecture", "kab lecture",
         # Gujarati
         "timetable su chhe", "timetable keto", "aaje ke classes", "aaj ky class",
-        "class ketla vage", "class ketava vage",
+        "class ketla vage", "class ketava vage", "lecture ketla vage",
+        "aaj lecture su chhe",
     ),
     "attendance": (
         "attendance", "haziri", "hazri", "absent", "present days", "present",
@@ -344,6 +348,13 @@ _KEYWORDS: dict[IntentType, tuple[str, ...]] = {
         "how is my class performing", "how are my students performing",
         "teaching performance", "class overview", "my students", "all my students",
         "kya padha raha hu", "kya padha rahi hu", "meri padhai kaisi",
+        # Class-level attendance aggregates (avg attendance per subject)
+        # "how many student today present", "present today in class"
+        "today present", "present today", "students present", "student present",
+        "how many present", "how many students are present", "present in class",
+        "present in my class", "average attendance", "avg attendance",
+        "attendance in my class", "attendance of students",
+        "present aaj", "aaj present", "kitne present",
     ),
     "flagged_students": (
         "flagged", "at-risk", "at risk", "needs attention", "need attention",
@@ -351,10 +362,22 @@ _KEYWORDS: dict[IntentType, tuple[str, ...]] = {
         "at risk students", "struggling", "struggling students", "failing students",
         "attendance defaulters", "low attendance students",
         "dikkat wale student", "kharab students",
+        # Lowest / worst-performing students -> struggling/failing group
+        "lowest", "worst", "low performers", "low performing", "worst performers",
+        "worst performing", "least performing", "lowest performers",
+        "poorest", "bottom students",
     ),
     "prediction_insights": (
         "prediction insight", "prediction insights", "ml insight", "ai insight",
         "risk prediction", "predict", "predicted", "risk",
+    ),
+    "mentee_analytics": (
+        "mentees", "mentee", "my mentors", "mentors", "under my mentors",
+        "students under my mentors", "students under me", "my mentees",
+        "assigned students", "my assigned students", "mentee list", "mentee count",
+        "kitne mentees", "meri mentees", "mara mentees", "mentee kitne",
+        "how many students under my mentors", "mentorship", "my mentorship",
+        "how many mentees", "mentee summary",
     ),
     "department_analytics": (
         "department analytics", "my department", "dept-wide", "department",
@@ -384,6 +407,10 @@ _KEYWORDS: dict[IntentType, tuple[str, ...]] = {
         "flagged", "flagged students", "at-risk students", "institution risk",
         "needs attention", "risk students", "struggling students", "struggling",
         "failing students", "defaulters", "attendance defaulters",
+        # Lowest / worst-performing students -> struggling/failing group
+        "lowest", "worst", "low performers", "low performing", "worst performers",
+        "worst performing", "least performing", "lowest performers",
+        "poorest", "bottom students",
     ),
     "ml_insights": (
         "ml insight", "ml insights", "model insight", "prediction accuracy",
@@ -475,6 +502,12 @@ def _normalize_input(text: str) -> str:
 
     # "goal" variants (gole, goel, goll)
     cleaned = re.sub(r"\bgo[ae]+l\b|\bgoll\b", "goal", cleaned)
+
+    # "lecture" variants (lectrue, lectur, lectre)
+    if "lect" in cleaned:
+        cleaned = re.sub(r"\blec[a-z]*tu?r?e?\b", "lecture", cleaned)
+        cleaned = re.sub(r"\blect?ru?e?\b", "lecture", cleaned)
+        cleaned = re.sub(r"\blect?ur?e?\b", "lecture", cleaned)
 
     return " ".join(cleaned.split())
 
@@ -658,10 +691,33 @@ class IntentRouter:
                 "our students", "my class", "my classes", "class performance",
                 "struggling students", "struggling", "failing", "defaulters",
                 "attendance defaulters", "who need attention", "needs attention",
+                # Flagged / at-risk group phrasings. These are aggregate student
+                # warnings ("show flagged at-risk students") and must NOT stay
+                # ambiguous with prediction_insights merely because "at risk"
+                # also contains the word "risk".
+                "flagged students", "flagged", "at risk students", "at risk",
+                "at-risk", "risk students",
+                # Worst / lowest performers -> flagged (struggling/failing) group
+                "lowest", "worst", "low performing", "worst performing",
+                "least performing", "low performers", "worst performers",
+                "bottom students", "poorest",
+                # Subject-scoped aggregate questions ("... in my subject")
+                "my subject", "in my subject", "this subject", "in this subject",
+                "for this subject", "of this subject", "that subject",
+                # Class-level attendance aggregates ("how many present today")
+                "today present", "present today", "students present",
+                "student present", "how many present", "present in class",
+                "average attendance", "avg attendance", "present in my class",
+                "attendance of students",
             )
             has_aggregate_marker = any(marker in cleaned for marker in aggregate_markers)
             if has_aggregate_marker:
-                if any(k in cleaned for k in ("struggling", "defaulters", "failing", "attention", "at risk", "at-risk", "flagged")):
+                if any(k in cleaned for k in (
+                    "struggling", "defaulters", "failing", "attention", "at risk",
+                    "at-risk", "flagged", "risk students",
+                    "lowest", "worst", "low performing", "least performing",
+                    "bottom students", "poorest",
+                )):
                     in_role = {"flagged_students"}
                 elif "subject_analytics" in in_role:
                     in_role = {"subject_analytics"}

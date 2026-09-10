@@ -22,7 +22,7 @@ mock.module("./student-session.ts", {
 })
 
 // Import after registering mock so next/headers is never loaded
-const { sendChatMessage, toChatBffError } = await import("./chat-api.ts")
+const { sendChatMessage, fetchPortalContext, toChatBffError } = await import("./chat-api.ts")
 
 interface FetchCall {
   url: string
@@ -184,4 +184,52 @@ test("toChatBffError returns standardized safe messages", () => {
   assert.equal(err503.code, "SERVICE_UNAVAILABLE")
   const err504 = toChatBffError(504)
   assert.equal(err504.code, "GATEWAY_TIMEOUT")
+})
+
+test("fetchPortalContext hits /api/v1/chat/context with bearer token and returns data", async () => {
+  const ctxBody = {
+    role: "Student",
+    student: {
+      name: "Aarav Sharma",
+      cgpa: 8.2,
+      overall_attendance: 92,
+      top_subjects: [{ name: "Data Structures", percentage: 89 }],
+    },
+    generated_at: "2026-08-14T11:00:00Z",
+    data_available: true,
+  }
+  routes.set("/api/v1/chat/context", { body: ctxBody })
+
+  const result = await fetchPortalContext()
+  assert.equal(result.success, true)
+  if (result.success) {
+    assert.equal(result.data.role, "Student")
+    assert.equal(result.data.student?.cgpa, 8.2)
+    assert.equal(result.data.data_available, true)
+  }
+  const call = calls[0]
+  assert.ok(call.url.endsWith("/api/v1/chat/context"))
+  const headers = call.options?.headers as Record<string, string>
+  assert.ok(headers.Authorization.startsWith("Bearer "))
+})
+
+test("fetchPortalContext no session -> 401 unauthorized, fetch never called", async () => {
+  mockSession = null
+  const result = await fetchPortalContext()
+  assert.equal(result.success, false)
+  if (!result.success) {
+    assert.equal(result.error.status, 401)
+    assert.equal(result.error.code, "UNAUTHORIZED")
+  }
+  assert.equal(calls.length, 0)
+})
+
+test("fetchPortalContext backend 503 -> SERVICE_UNAVAILABLE with safe message", async () => {
+  routes.set("/api/v1/chat/context", { status: 503, body: { detail: "backend down" } })
+  const result = await fetchPortalContext()
+  assert.equal(result.success, false)
+  if (!result.success) {
+    assert.equal(result.error.status, 503)
+    assert.equal(result.error.code, "SERVICE_UNAVAILABLE")
+  }
 })
