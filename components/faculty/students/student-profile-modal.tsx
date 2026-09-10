@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 import Link from "next/link"
 import {
   AlertTriangle,
@@ -56,9 +57,324 @@ import { LoadingSkeleton } from "@/components/shared/state/loading-skeleton"
 
 const PRINT_STYLES = `
 @media print {
-  body * { visibility: hidden !important; }
-  [data-print-area], [data-print-area] * { visibility: visible !important; }
-  [data-print-area] { position: fixed !important; inset: 0 !important; overflow: visible !important; width: 100% !important; }
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body > * {
+    display: none !important;
+  }
+
+  #student-print-report {
+    display: block !important;
+    color: #111827;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 10px;
+    line-height: 1.4;
+  }
+
+  .spr-header {
+    margin-bottom: 10px;
+    border-bottom: 2.5px solid #111827;
+    padding-bottom: 6px;
+  }
+
+  .spr-brand {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: #111827;
+    margin: 0 0 2px 0;
+  }
+
+  .spr-student-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+  }
+
+  .spr-student-meta {
+    font-size: 10px;
+    color: #6b7280;
+    margin: 2px 0 0 0;
+  }
+
+  .spr-section {
+    margin-bottom: 10px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .spr-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #374151;
+    margin: 0 0 4px 0;
+    padding-bottom: 2px;
+    border-bottom: 1px solid #d1d5db;
+  }
+
+  .spr-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .spr-kpi {
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 6px 8px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .spr-kpi-label {
+    font-size: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6b7280;
+    margin: 0;
+  }
+
+  .spr-kpi-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #111827;
+    margin: 1px 0;
+    line-height: 1.2;
+  }
+
+  .spr-kpi-hint {
+    font-size: 8px;
+    color: #9ca3af;
+    margin: 0;
+  }
+
+  .spr-insights {
+    margin: 4px 0 0 0;
+    padding-left: 14px;
+  }
+
+  .spr-insights li {
+    font-size: 10px;
+    line-height: 1.4;
+    margin-bottom: 2px;
+  }
+
+  .spr-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  .spr-info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px 12px;
+  }
+
+  .spr-field {
+    min-width: 0;
+  }
+
+  .spr-field-label {
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6b7280;
+    margin: 0;
+  }
+
+  .spr-field-value {
+    font-size: 10px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .spr-mentor {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .spr-mentor-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #dcfce7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 12px;
+    color: #16a34a;
+  }
+
+  .spr-mentor-name {
+    font-size: 10px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+  }
+
+  .spr-mentor-detail {
+    font-size: 9px;
+    color: #6b7280;
+    margin: 1px 0 0 0;
+  }
+
+  table.spr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9px;
+    page-break-inside: auto;
+  }
+
+  table.spr-table thead {
+    display: table-header-group;
+  }
+
+  table.spr-table tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  table.spr-table th,
+  table.spr-table td {
+    border: 1px solid #d1d5db;
+    padding: 3px 5px;
+    text-align: left;
+  }
+
+  table.spr-table th {
+    background-color: #f3f4f6 !important;
+    font-weight: 700;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #374151;
+  }
+
+  .spr-semester-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 6px 8px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .spr-semester-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+
+  .spr-semester-no {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    background: #dbeafe;
+    color: #2563eb;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .spr-semester-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 1px 0;
+  }
+
+  .spr-semester-year {
+    font-size: 8px;
+    color: #6b7280;
+    margin: 0;
+  }
+
+  .spr-semester-badge {
+    font-size: 8px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .spr-semester-badge-pass {
+    background: #dcfce7;
+    color: #16a34a;
+  }
+
+  .spr-semester-badge-fail {
+    background: #fef3c7;
+    color: #d97706;
+  }
+
+  .spr-semester-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3px 10px;
+  }
+
+  .spr-sem-field {
+    min-width: 0;
+  }
+
+  .spr-sem-field-label {
+    font-size: 8px;
+    color: #6b7280;
+    margin: 0;
+  }
+
+  .spr-sem-field-value {
+    font-size: 10px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+  }
+
+  .spr-empty {
+    font-size: 10px;
+    color: #6b7280;
+    font-style: italic;
+    margin: 4px 0;
+  }
+
+  .spr-footer {
+    margin-top: 12px;
+    padding-top: 6px;
+    border-top: 1px solid #d1d5db;
+    font-size: 8px;
+    color: #9ca3af;
+    text-align: center;
+  }
 }
 `
 
@@ -308,6 +624,274 @@ export function StudentProfileModal({
   return (
     <>
       <style>{PRINT_STYLES}</style>
+      {data && s && typeof document !== "undefined" && createPortal(
+        <div id="student-print-report">
+          <div className="spr-header">
+            <p className="spr-brand">CampusX</p>
+            <p className="spr-student-name">{s.full_name}</p>
+            <p className="spr-student-meta">
+              {s.enrollment_no} · Semester {s.current_semester ?? "—"} · {s.department_name ?? "—"}
+            </p>
+          </div>
+
+          <div className="spr-kpi-grid">
+            <div className="spr-kpi">
+              <p className="spr-kpi-label">Latest SGPA</p>
+              <p className="spr-kpi-value">{fmt(s.latest_sgpa, 2)}</p>
+              {s.current_semester && <p className="spr-kpi-hint">Semester {s.current_semester}</p>}
+            </div>
+            <div className="spr-kpi">
+              <p className="spr-kpi-label">CGPA</p>
+              <p className="spr-kpi-value">{fmt(s.overall_cgpa, 2)}</p>
+              {s.overall_percentage != null && <p className="spr-kpi-hint">{fmt(s.overall_percentage, 2)}% overall</p>}
+            </div>
+            <div className="spr-kpi">
+              <p className="spr-kpi-label">Attendance</p>
+              <p className="spr-kpi-value">{fmtPct(s.overall_attendance_percentage)}</p>
+              <p className="spr-kpi-hint">vs 75% minimum</p>
+            </div>
+            <div className="spr-kpi">
+              <p className="spr-kpi-label">Backlogs</p>
+              <p className="spr-kpi-value">{s.total_backlogs == null ? "—" : String(s.total_backlogs)}</p>
+            </div>
+            <div className="spr-kpi">
+              <p className="spr-kpi-label">Credits Earned</p>
+              <p className="spr-kpi-value">{s.total_credits_earned ?? 0}/{s.total_credits_registered ?? 0}</p>
+            </div>
+            <div className="spr-kpi">
+              <p className="spr-kpi-label">Department Rank</p>
+              <p className="spr-kpi-value">{data.rank != null ? `#${data.rank}` : "—"}</p>
+              {data.rank_total && <p className="spr-kpi-hint">of {data.rank_total} students</p>}
+            </div>
+          </div>
+
+          {insights.length > 0 && (
+            <div className="spr-section">
+              <p className="spr-section-title">Faculty Insights</p>
+              <ul className="spr-insights">
+                {insights.map((insight, i) => (
+                  <li key={i}>
+                    <span className={cn("spr-dot", toneDot[insight.tone])} />
+                    {insight.text}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="spr-section">
+            <p className="spr-section-title">Student Overview</p>
+            <div className="spr-info-grid">
+              {[
+                { label: "Enrollment No", value: s.enrollment_no },
+                { label: "University Roll No", value: s.university_roll_no },
+                { label: "Gender", value: s.gender },
+                { label: "Date of Birth", value: s.date_of_birth },
+                { label: "Category", value: s.category },
+                { label: "Department", value: s.department_name },
+                { label: "Semester", value: s.current_semester },
+                { label: "Academic Year", value: s.current_academic_year },
+                { label: "Student Status", value: s.student_status },
+                { label: "City", value: s.city },
+                { label: "Email", value: s.email },
+                { label: "Phone", value: s.student_phone_number },
+                { label: "Guardian", value: s.guardian_name },
+                { label: "Guardian Phone", value: s.guardian_phone },
+                { label: "Admission Year", value: s.admission_year },
+                { label: "Admission Date", value: s.admission_date },
+                { label: "Admission Type", value: s.admission_type },
+                { label: "Admission Quota", value: s.admission_quota },
+              ].map((item) => (
+                <div key={item.label} className="spr-field">
+                  <p className="spr-field-label">{item.label}</p>
+                  <p className="spr-field-value">{item.value || "—"}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {data.mentor && (
+            <div className="spr-section">
+              <p className="spr-section-title">Mentor</p>
+              <div className="spr-mentor">
+                <div className="spr-mentor-icon">✦</div>
+                <div>
+                  <p className="spr-mentor-name">{data.mentor.faculty_name}</p>
+                  <p className="spr-mentor-detail">
+                    {[data.mentor.designation, data.mentor.mentor_role].filter(Boolean).join(" · ") || "Faculty Mentor"}
+                  </p>
+                  {data.mentor.mentor_since && (
+                    <p className="spr-mentor-detail">Mentor since {data.mentor.mentor_since}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {data.semester_summaries.length > 0 && (
+            <div className="spr-section">
+              <p className="spr-section-title">Academic Timeline</p>
+              <div className="spr-semester-grid">
+                {data.semester_summaries.map((sem) => (
+                  <div key={sem.semester_no} className="spr-semester-card">
+                    <div className="spr-semester-head">
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span className="spr-semester-no">{sem.semester_no}</span>
+                        <div>
+                          <p className="spr-semester-title">Semester {sem.semester_no}</p>
+                          <p className="spr-semester-year">{sem.academic_year ?? "—"}</p>
+                        </div>
+                      </div>
+                      {sem.semester_result && (
+                        <span className={cn("spr-semester-badge", sem.semester_result.toLowerCase() === "pass" ? "spr-semester-badge-pass" : "spr-semester-badge-fail")}>
+                          {sem.semester_result}
+                        </span>
+                      )}
+                    </div>
+                    <div className="spr-semester-grid">
+                      <div className="spr-sem-field">
+                        <p className="spr-sem-field-label">SGPA</p>
+                        <p className="spr-sem-field-value">{fmt(sem.semester_sgpa, 2)}</p>
+                      </div>
+                      <div className="spr-sem-field">
+                        <p className="spr-sem-field-label">Percentage</p>
+                        <p className="spr-sem-field-value">{fmtPct(sem.semester_percentage)}</p>
+                      </div>
+                      <div className="spr-sem-field">
+                        <p className="spr-sem-field-label">Attendance</p>
+                        <p className="spr-sem-field-value">{fmtPct(sem.semester_attendance_percentage)}</p>
+                      </div>
+                      <div className="spr-sem-field">
+                        <p className="spr-sem-field-label">Credits</p>
+                        <p className="spr-sem-field-value">{sem.credits_earned ?? 0}/{sem.credits_registered ?? 0}</p>
+                      </div>
+                      <div className="spr-sem-field">
+                        <p className="spr-sem-field-label">Backlogs</p>
+                        <p className="spr-sem-field-value">{sem.backlog_count ?? 0}</p>
+                      </div>
+                      <div className="spr-sem-field">
+                        <p className="spr-sem-field-label">Standing</p>
+                        <p className="spr-sem-field-value">{sem.academic_standing ?? "—"}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {subjectRows.length > 0 && (
+            <div className="spr-section">
+              <p className="spr-section-title">Subject-wise Attendance</p>
+              <table className="spr-table">
+                <thead>
+                  <tr>
+                    <th>Subject</th>
+                    <th>Classes</th>
+                    <th style={{ textAlign: "right" }}>Attendance</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subjectRows.map((sub) => {
+                    const below = sub.attendance_percentage != null && sub.attendance_percentage < 75
+                    return (
+                      <tr key={`${sub.subject_id}-${sub.semester_no}-${sub.academic_year}`}>
+                        <td>
+                          <span style={{ fontWeight: 600 }}>{sub.subject_name}</span>
+                          <br />
+                          <span style={{ fontSize: "8px", color: "#6b7280" }}>{sub.subject_code}</span>
+                        </td>
+                        <td>{sub.attended_classes != null ? `${sub.attended_classes}/${sub.total_classes ?? "—"}` : "—"}</td>
+                        <td style={{ textAlign: "right", fontWeight: 600 }}>{fmtPct(sub.attendance_percentage)}</td>
+                        <td>{below ? "Shortage" : "Regular"}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {data.subject_performance.length > 0 && (
+            <div className="spr-section">
+              <p className="spr-section-title">Subject-wise Performance</p>
+              <table className="spr-table">
+                <thead>
+                  <tr>
+                    <th>Subject</th>
+                    <th>Type</th>
+                    <th>Faculty</th>
+                    <th style={{ textAlign: "right" }}>Int / Mid / Ext</th>
+                    <th style={{ textAlign: "right" }}>Total</th>
+                    <th style={{ textAlign: "right" }}>%</th>
+                    <th>Grade</th>
+                    <th>Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.subject_performance.map((sub) => (
+                    <tr key={`${sub.subject_id}-${sub.semester_no}-${sub.academic_year}`}>
+                      <td>
+                        <span style={{ fontWeight: 600 }}>{sub.subject_name}</span>
+                        <br />
+                        <span style={{ fontSize: "8px", color: "#6b7280" }}>
+                          {sub.subject_code}{sub.semester_no ? ` · Sem ${sub.semester_no}` : ""}
+                        </span>
+                      </td>
+                      <td>{sub.subject_type ?? "—"}</td>
+                      <td>{sub.faculty_name ?? "—"}</td>
+                      <td style={{ textAlign: "right" }}>
+                        {sub.internal_marks != null || sub.mid_sem_marks != null || sub.external_marks != null
+                          ? `${fmt(sub.internal_marks, 0)} / ${fmt(sub.mid_sem_marks, 0)} / ${fmt(sub.external_marks, 0)}`
+                          : "—"}
+                      </td>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>{fmt(sub.total_marks, 0)}</td>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>{fmtPct(sub.percentage)}</td>
+                      <td>{sub.grade || "—"}</td>
+                      <td style={{ fontWeight: isPoorSubject(sub) ? 700 : 400 }}>{sub.result_status ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {data.career && (
+            <div className="spr-section">
+              <p className="spr-section-title">Career Preferences</p>
+              <div className="spr-info-grid">
+                {[
+                  { label: "Preferred Domain", value: data.career.preferred_domain },
+                  { label: "Dream Job Role", value: data.career.dream_job_role },
+                  { label: "Preferred Industry", value: data.career.preferred_industry },
+                  { label: "Work Mode", value: data.career.preferred_work_mode },
+                  { label: "Target Package", value: data.career.target_package_lpa != null ? `${data.career.target_package_lpa} LPA` : null },
+                  { label: "Higher Studies", value: data.career.higher_studies_interest },
+                  { label: "Entrepreneurship", value: data.career.entrepreneurship_interest },
+                  { label: "Certification", value: data.career.certification_interest },
+                  { label: "Internship Completed", value: data.career.internship_completed },
+                ].map((item) => (
+                  <div key={item.label} className="spr-field">
+                    <p className="spr-field-label">{item.label}</p>
+                    <p className="spr-field-value">{item.value || "—"}</p>
+                  </div>
+                ))}
+              </div>
+              {data.career.placement_readiness_level && (
+                <p style={{ marginTop: "4px", fontSize: "9px", color: "#6b7280" }}>
+                  Readiness Level: <span style={{ fontWeight: 600 }}>{data.career.placement_readiness_level}</span>
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="spr-footer">
+            CampusX · Student Academic Record
+          </div>
+        </div>,
+        document.body
+      )}
       <Dialog
         open={!!studentId}
         onOpenChange={(open) => {
@@ -315,6 +899,7 @@ export function StudentProfileModal({
         }}
       >
         <DialogContent className="flex h-dvh max-h-dvh w-full max-w-full flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:h-auto sm:max-h-[90dvh] sm:max-w-[90%] sm:rounded-xl sm:border sm:border-border lg:max-w-[1100px]">
+          {/* Screen-only top bar */}
           <div className="flex shrink-0 items-center justify-between gap-4 border-b px-6 py-4 pr-12">
             <div className="flex min-w-0 items-center gap-3">
               {data && s ? (
@@ -390,7 +975,7 @@ export function StudentProfileModal({
                   </TabsList>
                 </div>
 
-                <div ref={scrollRef} data-print-area className="min-h-0 flex-1 overflow-y-auto p-6">
+                <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-6">
                   <TabsContent value="overview" className="mt-0">
                     <div className="flex flex-col gap-6">
                       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

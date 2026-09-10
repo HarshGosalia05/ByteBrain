@@ -1714,6 +1714,7 @@ export type AttendanceGovernanceParams = AttendanceSummaryParams & {
 export type AttendanceExportParams = AttendanceSummaryParams & {
   search?: string | null
   student_ids?: string[]
+  attendance_range?: string | null
 }
 
 export type PerformanceSummaryParams = {

@@ -1789,6 +1789,209 @@ class FacultyRepository:
             rows = await conn.fetch(query, faculty_id)
             return [dict(row) for row in rows]
 
+    async def get_shortage_students(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        search: Optional[str],
+        attendance_range: Optional[str],
+        sort: str,
+        order: str,
+        page: int,
+        page_size: int,
+        compliance_threshold: float,
+    ) -> Dict[str, Any]:
+        """Get shortage students grouped by student for faculty scope."""
+        where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
+        
+        # Build attendance range filter
+        attendance_filter = ""
+        if attendance_range:
+            if attendance_range == "<50":
+                attendance_filter = "AND a.attendance_percentage < 50"
+            elif attendance_range == "<60":
+                attendance_filter = "AND a.attendance_percentage < 60"
+            elif attendance_range == "<75":
+                attendance_filter = "AND a.attendance_percentage < 75"
+            elif attendance_range == "75-100":
+                attendance_filter = "AND a.attendance_percentage >= 75"
+        
+        # Build search filter
+        search_filter = ""
+        search_params = []
+        if search:
+            search_filter = """AND (
+                st.full_name ILIKE '%' || $${param} || '%'
+                OR CAST(st.enrollment_no AS text) ILIKE '%' || $${param} || '%'
+                OR sse.subject_code ILIKE '%' || $${param} || '%'
+                OR sse.subject_name ILIKE '%' || $${param} || '%'
+            )"""
+            search_params = [search]
+        
+        # Build sort clause
+        sort_column = "student_name"
+        if sort == "attendance":
+            sort_column = "lowest_attendance"
+        elif sort == "shortage_count":
+            sort_column = "shortage_count"
+        elif sort == "name":
+            sort_column = "student_name"
+        
+        sort_order = "ASC" if order == "asc" else "DESC"
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        limit = page_size + 1  # Fetch one extra to check if there are more pages
+        
+        # Base query to get all shortage student-subject records
+        base_query = f"""
+            SELECT 
+                sse.enrollment_record_id, sse.student_id, sse.enrollment_no, sse.semester_no,
+                sse.subject_id, sse.subject_code, sse.subject_name,
+                st.first_name, st.last_name, st.department_name,
+                a.attendance_percentage, a.attendance_status, a.eligibility_status, a.shortage_flag,
+                a.total_classes, a.attended_classes
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            AND a.attendance_percentage IS NOT NULL
+            AND a.attendance_percentage < $${len(params) + 1}
+            {attendance_filter}
+            {search_filter}
+            ORDER BY a.attendance_percentage ASC NULLS LAST, st.first_name ASC, st.last_name ASC
+        """
+        
+        # Execute base query to get all shortage records
+        all_params = params + [compliance_threshold] + search_params
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(base_query, *all_params)
+        
+        # Group by student
+        students_map: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            student_id = row["student_id"]
+            if student_id not in students_map:
+                students_map[student_id] = {
+                    "student_id": student_id,
+                    "enrollment_no": row["enrollment_no"],
+                    "first_name": row["first_name"],
+                    "last_name": row["last_name"],
+                    "department_name": row["department_name"],
+                    "semester_no": row["semester_no"],
+                    "lowest_attendance": row["attendance_percentage"],
+                    "shortage_subjects": [],
+                    "shortage_count": 0,
+                }
+            
+            students_map[student_id]["shortage_subjects"].append({
+                "subject_id": row["subject_id"],
+                "subject_code": row["subject_code"],
+                "subject_name": row["subject_name"],
+                "semester_no": row["semester_no"],
+                "attendance_percentage": row["attendance_percentage"],
+                "attendance_status": row["attendance_status"],
+                "eligibility_status": row["eligibility_status"],
+                "shortage_flag": row["shortage_flag"],
+                "total_classes": row["total_classes"],
+                "attended_classes": row["attended_classes"],
+            })
+            
+            # Update lowest attendance
+            if row["attendance_percentage"] < students_map[student_id]["lowest_attendance"]:
+                students_map[student_id]["lowest_attendance"] = row["attendance_percentage"]
+        
+        # Convert to list and calculate shortage count
+        students_list = []
+        for student in students_map.values():
+            student["shortage_count"] = len(student["shortage_subjects"])
+            students_list.append(student)
+        
+        # Sort
+        reverse = order == "desc"
+        if sort == "attendance":
+            students_list.sort(key=lambda x: x["lowest_attendance"] or 100, reverse=reverse)
+        elif sort == "shortage_count":
+            students_list.sort(key=lambda x: x["shortage_count"], reverse=reverse)
+        else:
+            students_list.sort(key=lambda x: (x["first_name"] or "") + " " + (x["last_name"] or ""), reverse=reverse)
+        
+        # Pagination
+        total = len(students_list)
+        paginated = students_list[offset:offset + page_size]
+        has_more = len(students_list) > offset + page_size
+        
+        return {
+            "students": paginated,
+            "total": total,
+            "has_more": has_more,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    async def get_shortage_students_export(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        search: Optional[str],
+        attendance_range: Optional[str],
+        compliance_threshold: float,
+    ) -> List[Dict[str, Any]]:
+        """Get all shortage student-subject records for CSV export."""
+        where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
+        
+        attendance_filter = ""
+        if attendance_range:
+            if attendance_range == "<50":
+                attendance_filter = "AND a.attendance_percentage < 50"
+            elif attendance_range == "<60":
+                attendance_filter = "AND a.attendance_percentage < 60"
+            elif attendance_range == "<75":
+                attendance_filter = "AND a.attendance_percentage < 75"
+            elif attendance_range == "75-100":
+                attendance_filter = "AND a.attendance_percentage >= 75"
+        
+        search_filter = ""
+        search_params = []
+        if search:
+            search_filter = """AND (
+                st.full_name ILIKE '%' || $${param} || '%'
+                OR CAST(st.enrollment_no AS text) ILIKE '%' || $${param} || '%'
+                OR sse.subject_code ILIKE '%' || $${param} || '%'
+                OR sse.subject_name ILIKE '%' || $${param} || '%'
+            )"""
+            search_params = [search]
+        
+        query = f"""
+            SELECT 
+                sse.enrollment_record_id, sse.student_id, sse.enrollment_no, sse.semester_no,
+                sse.subject_id, sse.subject_code, sse.subject_name,
+                st.first_name, st.last_name, st.department_name,
+                a.attendance_percentage, a.attendance_status, a.eligibility_status, a.shortage_flag,
+                a.total_classes, a.attended_classes
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            LEFT JOIN attendance a 
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            {where}
+            AND a.attendance_percentage IS NOT NULL
+            AND a.attendance_percentage < $${len(params) + 1}
+            {attendance_filter}
+            {search_filter}
+            ORDER BY st.first_name ASC, st.last_name ASC, a.attendance_percentage ASC
+        """
+        
+        all_params = params + [compliance_threshold] + search_params
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *all_params)
+        
+        return [dict(row) for row in rows]
+
     async def get_attendance_health_score(
         self,
         faculty_id: str,

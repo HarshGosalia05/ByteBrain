@@ -124,7 +124,7 @@ def _default_responses(overrides=None):
             "total": 1
         },
         # Shortage Students Table
-        ("fetch", "ORDER BY a.attendance_percentage ASC, st.full_name ASC"): [
+        ("fetch", "filtered_students"): [
             {
                 "student_id": "STU01",
                 "student_name": "Alice Shah",
@@ -138,7 +138,7 @@ def _default_responses(overrides=None):
                 "eligibility_status": "Not Eligible",
             }
         ],
-        ("fetchrow", "SELECT COUNT(*)\n            FROM attendance a\n            JOIN student_subject_enrollment e"): {
+        ("fetchrow", "SELECT COUNT(*) AS total\n            FROM (\n                SELECT DISTINCT st.student_id"): {
             "total": 1
         },
         # Risk Counts
@@ -268,6 +268,8 @@ class AttendanceIntelligenceServiceTests(unittest.TestCase):
         self.assertAlmostEqual(row.attendance_percentage, 68.5, places=2)
         self.assertAlmostEqual(row.shortage, 6.5, places=2)  # 75 - 68.5 = 6.5
         self.assertEqual(row.eligibility_status, "Not Eligible")
+        # shortage_students_total counts unique students (matches KPI population)
+        self.assertEqual(response.shortage_students_total, 1)
 
 
 class RiskIntelligenceServiceTests(unittest.TestCase):
@@ -343,7 +345,12 @@ class FilteringAndSafetyTests(unittest.TestCase):
         run(service.get_risk_intelligence())
         self.assertTrue(conn.executed)
         for kind, query, args in conn.executed:
-            self.assertTrue(query.lstrip().upper().startswith("SELECT"), query)
+            upper = query.lstrip().upper()
+            # SELECT or WITH (CTE containing only SELECT statements) are both read-only
+            self.assertTrue(
+                upper.startswith("SELECT") or upper.startswith("WITH"),
+                query,
+            )
 
     def test_endpoints_depend_on_admin_role(self):
         for route in admin_api.router.routes:
