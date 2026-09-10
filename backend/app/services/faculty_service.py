@@ -414,8 +414,9 @@ class FacultyService:
             )
 
         semester_no = term["semester_no"]
-        overview = await self.repo.get_term_overview(faculty_id, semester_no)
-        breakdown_rows = await self.repo.get_term_subjects(faculty_id, semester_no)
+        academic_year = term["academic_year"]
+        overview = await self.repo.get_term_overview(faculty_id, semester_no, academic_year)
+        breakdown_rows = await self.repo.get_term_subjects(faculty_id, semester_no, academic_year)
 
         subject_breakdown = [
             DashboardSubjectSummary(
