@@ -54,7 +54,7 @@ export function AdminShell({
 
   return (
     <div className="flex min-h-svh">
-      <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-svh lg:w-64 lg:shrink-0 lg:flex-col lg:gap-6 lg:border-r lg:border-sidebar-border lg:bg-sidebar lg:px-4 lg:py-6 print:hidden">
+      <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-svh lg:w-64 lg:shrink-0 lg:flex-col lg:gap-6 lg:border-r lg:border-sidebar-border lg:bg-sidebar lg:px-4 lg:py-6 lg:overflow-y-auto lg:hide-scrollbar print:hidden">
         <Brand />
         <SideNav />
       </aside>
@@ -81,7 +81,7 @@ export function AdminShell({
             className="absolute inset-0 bg-background/60 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col gap-6 border-r border-sidebar-border bg-sidebar px-4 py-6 shadow-xl">
+          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col gap-6 border-r border-sidebar-border bg-sidebar px-4 py-6 shadow-xl overflow-y-auto hide-scrollbar">
             <div className="flex items-center justify-between">
               <Brand />
               <Button

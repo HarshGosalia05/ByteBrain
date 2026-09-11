@@ -205,3 +205,12 @@
   }
 
 }
+
+/* Hide scrollbar only on admin sidebar */
+aside[class*="hide-scrollbar"]::-webkit-scrollbar {
+  display: none;
+}
+aside[class*="hide-scrollbar"] {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
