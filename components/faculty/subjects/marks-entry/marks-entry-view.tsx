@@ -912,22 +912,22 @@ export function MarksEntryView({
                   <Table
                     className={cn(
                       "table-fixed w-full",
-                      actionsVisible ? "min-w-[1000px]" : "min-w-[936px]",
+                      actionsVisible ? "min-w-[1120px]" : "min-w-[1056px]",
                     )}
                   >
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="sticky left-0 z-20 w-14 bg-card">
+                        <TableHead className="sticky left-0 z-20 w-24 bg-card">
                           Enrollment No
                         </TableHead>
-                        <TableHead className="sticky left-14 z-20 w-32 bg-card">
+                        <TableHead className="sticky left-24 z-20 w-36 bg-card">
                           Student Name
                         </TableHead>
                         <TableHead className="w-20">Internal</TableHead>
                         <TableHead className="w-20">Mid-sem</TableHead>
                         <TableHead className="w-20">End-sem</TableHead>
-                        <TableHead className="w-14">Total</TableHead>
-                        <TableHead className="w-16">%</TableHead>
+                        <TableHead className="w-24">Total</TableHead>
+                        <TableHead className="w-20">%</TableHead>
                         <TableHead className="w-14">Grade</TableHead>
                         <TableHead className="w-16">Result</TableHead>
                         <TableHead className="w-24">Category</TableHead>
@@ -942,10 +942,10 @@ export function MarksEntryView({
                         const live = liveDerivedForRow(row)
                         return (
                           <TableRow key={row.enrollment_record_id}>
-                            <TableCell className="sticky left-0 z-10 w-14 bg-card font-mono text-xs text-muted-foreground">
+                            <TableCell className="sticky left-0 z-10 w-24 bg-card font-mono text-xs text-muted-foreground">
                               {String(row.enrollment_no).padStart(3, "0")}
                             </TableCell>
-                            <TableCell className="sticky left-14 z-10 w-32 bg-card font-medium">
+                            <TableCell className="sticky left-24 z-10 w-36 bg-card font-medium">
                               <span className="block break-words">
                                 {row.first_name} {row.last_name}
                               </span>
@@ -959,20 +959,20 @@ export function MarksEntryView({
                             <TableCell className="w-20">
                               {marksInputFor(row, "end")}
                             </TableCell>
-                            <TableCell className="w-14 font-medium tabular-nums">
+                            <TableCell className="w-24 font-medium tabular-nums">
                               {live.complete && live.total !== null ? (
                                 live.total
                               ) : (
-                                <span className="whitespace-normal break-words italic text-muted-foreground">
+                                <span className="whitespace-nowrap italic text-muted-foreground">
                                   Not Calculated
                                 </span>
                               )}
                             </TableCell>
-                            <TableCell className="w-16 tabular-nums">
+                            <TableCell className="w-20 tabular-nums">
                               {live.complete && live.percentage !== null ? (
                                 formatPercent(live.percentage)
                               ) : (
-                                <span className="whitespace-normal break-words italic text-muted-foreground">
+                                <span className="whitespace-nowrap italic text-muted-foreground">
                                   Not Calculated
                                 </span>
                               )}
