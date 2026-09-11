@@ -65,7 +65,6 @@ export default async function WorkloadPage(props: {
       : rawAcademicYear ?? CURRENT_ACADEMIC_YEAR
   const subject_id =
     typeof searchParams.subject_id === "string" ? searchParams.subject_id : undefined
-  const compare = searchParams.compare === "true"
 
   const subject_type =
     typeof searchParams.subject_type === "string" ? searchParams.subject_type : undefined
@@ -100,7 +99,6 @@ export default async function WorkloadPage(props: {
     semester: semester === 0 ? null : semester,
     academic_year,
     subject_id,
-    compare,
   }
 
   const res = await getFacultyWorkloadSummary(filters)
@@ -122,10 +120,7 @@ export default async function WorkloadPage(props: {
         scopeLabel={buildScopeLabel(res.data.applied, res.data.filters)}
         filters={filters}
       />
-      <WorkloadFilterBar
-        filters={res.data.filters}
-        hasPreviousTerm={res.data.previous_term !== null}
-      />
+      <WorkloadFilterBar filters={res.data.filters} />
       <WorkloadView data={res.data}>
         <Suspense fallback={sectionFallback()}>
           <ChartsSection filters={filters} thresholds={res.data.thresholds} />

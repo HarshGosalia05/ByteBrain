@@ -57,7 +57,6 @@ export default async function PerformancePage(props: {
       : rawAcademicYear ?? CURRENT_ACADEMIC_YEAR
   const subject_id =
     typeof searchParams.subject_id === "string" ? searchParams.subject_id : undefined
-  const compare = searchParams.compare === "true"
   const search = typeof searchParams.search === "string" ? searchParams.search : undefined
   const gapStatus =
     typeof searchParams.gap_status === "string" ? searchParams.gap_status : undefined
@@ -72,7 +71,6 @@ export default async function PerformancePage(props: {
     semester: semester === 0 ? null : semester,
     academic_year,
     subject_id,
-    compare,
   }
 
   const res = await getFacultyPerformanceSummary(filters)
@@ -94,10 +92,7 @@ export default async function PerformancePage(props: {
         scopeLabel={buildScopeLabel(res.data.applied, res.data.filters)}
         filters={filters}
       />
-      <PerformanceFilterBar
-        filters={res.data.filters}
-        hasPreviousTerm={res.data.previous_term !== null}
-      />
+      <PerformanceFilterBar filters={res.data.filters} />
       <PerformanceView data={res.data}>
         <Suspense fallback={sectionFallback()}>
           <ChartsSection filters={filters} thresholds={res.data.thresholds} />

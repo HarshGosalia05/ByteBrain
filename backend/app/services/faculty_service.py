@@ -86,6 +86,7 @@ from app.schemas.faculty import (
     AttendanceThresholds,
     AttendanceSummary,
     AttendanceHeatmapCell,
+    AttendanceHeatmapPage,
     AttendanceDistributions,
     AttendanceSubjectItem,
     AttendanceSubjectBreakdown,
@@ -2155,6 +2156,37 @@ class FacultyService:
             ],
         )
 
+    async def get_attendance_heatmap_page(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        page: int,
+        page_size: int,
+    ) -> AttendanceHeatmapPage:
+        await self._ensure_profile(faculty_id)
+        result = await self.repo.get_attendance_heatmap_paginated(
+            faculty_id, semester_no, academic_year, subject_id, page, page_size,
+        )
+        return AttendanceHeatmapPage(
+            cells=[
+                AttendanceHeatmapCell(
+                    student_id=r["student_id"],
+                    subject_id=r["subject_id"],
+                    subject_code=r["subject_code"],
+                    first_name=r["first_name"],
+                    last_name=r["last_name"],
+                    attendance_percentage=float(r["attendance_percentage"])
+                    if r.get("attendance_percentage") is not None else None,
+                )
+                for r in result["cells"]
+            ],
+            total_students=result["total_students"],
+            page=page,
+            page_size=page_size,
+        )
+
     async def get_attendance_subject_breakdown(
         self,
         faculty_id: str,
@@ -2224,10 +2256,12 @@ class FacultyService:
     async def get_attendance_trends(
         self,
         faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
         subject_id: Optional[str],
     ) -> AttendanceTrends:
         await self._ensure_profile(faculty_id)
-        data = await self.repo.get_attendance_trends(faculty_id, subject_id)
+        data = await self.repo.get_attendance_trends(faculty_id, semester_no, academic_year, subject_id)
         return AttendanceTrends(
             items=[
                 AttendanceTrendItem(

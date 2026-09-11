@@ -14,7 +14,6 @@ const selectClassName =
 
 type WorkloadFilterBarProps = {
   filters: WorkloadFilters
-  hasPreviousTerm: boolean
 }
 
 function downloadCsv(text: string, filename: string) {
@@ -29,7 +28,7 @@ function downloadCsv(text: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-export function WorkloadFilterBar({ filters, hasPreviousTerm }: WorkloadFilterBarProps) {
+export function WorkloadFilterBar({ filters }: WorkloadFilterBarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -80,25 +79,15 @@ export function WorkloadFilterBar({ filters, hasPreviousTerm }: WorkloadFilterBa
     params.delete("semester")
     params.set("academic_year", CURRENT_ACADEMIC_YEAR)
     params.delete("subject_id")
-    params.delete("compare")
     router.push(`${pathname}?${params.toString()}`)
   }
 
   const semester = searchParams.get("semester") || ""
   const academicYear = searchParams.get("academic_year") ?? CURRENT_ACADEMIC_YEAR
   const subjectId = searchParams.get("subject_id") || ""
-  const compareOn = searchParams.get("compare") === "true"
-  const semesterSelected = Boolean(semester)
-  const compareDisabled = !semesterSelected || !hasPreviousTerm
 
   const activeFiltersCount =
-    (semester ? 1 : 0) + (academicYear !== CURRENT_ACADEMIC_YEAR ? 1 : 0) + (subjectId ? 1 : 0) + (compareOn ? 1 : 0)
-
-  const compareHint = !semesterSelected
-    ? "Select a semester to compare"
-    : hasPreviousTerm
-      ? undefined
-      : "No previous term available"
+    (semester ? 1 : 0) + (academicYear !== CURRENT_ACADEMIC_YEAR ? 1 : 0) + (subjectId ? 1 : 0)
 
   return (
     <div className="flex flex-col gap-3 print:hidden">
@@ -142,42 +131,6 @@ export function WorkloadFilterBar({ filters, hasPreviousTerm }: WorkloadFilterBa
             </option>
           ))}
         </select>
-
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-md border border-input bg-background p-0.5">
-            <button
-              type="button"
-              className={cn(
-                "h-8 rounded px-2.5 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50",
-                !compareOn
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              disabled={compareDisabled}
-              onClick={() => handleFilterChange("compare", "")}
-              aria-pressed={!compareOn}
-            >
-              Current
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "h-8 rounded px-2.5 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50",
-                compareOn
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              disabled={compareDisabled}
-              onClick={() => handleFilterChange("compare", "true")}
-              aria-pressed={compareOn}
-            >
-              Previous
-            </button>
-          </div>
-          {compareDisabled && compareHint && (
-            <span className="text-xs text-muted-foreground">{compareHint}</span>
-          )}
-        </div>
 
         <button
           type="button"

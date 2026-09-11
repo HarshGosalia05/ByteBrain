@@ -617,6 +617,12 @@ class AttendanceHeatmapCell(BaseModel):
     last_name: str
     attendance_percentage: Optional[float] = None
 
+class AttendanceHeatmapPage(BaseModel):
+    cells: List[AttendanceHeatmapCell]
+    total_students: int
+    page: int
+    page_size: int
+
 class AttendanceDistributions(BaseModel):
     status_distribution: List[DistributionItem]
     attendance_bands: List[DistributionItem]
