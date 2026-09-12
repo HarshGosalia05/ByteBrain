@@ -87,7 +87,7 @@ export function Navbar({ userRole, dashboardUrl }: NavbarProps) {
           : "border-b border-transparent bg-background/50 py-4 backdrop-blur-xs"
       )}
     >
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-[90rem] items-center justify-between px-5 sm:px-8 lg:px-12 xl:px-16">
         {/* Brand Logo */}
         <Link
           href="#top"
@@ -95,10 +95,12 @@ export function Navbar({ userRole, dashboardUrl }: NavbarProps) {
           className="group flex items-center gap-2.5 outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg p-1"
           aria-label="CampusX Home"
         >
-          <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-sm transition-transform duration-200 group-hover:scale-105">
-            K
-          </span>
-          <span className="text-base font-semibold tracking-tight text-foreground">
+          <img
+            src="/campusx-cx-icon.png"
+            alt="CampusX"
+            className="size-9 rounded-full object-contain transition-transform duration-200 group-hover:scale-105 sm:size-10 md:size-11"
+          />
+          <span className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
             CampusX
           </span>
         </Link>
