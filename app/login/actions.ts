@@ -89,6 +89,13 @@ export async function login(
       return { error: "Invalid username or password" }
     }
 
+    const expectedRole = (formData.get("expected_role") as string | null)?.trim().toLowerCase()
+    if (expectedRole && userRow.role.toLowerCase() !== expectedRole) {
+      return {
+        error: `This account belongs to the ${userRow.role} portal. Please login via ${userRow.role} Login.`,
+      }
+    }
+
     // Successful login — reset rate limit for this user.
     resetRateLimit(rateKey)
 
