@@ -32,6 +32,7 @@ from app.schemas.faculty import (
     PerformanceInsightsResponse,
     AttendanceSummary,
     AttendanceDistributions,
+    AttendanceHeatmapPage,
     AttendanceSubjectBreakdown,
     AttendanceTrends,
     AttendanceGovernance,
@@ -641,6 +642,21 @@ async def get_attendance_distributions(
         _faculty_id_or_error(user), semester, academic_year, subject_id,
     )
 
+@router.get("/attendance/heatmap", response_model=AttendanceHeatmapPage)
+async def get_attendance_heatmap(
+    semester: Optional[int] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=10, le=50),
+    user: dict = Depends(require_faculty_role),
+    service: FacultyService = Depends(get_faculty_service)
+):
+    return await service.get_attendance_heatmap_page(
+        _faculty_id_or_error(user), semester, academic_year, subject_id,
+        page, page_size,
+    )
+
 @router.get("/attendance/subject-breakdown", response_model=AttendanceSubjectBreakdown)
 async def get_attendance_subject_breakdown(
     semester: Optional[int] = Query(None),
@@ -662,7 +678,7 @@ async def get_attendance_trends(
     user: dict = Depends(require_faculty_role),
     service: FacultyService = Depends(get_faculty_service)
 ):
-    return await service.get_attendance_trends(_faculty_id_or_error(user), subject_id)
+    return await service.get_attendance_trends(_faculty_id_or_error(user), semester, academic_year, subject_id)
 
 @router.get("/attendance/governance", response_model=AttendanceGovernance)
 async def get_attendance_governance(

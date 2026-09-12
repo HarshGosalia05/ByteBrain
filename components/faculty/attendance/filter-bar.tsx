@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Filter, FilterX } from "lucide-react"
 
-import { CURRENT_ACADEMIC_YEAR, ACADEMIC_YEAR_ALL } from "@/lib/config"
+import { ACADEMIC_YEAR_ALL } from "@/lib/config"
 import type { AttendanceFilters } from "@/lib/faculty-api"
 import { cn } from "@/lib/utils"
 
@@ -12,10 +12,9 @@ const selectClassName =
 
 type AttendanceFilterBarProps = {
   filters: AttendanceFilters
-  hasPreviousTerm: boolean
 }
 
-export function AttendanceFilterBar({ filters, hasPreviousTerm }: AttendanceFilterBarProps) {
+export function AttendanceFilterBar({ filters }: AttendanceFilterBarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -33,27 +32,17 @@ export function AttendanceFilterBar({ filters, hasPreviousTerm }: AttendanceFilt
   const handleResetFilters = () => {
     const params = new URLSearchParams(searchParams.toString())
     params.delete("semester")
-    params.set("academic_year", CURRENT_ACADEMIC_YEAR)
+    params.delete("academic_year")
     params.delete("subject_id")
-    params.delete("compare")
     router.push(`${pathname}?${params.toString()}`)
   }
 
   const semester = searchParams.get("semester") || ""
-  const academicYear = searchParams.get("academic_year") ?? CURRENT_ACADEMIC_YEAR
+  const academicYear = searchParams.get("academic_year") || ACADEMIC_YEAR_ALL
   const subjectId = searchParams.get("subject_id") || ""
-  const compareOn = searchParams.get("compare") === "true"
-  const semesterSelected = Boolean(semester)
-  const compareDisabled = !semesterSelected || !hasPreviousTerm
 
   const activeFiltersCount =
-    (semester ? 1 : 0) + (academicYear !== CURRENT_ACADEMIC_YEAR ? 1 : 0) + (subjectId ? 1 : 0) + (compareOn ? 1 : 0)
-
-  const compareHint = !semesterSelected
-    ? "Select a semester to compare"
-    : hasPreviousTerm
-      ? undefined
-      : "No previous term available"
+    (semester ? 1 : 0) + (academicYear !== ACADEMIC_YEAR_ALL ? 1 : 0) + (subjectId ? 1 : 0)
 
   return (
     <div className="flex flex-col gap-4 print:hidden">
@@ -97,42 +86,6 @@ export function AttendanceFilterBar({ filters, hasPreviousTerm }: AttendanceFilt
             </option>
           ))}
         </select>
-
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-md border border-input bg-background p-0.5">
-            <button
-              type="button"
-              className={cn(
-                "h-8 rounded px-2.5 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50",
-                !compareOn
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              disabled={compareDisabled}
-              onClick={() => handleFilterChange("compare", "")}
-              aria-pressed={!compareOn}
-            >
-              Current
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "h-8 rounded px-2.5 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50",
-                compareOn
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              disabled={compareDisabled}
-              onClick={() => handleFilterChange("compare", "true")}
-              aria-pressed={compareOn}
-            >
-              Previous
-            </button>
-          </div>
-          {compareDisabled && compareHint && (
-            <span className="text-xs text-muted-foreground">{compareHint}</span>
-          )}
-        </div>
 
         {activeFiltersCount > 0 && (
           <div className="flex items-center gap-2">

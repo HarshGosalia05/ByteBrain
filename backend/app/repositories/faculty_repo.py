@@ -1243,21 +1243,32 @@ class FacultyRepository:
     ) -> List[Dict[str, Any]]:
         where, params = self._performance_where(faculty_id, semester_no, academic_year, subject_id)
         query = f"""
-            SELECT
-                CASE
-                    WHEN a.attendance_percentage < 60 THEN '< 60%'
-                    WHEN a.attendance_percentage < 75 THEN '60% - 75%'
-                    WHEN a.attendance_percentage < 90 THEN '75% - 90%'
-                    ELSE '>= 90%'
-                END AS band,
-                count(DISTINCT sse.enrollment_record_id) AS count
-            FROM student_subject_enrollment sse
-            LEFT JOIN attendance a 
-                ON a.enrollment_record_id = sse.enrollment_record_id
-            {where}
-            AND a.attendance_percentage IS NOT NULL
+            SELECT band, count(DISTINCT enrollment_record_id) AS count
+            FROM (
+                SELECT sse.enrollment_record_id,
+                    CASE
+                        WHEN COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) < 60 THEN '< 60%'
+                        WHEN COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) < 75 THEN '60% - 75%'
+                        WHEN COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) < 90 THEN '75% - 90%'
+                        WHEN COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) IS NOT NULL THEN '>= 90%'
+                        ELSE NULL
+                    END AS band
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a
+                    ON a.enrollment_record_id = sse.enrollment_record_id
+                LEFT JOIN student_semester_summary sss
+                    ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
+                {where}
+            ) sub
+            WHERE band IS NOT NULL
             GROUP BY band
-            ORDER BY MIN(a.attendance_percentage) ASC
+            ORDER BY CASE band
+                WHEN '< 60%' THEN 1
+                WHEN '60% - 75%' THEN 2
+                WHEN '75% - 90%' THEN 3
+                WHEN '>= 90%' THEN 4
+                ELSE 5
+            END
         """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, *params)
@@ -1645,14 +1656,32 @@ class FacultyRepository:
     ) -> List[Dict[str, Any]]:
         where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
         query = f"""
-            SELECT a.attendance_status AS status, count(DISTINCT sse.enrollment_record_id) AS count
-            FROM student_subject_enrollment sse
-            LEFT JOIN attendance a 
-                ON a.enrollment_record_id = sse.enrollment_record_id
-            {where}
-            AND a.attendance_status IS NOT NULL
-            GROUP BY a.attendance_status
-            ORDER BY MIN(a.attendance_percentage) DESC
+            SELECT status, count(DISTINCT enrollment_record_id) AS count
+            FROM (
+                SELECT sse.enrollment_record_id,
+                    CASE
+                        WHEN COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) >= 90 THEN 'Excellent'
+                        WHEN COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) >= 75 THEN 'Good'
+                        WHEN COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) >= 60 THEN 'Average'
+                        WHEN COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) IS NOT NULL THEN 'Low'
+                        ELSE 'No Data'
+                    END AS status
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a
+                    ON a.enrollment_record_id = sse.enrollment_record_id
+                LEFT JOIN student_semester_summary sss
+                    ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
+                {where}
+            ) sub
+            WHERE status != 'No Data'
+            GROUP BY status
+            ORDER BY CASE status
+                WHEN 'Excellent' THEN 1
+                WHEN 'Good' THEN 2
+                WHEN 'Average' THEN 3
+                WHEN 'Low' THEN 4
+                ELSE 5
+            END
         """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, *params)
@@ -1667,21 +1696,84 @@ class FacultyRepository:
     ) -> List[Dict[str, Any]]:
         where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
         query = f"""
-            SELECT 
+            SELECT
                 sse.student_id, st.first_name, st.last_name,
                 sse.subject_id, sse.subject_code,
-                a.attendance_percentage
+                COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) AS attendance_percentage
             FROM student_subject_enrollment sse
             JOIN students st ON st.student_id = sse.student_id
-            LEFT JOIN attendance a 
+            LEFT JOIN attendance a
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             {where}
-            AND a.attendance_percentage IS NOT NULL
+            AND COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) IS NOT NULL
             ORDER BY st.first_name ASC, st.last_name ASC, sse.subject_code ASC
         """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, *params)
             return [dict(row) for row in rows]
+
+    async def get_attendance_heatmap_paginated(
+        self,
+        faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
+        subject_id: Optional[str],
+        page: int,
+        page_size: int,
+    ) -> Dict[str, Any]:
+        where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
+        offset = (page - 1) * page_size
+        len_base = len(params)
+        count_query = f"""
+            SELECT count(DISTINCT sse.student_id) AS total
+            FROM student_subject_enrollment sse
+            LEFT JOIN attendance a
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
+            {where}
+            AND COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) IS NOT NULL
+        """
+        paginated_params = list(params) + [page_size, offset]
+        lp = len(paginated_params)
+        data_query = f"""
+            WITH scoped_students AS (
+                SELECT DISTINCT sse.student_id
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a
+                    ON a.enrollment_record_id = sse.enrollment_record_id
+                LEFT JOIN student_semester_summary sss
+                    ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
+                {where}
+                AND COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) IS NOT NULL
+                ORDER BY sse.student_id ASC
+                LIMIT ${lp - 1} OFFSET ${lp}
+            )
+            SELECT
+                sse.student_id, st.first_name, st.last_name,
+                sse.subject_id, sse.subject_code,
+                COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) AS attendance_percentage
+            FROM student_subject_enrollment sse
+            JOIN students st ON st.student_id = sse.student_id
+            JOIN scoped_students ss ON ss.student_id = sse.student_id
+            LEFT JOIN attendance a
+                ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
+            WHERE sse.faculty_id = $1
+            AND COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) IS NOT NULL
+            ORDER BY st.first_name ASC, st.last_name ASC, sse.subject_code ASC
+        """
+        async with self.pool.acquire() as conn:
+            count_row = await conn.fetchrow(count_query, *params)
+            total = int(count_row["total"]) if count_row else 0
+            rows = await conn.fetch(data_query, *paginated_params)
+            return {
+                "cells": [dict(row) for row in rows],
+                "total_students": total,
+            }
 
     async def get_attendance_above_below(
         self,
@@ -1694,15 +1786,24 @@ class FacultyRepository:
         where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
         params.append(attendance_threshold)
         query = f"""
-            SELECT
-                CASE WHEN a.attendance_percentage >= ${len(params)} 
-                    THEN 'Above Threshold' ELSE 'Below Threshold' END AS band,
-                count(DISTINCT sse.enrollment_record_id) AS count
-            FROM student_subject_enrollment sse
-            LEFT JOIN attendance a 
-                ON a.enrollment_record_id = sse.enrollment_record_id
-            {where}
-            AND a.attendance_percentage IS NOT NULL
+            SELECT band, count(DISTINCT enrollment_record_id) AS count
+            FROM (
+                SELECT sse.enrollment_record_id,
+                    CASE
+                        WHEN COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) >= ${len(params)}
+                            THEN 'Above Threshold'
+                        WHEN COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) IS NOT NULL
+                            THEN 'Below Threshold'
+                        ELSE NULL
+                    END AS band
+                FROM student_subject_enrollment sse
+                LEFT JOIN attendance a
+                    ON a.enrollment_record_id = sse.enrollment_record_id
+                LEFT JOIN student_semester_summary sss
+                    ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
+                {where}
+            ) sub
+            WHERE band IS NOT NULL
             GROUP BY band
             ORDER BY band ASC
         """
@@ -1713,14 +1814,11 @@ class FacultyRepository:
     async def get_attendance_trends(
         self,
         faculty_id: str,
+        semester_no: Optional[int],
+        academic_year: Optional[str],
         subject_id: Optional[str],
     ) -> Dict[str, Any]:
-        clauses = ["sse.faculty_id = $1", "sse.enrollment_status = 'Active'"]
-        params: List[Any] = [faculty_id]
-        if subject_id is not None:
-            params.append(subject_id)
-            clauses.append(f"sse.subject_id = ${len(params)}")
-        where = f"WHERE {' AND '.join(clauses)}"
+        where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
         term_query = f"""
             SELECT 
                 sse.semester_no, sse.academic_year,
@@ -1766,18 +1864,22 @@ class FacultyRepository:
     ) -> List[Dict[str, Any]]:
         where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
         query = f"""
-            SELECT 
+            SELECT
                 sse.enrollment_record_id, sse.student_id, sse.enrollment_no, sse.semester_no,
                 sse.subject_id, sse.subject_code, sse.subject_name,
                 st.first_name, st.last_name,
-                a.attendance_percentage, a.attendance_status, a.eligibility_status, a.shortage_flag,
+                COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) AS attendance_percentage,
+                a.attendance_status, a.eligibility_status, a.shortage_flag,
                 a.total_classes, a.attended_classes
             FROM student_subject_enrollment sse
             JOIN students st ON st.student_id = sse.student_id
-            LEFT JOIN attendance a 
+            LEFT JOIN attendance a
                 ON a.enrollment_record_id = sse.enrollment_record_id
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
             {where}
-            ORDER BY a.attendance_percentage ASC NULLS LAST, st.first_name ASC, st.last_name ASC
+            ORDER BY COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) ASC NULLS LAST,
+                st.first_name ASC, st.last_name ASC
         """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, *params)
@@ -2053,15 +2155,20 @@ class FacultyRepository:
     ) -> List[Dict[str, Any]]:
         where, params = self._attendance_where(faculty_id, semester_no, academic_year, subject_id)
         query = f"""
-            SELECT a.attendance_percentage, sp.percentage AS performance_percentage
+            SELECT
+                COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) AS attendance_percentage,
+                sp.percentage AS performance_percentage
             FROM student_subject_enrollment sse
-            LEFT JOIN attendance a 
+            LEFT JOIN attendance a
                 ON a.enrollment_record_id = sse.enrollment_record_id
-            LEFT JOIN student_subject_performance sp 
+            LEFT JOIN student_semester_summary sss
+                ON sss.student_id = sse.student_id AND sss.semester_no = sse.semester_no
+            LEFT JOIN student_subject_performance sp
                 ON sp.enrollment_record_id = sse.enrollment_record_id
             {where}
-            AND a.attendance_percentage IS NOT NULL AND sp.percentage IS NOT NULL
-            ORDER BY a.attendance_percentage ASC
+            AND COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) IS NOT NULL
+            AND sp.percentage IS NOT NULL
+            ORDER BY COALESCE(a.attendance_percentage, sss.semester_attendance_percentage) ASC
         """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, *params)

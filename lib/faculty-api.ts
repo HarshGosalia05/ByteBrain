@@ -1537,6 +1537,13 @@ export type AttendanceHeatmapCell = {
   attendance_percentage: number | null
 }
 
+export type AttendanceHeatmapPage = {
+  cells: AttendanceHeatmapCell[]
+  total_students: number
+  page: number
+  page_size: number
+}
+
 export type AttendanceDistributions = {
   status_distribution: DistributionItem[]
   attendance_bands: DistributionItem[]
@@ -1968,6 +1975,17 @@ export function getFacultyAttendanceDistributions(
 ): Promise<BffResult<AttendanceDistributions>> {
   return callFastapi<AttendanceDistributions>(
     attendancePath("distributions", attendanceScopeQuery(params ?? {})),
+    BFF_TTL_MS,
+    opts?.bypassCache,
+  )
+}
+
+export function getFacultyAttendanceHeatmap(
+  params?: AttendanceSummaryParams & { page?: number; page_size?: number },
+  opts?: { bypassCache?: boolean },
+): Promise<BffResult<AttendanceHeatmapPage>> {
+  return callFastapi<AttendanceHeatmapPage>(
+    attendancePath("heatmap", attendanceScopeQuery(params ?? {})),
     BFF_TTL_MS,
     opts?.bypassCache,
   )

@@ -7,14 +7,12 @@ import {
   GitCompareArrows,
   GraduationCap,
   Gauge,
-  LayoutGrid,
   Split,
   Target,
   TrendingUp,
 } from "lucide-react"
 
 import { SubjectBarChart, type ChartReferenceLine } from "@/components/shared/charts/bar-chart"
-import { HeatmapGrid } from "@/components/shared/charts/heatmap-grid"
 import { ScatterChart } from "@/components/shared/charts/scatter-chart"
 import { TrendChart } from "@/components/shared/charts/trend-chart"
 import { ChartCard } from "@/components/shared/data/chart-card"
@@ -88,18 +86,6 @@ export function ChartsView({
     router.push(`${pathname}?${params.toString()}#students`)
   }
 
-  const handleCellClick = (cell: {
-    subject_id: string
-    first_name: string
-    last_name: string
-  }) => {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set("subject_id", cell.subject_id)
-    params.set("search", `${cell.first_name} ${cell.last_name}`.trim())
-    params.set("page", "1")
-    router.push(`${pathname}?${params.toString()}#students`)
-  }
-
   const scope = scopeStamp([
     searchParams.get("academic_year"),
     searchParams.get("semester") ? `sem${searchParams.get("semester")}` : null,
@@ -124,7 +110,6 @@ export function ChartsView({
     label: a.label,
     count: a.count,
   }))
-  const heatmapCells = distData?.heatmap ?? []
 
   const subjectRows = subjectBreakdown.data?.items ?? []
   const subjectAvg = subjectRows.map((s) => ({
@@ -265,37 +250,6 @@ export function ChartsView({
                 bars={[
                   { dataKey: "count", name: "Students", color: "var(--chart-4)" },
                 ]}
-              />
-            </ChartCard>
-
-            <ChartCard
-              title="Attendance heatmap"
-              subtitle="Student × subject attendance %"
-              status={distError ? "error" : heatmapCells.length ? "ready" : "empty"}
-              errorDescription={distError ?? undefined}
-              emptyIcon={LayoutGrid}
-              emptyTitle="No heatmap data"
-              emptyDescription="Cells will appear here once attendance is recorded for this scope."
-              exportFileName={`faculty_attendance_${scope}_heatmap.csv`}
-              exportColumns={[
-                { key: "student_id", label: "Student ID" },
-                { key: "first_name", label: "First Name" },
-                { key: "last_name", label: "Last Name" },
-                { key: "subject_code", label: "Subject" },
-                { key: "attendance_percentage", label: "Attendance %" },
-              ]}
-              exportRows={heatmapCells.map((c) => ({
-                ...c,
-                attendance_percentage:
-                  c.attendance_percentage === null ? null : Number(c.attendance_percentage.toFixed(1)),
-              }))}
-              className="lg:col-span-2 xl:col-span-3"
-            >
-              <HeatmapGrid
-                cells={heatmapCells}
-                critical={thresholds.critical}
-                healthy={thresholds.compliance}
-                onCellClick={handleCellClick}
               />
             </ChartCard>
           </div>

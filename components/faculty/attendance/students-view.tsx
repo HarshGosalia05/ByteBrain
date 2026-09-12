@@ -319,11 +319,11 @@ export function StudentsView({
         </select>
       </div>
 
-      <div className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10 print:break-inside-avoid">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10">
+      <div className="overflow-x-auto rounded-xl border border-border/50 bg-card print:break-inside-avoid">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border/50 bg-muted/40">
+              <th className="h-11 w-10 px-3 text-left align-middle font-medium text-muted-foreground">
                 <button
                   type="button"
                   onClick={toggleSelectAll}
@@ -336,12 +336,12 @@ export function StudentsView({
                     <Square className="size-4" />
                   )}
                 </button>
-              </TableHead>
+              </th>
               {Object.entries(SORTABLE).map(([key, col]) => {
                 const isActive = sort === key
                 const Icon = isActive ? (order === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown
                 return (
-                  <TableHead key={key}>
+                  <th key={key} className="h-11 px-3 text-left align-middle font-medium text-muted-foreground">
                     <button
                       type="button"
                       onClick={() => handleSort(key)}
@@ -350,33 +350,36 @@ export function StudentsView({
                       {col.label}
                       <Icon className="size-3.5 opacity-60" />
                     </button>
-                  </TableHead>
+                  </th>
                 )
               })}
-              <TableHead>Classes</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Defaulter</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+              <th className="h-11 px-3 text-left align-middle font-medium text-muted-foreground">Classes</th>
+              <th className="h-11 px-3 text-left align-middle font-medium text-muted-foreground">Status</th>
+              <th className="h-11 px-3 text-left align-middle font-medium text-muted-foreground">Defaulter</th>
+            </tr>
+          </thead>
+          <tbody>
             {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={10} className="h-40">
+              <tr>
+                <td colSpan={10} className="h-40">
                   <EmptyState
                     icon={Users}
                     title="No students found"
                     description="No enrollments match the current filters. Try clearing the search or changing the scope."
                   />
-                </TableCell>
-              </TableRow>
+                </td>
+              </tr>
             ) : (
-              rows.map((row) => (
-                <TableRow
+              rows.map((row, rowIndex) => (
+                <tr
                   key={row.enrollment_record_id}
-                  className="cursor-pointer"
+                  className={cn(
+                    "h-11 cursor-pointer border-b border-border/30 transition-colors hover:bg-muted/30",
+                    rowIndex % 2 === 0 ? "bg-card" : "bg-muted/15",
+                  )}
                   onClick={() => setSelectedStudentId(row.student_id)}
                 >
-                  <TableCell onClick={(e) => e.stopPropagation()}>
+                  <td className="w-10 px-3 align-middle" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       onClick={() => toggleSelect(row.enrollment_record_id)}
@@ -389,28 +392,28 @@ export function StudentsView({
                         <Square className="size-4" />
                       )}
                     </button>
-                  </TableCell>
-                  <TableCell className="font-medium text-muted-foreground">
+                  </td>
+                  <td className="whitespace-nowrap px-3 font-medium text-muted-foreground">
                     {row.enrollment_no}
-                  </TableCell>
-                  <TableCell className="font-medium">
+                  </td>
+                  <td className="whitespace-nowrap px-3 font-medium">
                     {row.first_name} {row.last_name}
-                  </TableCell>
-                  <TableCell>{row.semester_no}</TableCell>
-                  <TableCell>
+                  </td>
+                  <td className="px-3">{row.semester_no}</td>
+                  <td className="px-3">
                     <span className="inline-flex rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground">
                       {row.subject_code}
                     </span>
-                  </TableCell>
-                  <TableCell className={attendanceClass(row.attendance_percentage)}>
+                  </td>
+                  <td className={cn("whitespace-nowrap px-3 tabular-nums", attendanceClass(row.attendance_percentage))}>
                     {row.attendance_percentage !== null
                       ? `${row.attendance_percentage.toFixed(1)}%`
                       : "—"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
+                  </td>
+                  <td className="whitespace-nowrap px-3 tabular-nums text-muted-foreground">
                     {row.attended_classes ?? "—"} / {row.total_classes ?? "—"}
-                  </TableCell>
-                  <TableCell>
+                  </td>
+                  <td className="px-3">
                     <div className="flex flex-col items-start gap-1">
                       {row.attendance_status && (
                         <span className="text-xs text-muted-foreground">{row.attendance_status}</span>
@@ -425,13 +428,13 @@ export function StudentsView({
                         </span>
                       )}
                     </div>
-                  </TableCell>
-                  <TableCell>{defaulterBadge(row.defaulter_status)}</TableCell>
-                </TableRow>
+                  </td>
+                  <td className="px-3">{defaulterBadge(row.defaulter_status)}</td>
+                </tr>
               ))
             )}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
 
       {pagination && pagination.total_pages > 1 && (

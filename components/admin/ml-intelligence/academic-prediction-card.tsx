@@ -1,6 +1,6 @@
 "use client"
 
-import { BookOpen, GraduationCap, TrendingUp, Info, CircleAlert } from "lucide-react"
+import { BookOpen, GraduationCap, TrendingUp, Info } from "lucide-react"
 import type { AcademicPredictionIntelligence } from "@/lib/admin-api"
 import { StatCard } from "@/components/shared/data/stat-card"
 import { ChartCard } from "@/components/shared/data/chart-card"
@@ -29,51 +29,6 @@ export function AcademicPredictionCard({ data }: { data: AcademicPredictionIntel
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Clean M1 V3 availability notice — documented limitation, never fabricated */}
-      <div className="flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
-        <CircleAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <div className="flex flex-col gap-0.5">
-          <p className="text-sm font-medium">Clean M1 V3 cohort analytics (surfaced per-student)</p>
-          <p className="text-xs text-muted-foreground">
-            Institutional Clean M1 V3 (Subject Marks Prediction) predictions are surfaced per student for the
-            Student, Faculty/Mentor, and Chatbot experiences with 38-feature history learning. No unverified
-            aggregate figures are displayed here to ensure honest generalization.
-          </p>
-        </div>
-      </div>
-
-      {/* M2-TP availability notice — documented limitation, never fabricated */}
-      <div className="flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
-        <CircleAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <div className="flex flex-col gap-0.5">
-          <p className="text-sm font-medium">M2-TP cohort analytics (validated M2-TP aggregate)</p>
-          <p className="text-xs text-muted-foreground">
-            The M2-TP (Next-Semester Theory & Practical Performance) aggregate below is computed from
-            persisted, model-version-verified M2-TP predictions (prediction_type=&quot;m2&quot;,
-            model_version=&quot;m2_tp_v1&quot;). Only verified rows are aggregated; old or
-            non-M2-TP rows are never mixed in. Forecasts apply to upcoming regular semesters and are
-            never fabricated.
-          </p>
-        </div>
-      </div>
-
-      {/* M3 V2 availability notice — documented limitation, never fabricated */}
-      <div className="flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
-        <CircleAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <div className="flex flex-col gap-0.5">
-          <p className="text-sm font-medium">M3 V2 at-risk cohort analytics (not yet available)</p>
-          <p className="text-xs text-muted-foreground">
-            Institutional M3 V2 (At-Risk Student Prediction) aggregate risk statistics are
-            unavailable for the same reason as M1/M2 V2: the backend exposes M3 V2 per-student only,
-            with no cohort endpoint and no persistence wiring. The validated M3 V2 at-risk estimate
-            is surfaced per student for the Student and Faculty/Mentor experiences. The current
-            cohort is in the final / internship semester with no upcoming regular academic semester,
-            so their per-student M3 V2 estimates are NO_DATA by design and must not be fabricated.
-            No aggregate figures are shown here to avoid presenting unverified statistics.
-          </p>
-        </div>
-      </div>
-
       {/* M1 & M2 Header KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

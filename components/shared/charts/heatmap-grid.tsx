@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useMemo } from "react"
+import { useMemo } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -56,55 +56,69 @@ export function HeatmapGrid({ cells, critical, healthy, onCellClick }: HeatmapGr
     return null
   }
 
-  const columns = `minmax(160px, 1.6fr) repeat(${subjects.length}, minmax(76px, 1fr))`
-
   return (
-    <div className="overflow-x-auto">
-      <div className="grid min-w-[640px] gap-1" style={{ gridTemplateColumns: columns }}>
-        <div className="sticky left-0 z-10 rounded-md bg-card px-2 py-1.5 text-xs font-medium text-muted-foreground ring-1 ring-foreground/10">
-          Student
-        </div>
-        {subjects.map(([code]) => (
-          <div
-            key={code}
-            className="truncate rounded-md bg-muted/60 px-2 py-1.5 text-center text-xs font-medium text-muted-foreground"
-            title={code}
-          >
-            {code}
-          </div>
-        ))}
-        {rows.map((row) => (
-          <Fragment key={row.studentId}>
-            <div className="sticky left-0 z-10 truncate rounded-md bg-card px-2 py-1.5 text-xs font-medium text-foreground ring-1 ring-foreground/10">
-              {row.name}
-            </div>
-            {subjects.map(([code, subjectId]) => {
-              const value = row.values[code] ?? null
-              const cell = cells.find(
-                (c) => c.student_id === row.studentId && c.subject_id === subjectId,
-              )
-              const interactive = value !== null && Boolean(onCellClick)
-              return (
-                <button
-                  key={`${row.studentId}-${subjectId}`}
-                  type="button"
-                  disabled={!interactive}
-                  onClick={() => cell && onCellClick?.(cell)}
-                  className={cn(
-                    "rounded-md px-1 py-1.5 text-center text-xs tabular-nums",
-                    cellClassName(value, critical, healthy),
-                    interactive && "cursor-pointer transition-opacity hover:opacity-80",
-                  )}
-                  aria-label={`${row.name} in ${code}: ${value === null ? "no attendance record" : `${value.toFixed(1)}%`}`}
-                >
-                  {value === null ? "—" : `${Math.round(value)}%`}
-                </button>
-              )
-            })}
-          </Fragment>
-        ))}
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+    <div className="overflow-x-auto rounded-lg border border-border/50">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr>
+            <th className="sticky left-0 z-10 w-[160px] min-w-[160px] border-b border-r border-border/50 bg-muted/60 px-3 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground">
+              Student
+            </th>
+            {subjects.map(([code]) => (
+              <th
+                key={code}
+                className="min-w-[76px] border-b border-border/50 bg-muted/60 px-3 py-2.5 text-center text-xs font-semibold tracking-wide text-muted-foreground"
+                title={code}
+              >
+                {code}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr
+              key={row.studentId}
+              className={cn(
+                "h-10 transition-colors hover:bg-muted/30",
+                rowIndex % 2 === 0 ? "bg-card" : "bg-muted/20",
+              )}
+            >
+              <td className="sticky left-0 z-10 w-[160px] min-w-[160px] border-r border-border/50 bg-card px-3 py-2 text-left text-xs font-medium text-foreground">
+                <span className="block truncate">{row.name}</span>
+              </td>
+              {subjects.map(([code, subjectId]) => {
+                const value = row.values[code] ?? null
+                const cell = cells.find(
+                  (c) => c.student_id === row.studentId && c.subject_id === subjectId,
+                )
+                const interactive = value !== null && Boolean(onCellClick)
+                return (
+                  <td
+                    key={`${row.studentId}-${subjectId}`}
+                    className="border-border/50 px-3 py-2 text-center text-xs tabular-nums"
+                  >
+                    <button
+                      type="button"
+                      disabled={!interactive}
+                      onClick={() => cell && onCellClick?.(cell)}
+                      className={cn(
+                        "inline-flex h-7 w-full items-center justify-center rounded-md px-1 text-xs tabular-nums",
+                        cellClassName(value, critical, healthy),
+                        interactive && "cursor-pointer transition-opacity hover:opacity-80",
+                      )}
+                      aria-label={`${row.name} in ${code}: ${value === null ? "no attendance record" : `${value.toFixed(1)}%`}`}
+                    >
+                      {value === null ? "—" : `${Math.round(value)}%`}
+                    </button>
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-3 flex flex-wrap items-center gap-3 px-1 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-sm bg-destructive/15 ring-1 ring-destructive/30" />
           Below {critical}%

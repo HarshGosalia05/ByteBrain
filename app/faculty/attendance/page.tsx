@@ -2,7 +2,7 @@ import { Suspense } from "react"
 import Link from "next/link"
 
 import { requireRole } from "@/lib/session"
-import { CURRENT_ACADEMIC_YEAR, ACADEMIC_YEAR_ALL } from "@/lib/config"
+import { ACADEMIC_YEAR_ALL } from "@/lib/config"
 import { buttonVariants } from "@/components/ui/button"
 import {
   getFacultyAttendanceSummary,
@@ -16,6 +16,7 @@ import { AttendanceFreshnessStrip } from "@/components/faculty/attendance/freshn
 import { AttendanceView } from "@/components/faculty/attendance/attendance-view"
 import { ChartsSection } from "@/components/faculty/attendance/charts-section"
 import { GovernanceSection } from "@/components/faculty/attendance/governance-section"
+import { HeatmapSection } from "@/components/faculty/attendance/heatmap-section"
 import { HighlightsSection } from "@/components/faculty/attendance/highlights-section"
 import { StudentsSection } from "@/components/faculty/attendance/students-section"
 import { ErrorState } from "@/components/shared/state/error-state"
@@ -54,12 +55,11 @@ export default async function AttendancePage(props: {
   const rawAcademicYear =
     typeof searchParams.academic_year === "string" ? searchParams.academic_year : undefined
   const academic_year =
-    rawAcademicYear === ACADEMIC_YEAR_ALL
-      ? undefined
-      : rawAcademicYear ?? CURRENT_ACADEMIC_YEAR
+    rawAcademicYear && rawAcademicYear !== ACADEMIC_YEAR_ALL
+      ? rawAcademicYear
+      : undefined
   const subject_id =
     typeof searchParams.subject_id === "string" ? searchParams.subject_id : undefined
-  const compare = searchParams.compare === "true"
 
   const search = typeof searchParams.search === "string" ? searchParams.search : undefined
   const attendance_range =
@@ -80,7 +80,6 @@ export default async function AttendancePage(props: {
     semester: semester === 0 ? null : semester,
     academic_year,
     subject_id,
-    compare,
   }
 
   const res = await getFacultyAttendanceSummary(filters)
@@ -121,13 +120,13 @@ export default async function AttendancePage(props: {
         scopeLabel={buildScopeLabel(res.data.applied, res.data.filters)}
         filters={filters}
       />
-      <AttendanceFilterBar
-        filters={res.data.filters}
-        hasPreviousTerm={res.data.previous_term !== null}
-      />
+      <AttendanceFilterBar filters={res.data.filters} />
       <AttendanceView data={res.data}>
         <Suspense fallback={sectionFallback()}>
           <ChartsSection filters={filters} thresholds={res.data.thresholds} />
+        </Suspense>
+        <Suspense fallback={sectionFallback()}>
+          <HeatmapSection filters={filters} thresholds={res.data.thresholds} />
         </Suspense>
         <Suspense fallback={sectionFallback()}>
           <HighlightsSection filters={filters} />
