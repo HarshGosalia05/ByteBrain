@@ -11,7 +11,6 @@ import { FutureRiskCard } from "./future-risk-card"
 import { AcademicPredictionCard } from "./academic-prediction-card"
 import { CareerReadinessCard } from "./career-readiness-card"
 import { GroundedInsightsCard } from "./grounded-insights-card"
-import { AdminGenerationPanel } from "./admin-generation-panel"
 
 const selectClassName =
   "h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
@@ -144,9 +143,6 @@ export function AdminMlIntelligenceGrid({ data }: { data: AdminMlIntelligenceDat
           )}
         </div>
       </div>
-
-      {/* Generation controls */}
-      <AdminGenerationPanel />
 
       {/* 1. Overview KPIs & Models Status */}
       <MlOverviewCard kpis={data.overview} />
