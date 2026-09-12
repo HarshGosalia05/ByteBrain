@@ -1,0 +1,55 @@
+name: CampusX
+
+services:
+  CampusX-backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: campusx-backend
+    container_name: CampusX-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - CORS_ORIGINS=http://localhost:3000
+    env_file:
+      - path: .env.local
+        required: false
+      - path: .env
+        required: false
+    networks:
+      - CampusX-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/v1/health').getcode() == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  CampusX-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: campusx-frontend
+    container_name: CampusX-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - FASTAPI_URL=http://CampusX-backend:8000
+    env_file:
+      - path: .env.local
+        required: false
+      - path: .env
+        required: false
+    depends_on:
+      CampusX-backend:
+        condition: service_healthy
+    networks:
+      - CampusX-network
+
+networks:
+  CampusX-network:
+    driver: bridge

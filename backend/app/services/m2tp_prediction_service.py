@@ -16,6 +16,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import ml
 import numpy as np
 import pandas as pd
 
@@ -29,7 +30,8 @@ def _clean_record(r: Any) -> dict:
     return d
 
 # Paths to the isolated M2_TP_CampusX_package
-PACKAGE_DIR = Path(__file__).resolve().parents[3] / "ml" / "M2_TP_CampusX_package"
+_ML_ROOT = Path(ml.__file__).resolve().parent
+PACKAGE_DIR = _ML_ROOT / "M2_TP_CampusX_package"
 MODEL_DIR = PACKAGE_DIR / "model"
 SCHEMA_DIR = PACKAGE_DIR / "schema"
 

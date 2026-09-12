@@ -1,0 +1,67 @@
+# -----------------------------------------------------------------------------
+# Secrets & Environment (STRICT SAFETY: Never copy real secrets into images)
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+*.pem
+*.key
+
+# -----------------------------------------------------------------------------
+# Dependencies & Build Artifacts
+# -----------------------------------------------------------------------------
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# -----------------------------------------------------------------------------
+# Python Cache & Virtual Environments
+# -----------------------------------------------------------------------------
+**/.venv/
+**/venv/
+**/ml.venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+
+# -----------------------------------------------------------------------------
+# Git & Tooling
+# -----------------------------------------------------------------------------
+.git/
+.gitignore
+.prettierrc
+.prettierignore
+eslint.config.mjs
+
+# -----------------------------------------------------------------------------
+# Logs & Scratch Files
+# -----------------------------------------------------------------------------
+**/*.log
+scratch/
+deliverables/
+docs/
+plan/
+plan_*/
+supabase_export*/
+
+# -----------------------------------------------------------------------------
+# Large Files & Test/Development Dumps
+# -----------------------------------------------------------------------------
+**/*.zip
+**/*.csv
+backend/tests/
+backend/oa.json
+backend/db_schema_inspect.json
+backend/probe_*.py
+ml/tests/
+ml/data/
+ml/reports/
+ml/*.zip
+ml/*.csv

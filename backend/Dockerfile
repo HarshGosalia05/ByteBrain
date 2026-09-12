@@ -2,22 +2,28 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Python runtime performance and hygiene
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
 # Install dependencies
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY backend/app /app/app
+# Create non-root application user
+RUN useradd --create-home --shell /bin/bash --uid 1001 appuser
 
-# Copy ML runtime (ml/src + artifacts). Build context must be the repo root:
-#   docker build -f backend/Dockerfile <repo-root>
-COPY ml /app/ml
+# Copy application code and ML runtime (build context: repo root)
+COPY --chown=appuser:appuser backend/app /app/app
+COPY --chown=appuser:appuser ml /app/ml
 
-# Make both app/ and ml/ importable (predict.py imports from ml.src)
-ENV PYTHONPATH=/app
+USER appuser
 
-# Expose port
 EXPOSE 8000
 
-# Run application
+# Docker healthcheck querying the backend health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD python -c "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/v1/health').getcode() == 200 else 1)"
+
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

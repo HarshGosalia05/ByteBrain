@@ -1,11 +1,27 @@
 import os
 from pathlib import Path
-from typing import List
-from pydantic import model_validator
+from typing import Any, List, Union
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_ROOT_DIR = Path(__file__).resolve().parents[3]
-_ENV_FILES = tuple(str(p) for p in [_ROOT_DIR / ".env.local", _ROOT_DIR / ".env"] if p.exists())
+# Resolve candidate .env files across possible run environments (local dev root, backend dir, CWD).
+# In Docker, no .env file is copied into the container; settings are populated authoritatively from
+# container environment variables (os.environ).
+_CANDIDATE_DIRS = [
+    Path(__file__).resolve().parents[3],  # Repo root when running from backend/app/core
+    Path(__file__).resolve().parents[2],  # Root when app is at /app/app
+    Path.cwd(),
+]
+_SEEN = set()
+_ENV_FILES_LIST = []
+for _d in _CANDIDATE_DIRS:
+    for _fname in [".env.local", ".env"]:
+        _p = _d / _fname
+        if _p.exists() and str(_p) not in _SEEN:
+            _SEEN.add(str(_p))
+            _ENV_FILES_LIST.append(str(_p))
+
+_ENV_FILES = tuple(_ENV_FILES_LIST)
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -75,7 +91,23 @@ class Settings(BaseSettings):
     CHAT_RATE_LIMIT_BURST: int = 10
 
     # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000"]
+
+    @field_validator("CORS_ORIGINS", mode="after")
+    @classmethod
+    def assemble_cors_origins(cls, v: Any) -> List[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("[") and v.endswith("]"):
+                import json
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        elif isinstance(v, (list, tuple)):
+            return list(v)
+        return ["http://localhost:3000"]
     
     # Faculty analytics flag thresholds (configurable, not hardcoded)
     FACULTY_PERFORMANCE_THRESHOLD: float = 60.0
