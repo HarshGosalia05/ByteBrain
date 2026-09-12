@@ -111,9 +111,11 @@ export function LoginForm({ initialRole, className, ...props }: LoginFormProps) 
       <div className={cn("flex flex-col gap-6", className)} {...props}>
         <Card className="border-border/80 bg-card/95 shadow-2xl ring-1 ring-foreground/5 backdrop-blur-md">
           <CardHeader className="text-center pb-4">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-lg mb-3 shadow-md">
-              K
-            </div>
+            <img
+              src="/campusx-cx-icon.png"
+              alt="CampusX"
+              className="mx-auto size-12 rounded-2xl object-contain shadow-md mb-3"
+            />
             <CardTitle className="text-2xl font-extrabold tracking-tight text-foreground">
               Welcome to CampusX
             </CardTitle>

@@ -9,9 +9,11 @@ export function Footer() {
           {/* Col 1: Brand & Mission */}
           <div className="md:col-span-1 space-y-3">
             <Link href="#top" className="flex items-center gap-2.5">
-              <span className="flex size-8 items-center justify-center rounded-xl bg-primary text-xs font-bold text-primary-foreground">
-                K
-              </span>
+              <img
+                src="/campusx-cx-icon.png"
+                alt="CampusX"
+                className="size-8 rounded-full object-contain"
+              />
               <span className="text-base font-bold tracking-tight text-foreground">
                 CampusX
               </span>

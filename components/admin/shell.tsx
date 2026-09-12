@@ -14,9 +14,11 @@ import { derivePageContext } from "@/lib/page-context"
 function Brand() {
   return (
     <Link href="/admin/dashboard" className="flex items-center gap-2 px-1">
-      <span className="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-        K
-      </span>
+      <img
+        src="/campusx-cx-icon.png"
+        alt="CampusX"
+        className="size-8 rounded-full object-contain"
+      />
       <span className="text-sm font-semibold">CampusX</span>
     </Link>
   )
