@@ -146,7 +146,7 @@ jobs:
           Write-Host "Deployed Commit : ${{ github.sha }}"
           Write-Host "Branch          : ${{ github.ref_name }}"
           Write-Host "Triggered By    : ${{ github.actor }}"
-          Write-Host "Timestamp       : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC' -AsUTC)"
+          Write-Host "Timestamp       : $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss UTC'))"
           Write-Host "Frontend URL    : http://localhost:3000"
           Write-Host "Backend API     : http://localhost:8000"
           Write-Host "Backend Health  : http://localhost:8000/api/v1/health"
@@ -160,7 +160,7 @@ jobs:
           Write-Host "              DEPLOYMENT FAILED"
           Write-Host "=================================================="
           Write-Host "Commit          : ${{ github.sha }}"
-          Write-Host "Timestamp       : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC' -AsUTC)"
+          Write-Host "Timestamp       : $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss UTC'))"
           Write-Host "Dumping container statuses:"
           docker compose ps
           Write-Host "Dumping backend container logs:"
