@@ -53,13 +53,6 @@ function TermChips({
 
   return (
     <div role="group" aria-label="Filter by semester" className="flex flex-wrap items-center gap-1.5">
-      <Link
-        href={hrefFor(null)}
-        aria-pressed={semester === null}
-        className={cn(termChip, semester === null ? termChipActive : termChipIdle)}
-      >
-        Auto
-      </Link>
       {semesterOptions.map((sem) => (
         <Link
           key={sem}

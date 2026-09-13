@@ -20,10 +20,12 @@ COPY --chown=appuser:appuser ml /app/ml
 
 USER appuser
 
+ENV PORT=8000
+
 EXPOSE 8000
 
 # Docker healthcheck querying the backend health endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD python -c "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/v1/health').getcode() == 200 else 1)"
+  CMD python -c "import urllib.request, sys, os; port=os.environ.get('PORT','8000'); sys.exit(0 if urllib.request.urlopen(f'http://localhost:{port}/api/v1/health').getcode() == 200 else 1)"
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

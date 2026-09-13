@@ -17,7 +17,7 @@ export default async function TimetablePage(props: {
   const semester =
     rawSemester && rawSemester.trim() !== "" && Number.isInteger(Number(rawSemester))
       ? Number(rawSemester)
-      : undefined
+      : 7
   const academic_year =
     typeof searchParams.academic_year === "string" && searchParams.academic_year.trim() !== ""
       ? searchParams.academic_year
@@ -32,7 +32,7 @@ export default async function TimetablePage(props: {
     return <ErrorState title="Failed to load timetable" description={timetableResult.error.message} />
   }
 
-  const semesterOptions = subjectsResult.ok ? subjectsResult.data.filters.semesters : []
+  const semesterOptions = [7]
 
   return (
     <div className="flex flex-col gap-6 p-6">
