@@ -20,6 +20,8 @@ venv/
 # python
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
 
 # build output
 dist/
@@ -63,7 +65,5 @@ next-env.d.ts
 ml.venv/
 
 # =========================
-# Python cache
+# Python cache (already covered above)
 # =========================
-__pycache__/
-*.pyo

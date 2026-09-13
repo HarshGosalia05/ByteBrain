@@ -6,7 +6,7 @@ evaluate the *positive* (at-risk) class, using only data partitioning (no
 model fitting).
 
 It byte-for-byte echoes the project's documented M3 evaluation contract
-(m3_report.md, m3/evaluate.py): GroupKFold(n_splits=5) grouped by student_id.
+(MDs/ml/reports/m3_report.md, m3/evaluate.py): GroupKFold(n_splits=5) grouped by student_id.
 Cross-validation is the mechanism that rotates which students are held out, so
 the rare positive students are actually held out for evaluation in some folds —
 unlike a single fixed 3-way holdout, in which the positive students land in

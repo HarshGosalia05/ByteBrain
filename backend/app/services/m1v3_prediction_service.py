@@ -8,7 +8,7 @@ production data from the database (read-only).
 
 The 38 clean features and their production sources are defined in
 ml/M1_v3_CampusX_package/schema/features.json and
-schema/M1_v3_FEATURE_CONTRACT.md. Brief groups:
+MDs/ml/contracts/M1_v3_FEATURE_CONTRACT.md. Brief groups:
   current-subject: internal_marks, mid_sem_marks, pre_endsem_assessment_pct,
                    assignment_score, quiz_avg_marks, submission_delay_days
   history (sem < target N): prev_sgma_mean/pct/att/backlog + trends

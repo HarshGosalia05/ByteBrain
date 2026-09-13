@@ -1,6 +1,6 @@
 """ETL-specific exception hierarchy and process exit-code mapping.
 
-Exit codes align with ``plan/data_engineering/01_reusable_etl_architecture.md``
+Exit codes align with ``MDs/plans/data_engineering/01_reusable_etl_architecture.md``
 §5.3 (0 success; 1 validation/quarantine-threshold; 2 stitch ambiguity;
 3 load/derive failure) and extend them with configuration and unexpected
 failure codes so every failure is distinct and machine-readable.

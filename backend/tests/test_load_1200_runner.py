@@ -1,6 +1,6 @@
 """Focused tests for the CSE 6A 1,200-cohort data-load runner (DRY-RUN ONLY).
 
-Covers the loader contract from ``plan_1200_6a/DATA_LOAD_PLAN.md`` —
+Covers the loader contract from ``MDs/reports/migration/DATA_LOAD_PLAN.md`` —
 ``backend/etl/load_1200.py``:
 
 * 11-step ordered load with exact expected row counts + conflict targets;

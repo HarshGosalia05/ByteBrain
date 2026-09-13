@@ -82,7 +82,7 @@ PREDICTION_POINT = (
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Feature tiers (all T-only; see m3_v2_feature_contract.md for rationale)
+# Feature tiers (all T-only; see MDs/reports/migration/m3_v2_feature_contract.md for rationale)
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Tier 1A: Current-semester (T) outcomes + structural signals (semester_summary).

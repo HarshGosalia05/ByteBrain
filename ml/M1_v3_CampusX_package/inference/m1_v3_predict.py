@@ -6,7 +6,7 @@ end-sem marks (0-70 scale) for one or more subject rows.
 
 Input contract:
   A pandas DataFrame with the EXACT 38 features in the order listed in
-  ../schema/features.json (see M1_v3_FEATURE_CONTRACT.md for construction).
+  ../schema/features.json (see MDs/ml/contracts/M1_v3_FEATURE_CONTRACT.md for construction).
 
 Preprocessing (median imputation, scaling, one-hot encoding) is embedded in
 the pipeline model file — no external scaler/encoder/imputer is required.

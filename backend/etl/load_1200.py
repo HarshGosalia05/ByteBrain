@@ -1,7 +1,7 @@
 """PHASE 5 — CSE 6A 1,200-cohort data load runner (ordered, batched, transform-aware).
 
 Consumes the ``New_1200_data_scale`` CSVs through the approved 11-step ordered
-load (``plan_1200_6a/DATA_LOAD_PLAN.md``), applying the B1-B5 transforms from
+load (``MDs/reports/migration/DATA_LOAD_PLAN.md``), applying the B1-B5 transforms from
 ``etl.cohort1200`` and the ``student_semester_summary`` (B3) standing map, then
 emits a deterministic reconciliation report.
 
@@ -1428,7 +1428,7 @@ async def load_1200_pipeline(ctx: PipelineCtx, conn) -> Tuple[Dict[str, Any], Di
         "phase": "PHASE_5_LOAD_DRYRUN" if ctx.mode == "dry-run" else "PHASE_5_LOAD_LIVE",
         "mode": ctx.mode,
         "loader_version": LOADER_VERSION,
-        "plan": "plan_1200_6a/DATA_LOAD_PLAN.md",
+        "plan": "MDs/reports/migration/DATA_LOAD_PLAN.md",
         "datasets_dir": str(ctx.datasets_dir.relative_to(REPO_ROOT)),
     }
 

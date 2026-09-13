@@ -15,7 +15,7 @@ It:
 
 The exact 38-feature order and construction rules are defined in
 ml/M1_v3_CampusX_package/schema/features.json and
-schema/M1_v3_FEATURE_CONTRACT.md. This module mirrors that contract in
+MDs/ml/contracts/M1_v3_FEATURE_CONTRACT.md. This module mirrors that contract in
 FEATURE_COLS and verifies it against the packaged model on load() so the
 two can never silently drift.
 
@@ -173,7 +173,7 @@ LIMIT 1
 """
 
 # Historical semester summary for target semester N: only semesters strictly
-# less than N (temporal rule from M1_v3_FEATURE_CONTRACT.md). Never includes
+# less than N (temporal rule from MDs/ml/contracts/M1_v3_FEATURE_CONTRACT.md). Never includes
 # the current semester or any future semester.
 _SQL_SEMESTER_HISTORY = """
 SELECT

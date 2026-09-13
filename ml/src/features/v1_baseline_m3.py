@@ -2,7 +2,7 @@
 
 Establishes a trustworthy BASELINE for the M3 next-semester risk classifier
 using the verified V1 feature dataset (Step 1) and the project's documented
-student-isolated GroupKFold(n_splits=5) evaluation strategy (m3_report.md,
+student-isolated GroupKFold(n_splits=5) evaluation strategy (MDs/ml/reports/m3_report.md,
 m3/evaluate.py, m3/train_m3.py).
 
 Baseline contract (reusing the existing M3 architecture, no tuning):
