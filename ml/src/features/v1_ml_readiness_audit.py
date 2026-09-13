@@ -74,15 +74,32 @@ except ImportError:  # sys.path == ml/src
 try:
     from .. import registry
     from .. import features as _features
+except ImportError:  # sys.path == ml/src
+    try:
+        import registry  # type: ignore[no-redef]
+        import features as _features  # type: ignore[no-redef]
+    except ImportError:
+        registry = None  # type: ignore[assignment]
+        _features = None  # type: ignore[assignment]
+
+try:
     from ..m1 import data as m1_data
+except ImportError:
+    try:
+        import m1.data as m1_data  # type: ignore[no-redef]
+    except ImportError:
+        m1_data = None  # type: ignore[assignment]
+
+try:
     from ..m3 import data as m3_data
     from ..m3 import config as m3_config
-except ImportError:  # sys.path == ml/src
-    import registry  # type: ignore[no-redef]
-    import features as _features  # type: ignore[no-redef]
-    import m1.data as m1_data  # type: ignore[no-redef]
-    import m3.data as m3_data  # type: ignore[no-redef]
-    import m3.config as m3_config  # type: ignore[no-redef]
+except ImportError:
+    try:
+        import m3.data as m3_data  # type: ignore[no-redef]
+        import m3.config as m3_config  # type: ignore[no-redef]
+    except ImportError:
+        m3_data = None  # type: ignore[assignment]
+        m3_config = None  # type: ignore[assignment]
 
 # The legacy M2 package (ml/src/m2, which historically supplied m2_data /
 # m2_config) has been retired along with the old M2 artifact.  M2 and M3
