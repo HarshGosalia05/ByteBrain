@@ -27,9 +27,9 @@ export function RolesSection({ userRole }: RolesSectionProps) {
           <Badge variant="outline" className="mb-3 text-xs tracking-wider uppercase">
             Built For Every Stakeholder
           </Badge>
-          {/* <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
+          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
             Role-Tailored Intelligence Across Campus
-          </h2> */}
+          </h2>
           <p className="mt-4 text-base sm:text-lg text-muted-foreground">
             CampusX delivers tailored workspaces with strict data boundaries, ensuring each
             stakeholder gets the precise insights, tools, and actions they need.
