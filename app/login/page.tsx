@@ -18,7 +18,7 @@ export default async function LoginPage(props: LoginPageProps) {
 
   return (
     <div className="flex min-h-svh w-full items-center justify-center p-4 sm:p-6 md:p-10 bg-background text-foreground relative overflow-hidden">
-      {/* Background Interactive Splash Cursor (CampusX cyan-blue, subtle low animation) */}
+      {/* Background Interactive Splash Cursor (same as Home page) */}
       <SplashCursor
         COLOR="#1da1f2"
         RAINBOW_MODE={false}

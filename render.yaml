@@ -1,0 +1,98 @@
+# render.yaml - CampusX Blueprint Configuration
+# =============================================================================
+# This file defines the Render infrastructure for the CampusX platform.
+#
+# IMPORTANT:
+#   - This file does NOT contain secret values.
+#   - All secrets must be configured through Render Environment Variables.
+#   - Migrations are NOT executed automatically. See RENDER_DEPLOYMENT.md.
+#   - The existing Supabase PostgreSQL database is used (no Render PostgreSQL).
+#
+# Usage:
+#   1. Push this file to your repository's main branch
+#   2. In Render Dashboard, click "New" > "Blueprint"
+#   3. Select your repository and this render.yaml will be detected
+#   4. Configure environment variables in the Render Dashboard before deploying
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Backend - FastAPI (Python)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: campusx-backend
+    runtime: docker
+    repo: https://github.com/HarshGosalia05/ByteBrain.git
+    branch: main
+    dockerfilePath: backend/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /api/v1/health
+    envVars:
+      # --- Required Secrets (set in Render Dashboard) ---
+      - key: DB_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+
+      # --- Database (existing Supabase PostgreSQL) ---
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        value: postgres
+      - key: DB_USER
+        sync: false
+
+      # --- CORS (set to deployed frontend URL) ---
+      - key: CORS_ORIGINS
+        sync: false
+
+      # --- GenAI (Groq primary, no Ollama on Render) ---
+      - key: GENAI_PRIMARY_PROVIDER
+        value: groq
+      - key: GENAI_FALLBACK_PROVIDER
+        value: ""
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: GROQ_BASE_URL
+        value: https://api.groq.com/openai/v1
+
+      # --- Application ---
+      - key: ENVIRONMENT
+        value: production
+      - key: CURRENT_ACADEMIC_YEAR
+        value: "2026-27"
+
+  # ---------------------------------------------------------------------------
+  # Frontend - Next.js (Node.js)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: campusx-frontend
+    runtime: docker
+    repo: https://github.com/HarshGosalia05/ByteBrain.git
+    branch: main
+    dockerfilePath: Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      # --- Required Secrets (set in Render Dashboard) ---
+      # JWT_SECRET is shared with the backend — frontend signs JWTs on login
+      # and the backend verifies them on API requests.
+      - key: JWT_SECRET
+        sync: false
+
+      # --- Backend connectivity ---
+      - key: FASTAPI_URL
+        sync: false
+
+      # --- Application ---
+      - key: NODE_ENV
+        value: production
+      - key: ENVIRONMENT
+        value: production
+      - key: CURRENT_ACADEMIC_YEAR
+        value: "2026-27"

@@ -9,10 +9,9 @@ services:
     container_name: CampusX-backend
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     environment:
       - ENVIRONMENT=production
-      - CORS_ORIGINS=http://localhost:3000
     env_file:
       - path: .env.local
         required: false
@@ -21,7 +20,7 @@ services:
     networks:
       - CampusX-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/v1/health').getcode() == 200 else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request, sys, os; port=os.environ.get('PORT','8000'); sys.exit(0 if urllib.request.urlopen(f'http://localhost:{port}/api/v1/health').getcode() == 200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -35,7 +34,7 @@ services:
     container_name: CampusX-frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     environment:
       - NODE_ENV=production
       - FASTAPI_URL=http://CampusX-backend:8000
