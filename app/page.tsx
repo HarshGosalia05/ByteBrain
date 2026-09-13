@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { getSessionUser } from "@/lib/auth-jwt"
 import { ROLE_DASHBOARDS, type Role } from "@/lib/session"
+import { fetchIntelligenceConsoleData } from "@/lib/intelligence-console"
 
 import { Navbar } from "@/components/landing/navbar"
 import { HeroSection } from "@/components/landing/hero-section"
@@ -8,6 +9,7 @@ import { StatsSection } from "@/components/landing/stats-section"
 import { RolesSection } from "@/components/landing/roles-section"
 import { FeaturesSection } from "@/components/landing/features-section"
 import { IntelligenceSection } from "@/components/landing/intelligence-section"
+import { IntelligenceConsole } from "@/components/landing/intelligence-console"
 import { HowItWorksSection } from "@/components/landing/how-it-works-section"
 import { StudentJourneySection } from "@/components/landing/student-journey-section"
 import { CopilotSection } from "@/components/landing/copilot-section"
@@ -37,6 +39,9 @@ export default async function HomePage() {
       ? ROLE_DASHBOARDS[user.role as Role]
       : null
 
+  const consoleResult =
+    user?.role === "Student" ? await fetchIntelligenceConsoleData() : null
+
   return (
     <div className="min-h-screen bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary relative">
       {/* Background Interactive Splash Cursor (CampusX cyan-blue, subtle low animation) */}
@@ -57,58 +62,65 @@ export default async function HomePage() {
         {/* 2. Hero Section with Live Dashboard Preview */}
         <HeroSection dashboardUrl={dashboardUrl} />
 
-        {/* 3. Platform Statistics */}
+        {/* 3. Intelligence Console — logged-in Student only */}
+        {consoleResult?.ok && (
+          <Reveal>
+            <IntelligenceConsole {...consoleResult.data} />
+          </Reveal>
+        )}
+
+        {/* 4. Platform Statistics */}
         <Reveal>
           <StatsSection />
         </Reveal>
 
-        {/* 4. Built For Every Stakeholder (Students, Faculty, Admins) */}
+        {/* 5. Built For Every Stakeholder (Students, Faculty, Admins) */}
         <Reveal>
           <RolesSection userRole={user?.role ?? null} />
         </Reveal>
 
-        {/* 5. 10 Core Key Features */}
+        {/* 6. 10 Core Key Features */}
         <Reveal>
           <FeaturesSection />
         </Reveal>
 
-        {/* 6. CampusX Intelligence Pipeline & Models (M1-M5) */}
+        {/* 7. CampusX Intelligence Pipeline & Models (M1-M5) */}
         <Reveal>
           <IntelligenceSection />
         </Reveal>
 
-        {/* 7. How It Works (4-Step Flow) */}
+        {/* 8. How It Works (4-Step Flow) */}
         <Reveal>
           <HowItWorksSection />
         </Reveal>
 
-        {/* 8. End-to-End Student Journey */}
+        {/* 9. End-to-End Student Journey */}
         <Reveal>
           <StudentJourneySection />
         </Reveal>
 
-        {/* 9. AI Academic Copilot Preview */}
+        {/* 10. AI Academic Copilot Preview */}
         <Reveal>
           <CopilotSection />
         </Reveal>
 
-        {/* 10. Security & Trust Architecture */}
+        {/* 11. Security & Trust Architecture */}
         <Reveal>
           <SecuritySection />
         </Reveal>
 
-        {/* 11. Institutional Impact Columns */}
+        {/* 12. Institutional Impact Columns */}
         <Reveal>
           <ImpactSection />
         </Reveal>
 
-        {/* 12. Final Call-to-Action Banner */}
+        {/* 13. Final Call-to-Action Banner */}
         <Reveal>
           <CTASection dashboardUrl={dashboardUrl} />
         </Reveal>
       </main>
 
-      {/* 13. Professional Footer */}
+      {/* 14. Professional Footer */}
       <Footer />
     </div>
   )

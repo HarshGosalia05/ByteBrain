@@ -1,0 +1,170 @@
+name: CampusX CI/CD Deployment
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: campusx-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & Deploy CampusX (Windows)
+    runs-on: [self-hosted, Windows]
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Checkout repository commit
+        uses: actions/checkout@v4
+
+      - name: Resolve Environment Configuration
+        run: |
+          Write-Host "=== Resolving Environment Configuration ==="
+          $hostEnvPath = "D:\KenexAi\ByteBrain\.env.local"
+          $workspaceEnvPath = Join-Path $PWD ".env.local"
+          
+          if (Test-Path $workspaceEnvPath) {
+            Write-Host "Found .env.local in current workspace."
+          } elseif (Test-Path $hostEnvPath) {
+            Write-Host "Copying .env.local from host repository ($hostEnvPath) into deployment workspace..."
+            Copy-Item -Path $hostEnvPath -Destination $workspaceEnvPath -Force
+          } else {
+            Write-Error "CRITICAL: .env.local not found in workspace or at $hostEnvPath. Deployment cannot proceed without database and auth configuration."
+            exit 1
+          }
+
+          if (Test-Path $workspaceEnvPath) {
+            Write-Host "Environment configuration file verified successfully (size: $((Get-Item $workspaceEnvPath).Length) bytes)."
+          }
+
+      - name: Validate Docker Compose Configuration
+        run: |
+          Write-Host "=== Validating Docker Compose Configuration ==="
+          docker compose config
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Docker Compose configuration validation failed."
+            exit 1
+          }
+          Write-Host "Docker Compose configuration is valid."
+
+      - name: Build Docker Images (Safe Build)
+        run: |
+          Write-Host "=== Building Docker Images ==="
+          Write-Host "Running containers remain untouched during build phase."
+          docker compose build
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Docker Compose build failed! Existing containers remain running."
+            exit 1
+          }
+          Write-Host "Docker images built successfully."
+
+      - name: Deploy Containers (In-Place Update)
+        run: |
+          Write-Host "=== Updating Running Containers ==="
+          docker compose up -d --remove-orphans
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to start/update containers."
+            exit 1
+          }
+          Write-Host "Containers launched successfully."
+
+      - name: Verify Service Health & Connectivity
+        run: |
+          Write-Host "=== Verifying Deployment Health ==="
+          
+          # 1. Backend Health Check
+          $backendUrl = "http://localhost:8000/api/v1/health"
+          $backendHealthy = $false
+          $maxRetries = 24  # up to 120 seconds (5s intervals)
+          
+          Write-Host "Checking backend health at $backendUrl..."
+          for ($i = 1; $i -le $maxRetries; $i++) {
+            try {
+              $resp = Invoke-RestMethod -Uri $backendUrl -Method Get -TimeoutSec 5 -ErrorAction Stop
+              if ($resp.status -eq "healthy" -and $resp.database -eq "connected") {
+                Write-Host "Backend is healthy and database is connected! (Attempt $i/$maxRetries)"
+                $backendHealthy = $true
+                break
+              } else {
+                Write-Host "Backend returned status: $($resp.status), database: $($resp.database). Waiting 5s... ($i/$maxRetries)"
+              }
+            } catch {
+              Write-Host "Waiting for backend to respond... ($i/$maxRetries)"
+            }
+            Start-Sleep -Seconds 5
+          }
+          
+          if (-not $backendHealthy) {
+            Write-Error "HEALTHCHECK FAILED: Backend did not become healthy within the timeout period."
+            Write-Host "=== Backend Logs ==="
+            docker compose logs --tail=50 CampusX-backend
+            exit 1
+          }
+
+          # 2. Frontend Availability Check
+          $frontendUrl = "http://localhost:3000/login"
+          $frontendHealthy = $false
+          $frontendRetries = 12 # up to 60 seconds
+          
+          Write-Host "Checking frontend availability at $frontendUrl..."
+          for ($j = 1; $j -le $frontendRetries; $j++) {
+            try {
+              $fResp = Invoke-WebRequest -Uri $frontendUrl -Method Get -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+              if ($fResp.StatusCode -eq 200) {
+                Write-Host "Frontend login page responded with HTTP 200! (Attempt $j/$frontendRetries)"
+                $frontendHealthy = $true
+                break
+              } else {
+                Write-Host "Frontend returned status $($fResp.StatusCode). Waiting 5s... ($j/$frontendRetries)"
+              }
+            } catch {
+              Write-Host "Waiting for frontend to respond... ($j/$frontendRetries)"
+            }
+            Start-Sleep -Seconds 5
+          }
+
+          if (-not $frontendHealthy) {
+            Write-Error "HEALTHCHECK FAILED: Frontend did not respond with HTTP 200 within timeout period."
+            Write-Host "=== Frontend Logs ==="
+            docker compose logs --tail=50 CampusX-frontend
+            exit 1
+          }
+
+          Write-Host "=== All Service Health Checks Passed! ==="
+
+      - name: Deployment Summary
+        if: success()
+        run: |
+          Write-Host "=================================================="
+          Write-Host "            DEPLOYMENT SUCCESSFUL"
+          Write-Host "=================================================="
+          Write-Host "Deployed Commit : ${{ github.sha }}"
+          Write-Host "Branch          : ${{ github.ref_name }}"
+          Write-Host "Triggered By    : ${{ github.actor }}"
+          Write-Host "Timestamp       : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC' -AsUTC)"
+          Write-Host "Frontend URL    : http://localhost:3000"
+          Write-Host "Backend API     : http://localhost:8000"
+          Write-Host "Backend Health  : http://localhost:8000/api/v1/health"
+          Write-Host "=================================================="
+          docker compose ps
+
+      - name: Deployment Failure Diagnostics
+        if: failure()
+        run: |
+          Write-Host "=================================================="
+          Write-Host "              DEPLOYMENT FAILED"
+          Write-Host "=================================================="
+          Write-Host "Commit          : ${{ github.sha }}"
+          Write-Host "Timestamp       : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC' -AsUTC)"
+          Write-Host "Dumping container statuses:"
+          docker compose ps
+          Write-Host "Dumping backend container logs:"
+          docker compose logs --tail=100 CampusX-backend
+          Write-Host "Dumping frontend container logs:"
+          docker compose logs --tail=100 CampusX-frontend
+          Write-Host "=================================================="
