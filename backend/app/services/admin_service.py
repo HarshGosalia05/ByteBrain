@@ -8,6 +8,7 @@ academic figures and never computes ML probabilities / confidence scores.
 
 from datetime import datetime, timezone
 from decimal import Decimal
+import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
@@ -143,15 +144,30 @@ class AdminService:
         kpis = DashboardKpis()
         filter_options = FilterOptions()
 
+        _t0 = time.monotonic()
+        _prev = _t0
+
+        def _step(name: str) -> None:
+            nonlocal _prev
+            now = time.monotonic()
+            print(
+                f"[ADMIN-DASHBOARD] {name} step_ms={int((now - _prev) * 1000)} total_ms={int((now - _t0) * 1000)}",
+                flush=True,
+            )
+            _prev = now
+
         overall = await self.repo.get_overall_counts(
             department_code, academic_year, semester
         )
+        _step("overall_counts")
         semester_avgs = await self.repo.get_semester_averages(
             department_code, academic_year, semester
         )
+        _step("semester_averages")
         risk_rows = await self.repo.get_risk_distribution(
             department_code, academic_year, semester
         )
+        _step("risk_distribution")
 
         kpis.total_students = int(overall.get("total_students") or 0)
         kpis.total_faculty = int(overall.get("total_faculty") or 0)
@@ -188,6 +204,7 @@ class AdminService:
                 department_code, academic_year, semester
             )
         ]
+        _step("department_performance")
 
         academic_trend = [
             DashboardTrendPoint(
@@ -197,6 +214,7 @@ class AdminService:
             )
             for row in await self.repo.get_academic_trend(department_code, academic_year)
         ]
+        _step("academic_trend")
 
         attendance_rows = await self.repo.get_attendance_distribution(
             department_code, academic_year, semester
@@ -208,6 +226,7 @@ class AdminService:
             )
             for row in attendance_rows
         ]
+        _step("attendance_distribution")
 
         result_rows = await self.repo.get_result_overview(
             department_code, academic_year, semester
@@ -218,6 +237,7 @@ class AdminService:
             for row in result_rows
         ]
         result_overview.sort(key=lambda item: result_order.get(item.status, 99))
+        _step("result_overview")
 
         insights = await self._build_insights(
             department_code=department_code,
@@ -226,8 +246,10 @@ class AdminService:
             department_performance=department_performance,
             risk_distribution=risk_distribution,
         )
+        _step("insights")
 
         filter_data = await self.repo.get_filter_options(department_code=department_code)
+        _step("filter_options")
         filter_options.batches = filter_data.get("batches") or filter_data.get("academic_years") or []
         filter_options.academic_years = filter_data.get("batches") or filter_data.get("academic_years") or []
         filter_options.departments = [
@@ -243,6 +265,7 @@ class AdminService:
         ]
         filter_options.department_batches = filter_data.get("department_batches") or {}
         filter_options.semesters = filter_data.get("semesters") or []
+        _step("done")
 
         return AdminDashboardResponse(
             kpis=kpis,
@@ -553,6 +576,19 @@ class AdminService:
         """Deterministic, data-driven insights (no ML, no guesses)."""
         insights: List[QuickInsight] = []
 
+        import time as _time
+        _t0 = _time.monotonic()
+        _prev = _t0
+
+        def _istep(name: str) -> None:
+            nonlocal _prev
+            now = _time.monotonic()
+            print(
+                f"[ADMIN-DASHBOARD] insights.{name} step_ms={int((now - _prev) * 1000)} total_ms={int((now - _t0) * 1000)}",
+                flush=True,
+            )
+            _prev = now
+
         # Highest / lowest performing department (from real averages).
         scored = [
             item
@@ -605,6 +641,7 @@ class AdminService:
         risk_rows = await self.repo.get_risk_by_department(
             department_code, academic_year, semester
         )
+        _istep("risk_by_department")
         dept_risk: Dict[str, int] = {}
         dept_total: Dict[str, int] = {}
         for row in risk_rows:
@@ -634,6 +671,7 @@ class AdminService:
         shortage = await self.repo.get_attendance_shortage_count(
             department_code, academic_year, semester
         )
+        _istep("attendance_shortage_count")
         if shortage > 0:
             insights.append(
                 QuickInsight(
@@ -660,6 +698,7 @@ class AdminService:
         weak_subjects = await self.repo.get_weakest_subjects(
             department_code, academic_year, semester
         )
+        _istep("weakest_subjects")
         if weak_subjects:
             weakest = weak_subjects[0]
             insights.append(
@@ -686,6 +725,7 @@ class AdminService:
                 )
             )
 
+        _istep("done")
         return insights
 
     async def get_attendance_intelligence(

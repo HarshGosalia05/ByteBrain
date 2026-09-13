@@ -1,3 +1,4 @@
+import time
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 import asyncpg
@@ -42,11 +43,21 @@ async def get_dashboard(
     semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
 ):
     """Institution-level dashboard analytics for admins."""
-    return await service.get_dashboard(
+    _t0 = time.monotonic()
+    print(
+        f"[ADMIN-DASHBOARD] request received dept={department_code} batch={batch} year={academic_year} sem={semester}",
+        flush=True,
+    )
+    result = await service.get_dashboard(
         department_code=department_code,
         academic_year=batch or academic_year,
         semester=semester,
     )
+    print(
+        f"[ADMIN-DASHBOARD] response ready total_ms={int((time.monotonic() - _t0) * 1000)}",
+        flush=True,
+    )
+    return result
 
 
 @router.get("/academic", response_model=AcademicOverviewResponse)
