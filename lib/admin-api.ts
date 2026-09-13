@@ -281,6 +281,11 @@ export function getAdminDashboard(
       academic_year: filters.academic_year ?? filters.batch,
       semester: filters.semester,
     },
+    // The dashboard performs multiple sequential Supabase aggregate queries
+    // (measured at ~13.6s in production when the pooler is warm), so the
+    // default 10s timeout is too short. All other admin FastAPI calls keep
+    // the 10s default.
+    timeoutMs: 30_000,
   })
 }
 
