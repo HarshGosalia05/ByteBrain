@@ -314,15 +314,30 @@ class AdminService:
         academic_year = _normalize_batch(academic_year)
         kpis = AcademicOverviewKpis()
 
+        _t0 = time.monotonic()
+        _prev = _t0
+
+        def _step(name: str) -> None:
+            nonlocal _prev
+            now = time.monotonic()
+            print(
+                f"[ADMIN-ACADEMIC] {name} step_ms={int((now - _prev) * 1000)} total_ms={int((now - _t0) * 1000)}",
+                flush=True,
+            )
+            _prev = now
+
         semester_avgs = await self.repo.get_semester_averages(
             department_code, academic_year, semester
         )
+        _step("semester_averages")
         overall = await self.repo.get_overall_counts(
             department_code, academic_year, semester
         )
+        _step("overall_counts")
         result_counts = await self.repo.get_result_counts(
             department_code, academic_year, semester
         )
+        _step("result_counts")
         kpis.avg_sgpa = _to_float(semester_avgs.get("avg_sgpa"))
         kpis.avg_percentage = _to_float(semester_avgs.get("avg_percentage"))
         kpis.avg_attendance = _to_float(semester_avgs.get("avg_attendance"))
@@ -334,6 +349,7 @@ class AdminService:
         kpis.credits_earned = await self.repo.get_credits_earned(
             department_code, academic_year, semester
         )
+        _step("credits_earned")
 
         trend = [
             AcademicTrendPoint(
@@ -346,6 +362,7 @@ class AdminService:
                 department_code, academic_year
             )
         ]
+        _step("academic_trend")
 
         pass_rate_trend = [
             PassRatePoint(
@@ -359,12 +376,14 @@ class AdminService:
                 department_code, academic_year, semester
             )
         ]
+        _step("pass_rate_trend")
 
         grade_counts: Dict[str, int] = {}
         for row in await self.repo.get_grade_distribution(
             department_code, academic_year, semester
         ):
             grade_counts[str(row["grade"])] = int(row.get("count") or 0)
+        _step("grade_distribution")
         grade_distribution = [
             GradeDistributionItem(grade=grade, count=grade_counts.get(grade, 0))
             for grade in GRADE_ORDER
@@ -374,9 +393,13 @@ class AdminService:
                 GradeDistributionItem(grade=grade, count=grade_counts[grade])
             )
 
+        filters_data = await self._build_filter_options(department_code)
+        _step("filter_options")
+        _step("done")
+
         return AcademicOverviewResponse(
             kpis=kpis,
-            filters=await self._build_filter_options(department_code),
+            filters=filters_data,
             trend=trend,
             pass_rate_trend=pass_rate_trend,
             grade_distribution=grade_distribution,
@@ -756,7 +779,7 @@ class AdminService:
             nonlocal _prev
             now = time.monotonic()
             print(
-                f"[ATTENDANCE] {name} step_ms={int((now - _prev) * 1000)} total_ms={int((now - _t0) * 1000)}",
+                f"[ADMIN-ATTENDANCE] {name} step_ms={int((now - _prev) * 1000)} total_ms={int((now - _t0) * 1000)}",
                 flush=True,
             )
             _prev = now

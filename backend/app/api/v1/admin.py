@@ -70,11 +70,21 @@ async def get_academic_overview(
     semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
 ):
     """MD-03 Part A — institution academic overview."""
-    return await service.get_academic_overview(
+    _t0 = time.monotonic()
+    print(
+        f"[ADMIN-ACADEMIC] request received dept={department_code} batch={batch} year={academic_year} sem={semester}",
+        flush=True,
+    )
+    result = await service.get_academic_overview(
         department_code=department_code,
         academic_year=batch or academic_year,
         semester=semester,
     )
+    print(
+        f"[ADMIN-ACADEMIC] response ready total_ms={int((time.monotonic() - _t0) * 1000)}",
+        flush=True,
+    )
+    return result
 
 
 @router.get("/academic/departments", response_model=DepartmentAnalyticsResponse)
@@ -130,7 +140,7 @@ async def get_attendance_intelligence(
     """MD-04 Admin Attendance Intelligence."""
     _t0 = time.monotonic()
     print(
-        f"[ATTENDANCE] request received dept={department_code} batch={batch} year={academic_year} sem={semester} search={search} limit={limit} offset={offset}",
+        f"[ADMIN-ATTENDANCE] request received dept={department_code} batch={batch} year={academic_year} sem={semester} search={search} limit={limit} offset={offset}",
         flush=True,
     )
     result = await service.get_attendance_intelligence(
@@ -142,7 +152,7 @@ async def get_attendance_intelligence(
         offset=offset,
     )
     print(
-        f"[ATTENDANCE] response ready total_ms={int((time.monotonic() - _t0) * 1000)}",
+        f"[ADMIN-ATTENDANCE] response ready total_ms={int((time.monotonic() - _t0) * 1000)}",
         flush=True,
     )
     return result
