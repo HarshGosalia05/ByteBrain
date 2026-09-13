@@ -153,6 +153,83 @@ test("getAdminStudents forwards filters, risk, search, sort and pagination", asy
   assert.equal(headers["Authorization"], `Bearer ${expectedToken}`)
 })
 
+// ---------------------------------------------------------------------------
+// Attendance timeout (MD-04 production fix)
+// ---------------------------------------------------------------------------
+// The attendance endpoint runs many sequential Supabase aggregate queries and
+// was measured at ~11.2s in production, so getAttendanceIntelligence must
+// override the default 10s BFF timeout with 30s while every other admin call
+// keeps the 10s default.
+
+test("getAttendanceIntelligence uses a 30s timeout; other admin calls keep the default 10s", async () => {
+  adminApi.clearAdminBffCache()
+
+  const attendanceBody = {
+    kpis: {
+      avg_attendance: 78.5,
+      students_below_target: 12,
+      critical_shortage_students: 5,
+      eligible_students: 340,
+      not_eligible_students: 21,
+    },
+    required_target: 75,
+    filters: { academic_years: [], departments: [], semesters: [] },
+    by_department: [],
+    by_semester: [],
+    distribution: [],
+    subjects: [],
+    subjects_total: 0,
+    shortage_total: 0,
+    shortage_students_total: 0,
+    shortage_students: [],
+    limit: 100,
+    offset: 0,
+    generated_at: "2026-08-12T00:00:00Z",
+  }
+  route("attendance", 200, attendanceBody)
+  route("faculty", 200, {
+    kpis: { total_faculty: 20, active_faculty: 18, department_count: 4 },
+    by_department: [],
+    by_designation: [],
+    faculty: [],
+    generated_at: "2026-08-12T00:00:00Z",
+  })
+
+  const observedTimeoutMs: number[] = []
+  const originalTimeout = AbortSignal.timeout
+  AbortSignal.timeout = (ms: number) => {
+    observedTimeoutMs.push(ms)
+    return originalTimeout.call(AbortSignal, ms)
+  }
+
+  try {
+    const attendance = await adminApi.getAttendanceIntelligence(
+      { department_code: 1, batch: "2026" },
+      "CS",
+    )
+    assert.equal(attendance.ok, true)
+    if (!attendance.ok) return
+    assert.equal(attendance.data.kpis.avg_attendance, 78.5)
+
+    const hit = getCalls("attendance")
+    assert.equal(hit.length, 1)
+    const query = hit[0].url.split("?")[1] ?? ""
+    assert.ok(query.includes("department_code=1"))
+    assert.ok(query.includes("batch=2026"))
+    assert.ok(query.includes("search=CS"))
+
+    // A normal admin call without an explicit timeout must keep 10s.
+    const faculty = await adminApi.getAdminFaculty()
+    assert.equal(faculty.ok, true)
+
+    assert.deepEqual(observedTimeoutMs, [30_000, 10_000])
+  } finally {
+    AbortSignal.timeout = originalTimeout
+    // Do not leak the faculty/attendance cache entries into later tests.
+    adminApi.clearAdminBffCache()
+  }
+})
+
 test("getAdminStudents with no query hits the plain students endpoint", async () => {
   const body = {
     filters: { academic_years: [], departments: [], semesters: [] },

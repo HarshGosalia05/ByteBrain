@@ -571,6 +571,11 @@ export function getAttendanceIntelligence(
       semester: filters.semester,
       search: search || undefined,
     },
+    // The attendance page runs 14 sequential Supabase aggregate queries,
+    // measured at ~11.2s in production when the pooler is warm — the default
+    // 10s timeout is too short. All other admin FastAPI calls keep the 10s
+    // default.
+    timeoutMs: 30_000,
   })
 }
 
