@@ -749,10 +749,23 @@ class AdminService:
         target = settings.FACULTY_ATTENDANCE_THRESHOLD
         critical = settings.FACULTY_ATTENDANCE_CRITICAL_THRESHOLD
 
+        _t0 = time.monotonic()
+        _prev = _t0
+
+        def _step(name: str) -> None:
+            nonlocal _prev
+            now = time.monotonic()
+            print(
+                f"[ATTENDANCE] {name} step_ms={int((now - _prev) * 1000)} total_ms={int((now - _t0) * 1000)}",
+                flush=True,
+            )
+            _prev = now
+
         # KPIs
         kpi_row = await self.repo.get_attendance_kpis(
             department_code, academic_year, semester, target, critical
         ) or {}
+        _step("kpis")
         kpis = AttendanceKpis(
             avg_attendance=_to_float(kpi_row.get("avg_attendance")),
             students_below_target=int(kpi_row.get("students_below_target") or 0),
@@ -770,6 +783,7 @@ class AdminService:
             )
             for row in await self.repo.get_attendance_by_department(academic_year, semester)
         ]
+        _step("by_department")
 
         # By semester
         by_semester = [
@@ -779,6 +793,7 @@ class AdminService:
             )
             for row in await self.repo.get_attendance_by_semester(department_code, academic_year)
         ]
+        _step("by_semester")
 
         # Distribution (reuse existing repo method)
         dist_rows = await self.repo.get_attendance_distribution(
@@ -792,11 +807,13 @@ class AdminService:
             )
             for row in dist_rows
         ]
+        _step("distribution")
 
         # Subject attendance
         subject_data = await self.repo.get_subject_attendance(
             department_code, academic_year, semester, search, target, critical, limit, offset
         )
+        _step("subject_attendance")
         subjects = [
             SubjectAttendanceRow(
                 subject_code=str(row["subject_code"]),
@@ -819,6 +836,7 @@ class AdminService:
         shortage_data = await self.repo.get_shortage_students(
             department_code, academic_year, semester, search, target, limit, offset
         )
+        _step("shortage_students")
         shortage_students = []
         for row in shortage_data.get("items") or []:
             pct = _to_float(row.get("attendance_percentage"))
@@ -843,10 +861,14 @@ class AdminService:
             row["student_id"] for row in (shortage_data.get("items") or [])
         ))
 
+        filters = await self._build_filter_options(department_code)
+        _step("filter_options")
+        _step("done")
+
         return AttendanceIntelligenceResponse(
             kpis=kpis,
             required_target=round(target, 2),
-            filters=await self._build_filter_options(department_code),
+            filters=filters,
             by_department=by_department,
             by_semester=by_semester,
             distribution=distribution,

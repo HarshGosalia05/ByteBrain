@@ -128,7 +128,12 @@ async def get_attendance_intelligence(
     offset: int = Query(0, ge=0, description="Page offset"),
 ):
     """MD-04 Admin Attendance Intelligence."""
-    return await service.get_attendance_intelligence(
+    _t0 = time.monotonic()
+    print(
+        f"[ATTENDANCE] request received dept={department_code} batch={batch} year={academic_year} sem={semester} search={search} limit={limit} offset={offset}",
+        flush=True,
+    )
+    result = await service.get_attendance_intelligence(
         department_code=department_code,
         academic_year=batch or academic_year,
         semester=semester,
@@ -136,6 +141,11 @@ async def get_attendance_intelligence(
         limit=limit,
         offset=offset,
     )
+    print(
+        f"[ATTENDANCE] response ready total_ms={int((time.monotonic() - _t0) * 1000)}",
+        flush=True,
+    )
+    return result
 
 
 @router.get("/risk", response_model=RiskIntelligenceResponse)
