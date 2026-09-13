@@ -6,7 +6,11 @@ import type { M3V2PredictionData } from "./m3v2-prediction"
 
 export type { SessionUser } from "./student-session.ts"
 
-const FASTAPI_URL = (process.env.FASTAPI_URL ?? "http://localhost:8000").replace(/\/+$/, "")
+const FASTAPI_URL = (() => {
+  const env = (process.env.FASTAPI_URL ?? "").trim().replace(/\/+$/, "")
+  if (env) return env
+  return process.env.NODE_ENV === "production" ? "" : "http://localhost:8000"
+})()
 const BFF_TTL_MS = 60_000
 
 export type DashboardKpis = {
@@ -181,6 +185,18 @@ async function callFastapi<T>(
       },
     }
   }
+  if (!FASTAPI_URL) {
+    console.error("[admin-api] FASTAPI_URL is not configured in the server environment.")
+    return {
+      ok: false,
+      error: {
+        status: 503,
+        code: "unavailable",
+        message:
+          "The academic service is not configured on this server (FASTAPI_URL is not set). Please contact the administrator.",
+      },
+    }
+  }
 
   const query = options?.query ?? {}
   const params = new URLSearchParams()
@@ -235,7 +251,11 @@ async function callFastapi<T>(
     }
     bffCache.set(key, { value: result, expiresAt: Date.now() + ttlMs })
     return result
-  } catch {
+  } catch (err) {
+    console.error(
+      `[admin-api] FastAPI call failed for /api/v1/admin/${pathWithQuery} at ${FASTAPI_URL || "<FASTAPI_URL unset>"}:`,
+      err instanceof Error ? err.message : err,
+    )
     return {
       ok: false,
       error: {
