@@ -21,16 +21,13 @@ services:
   # ---------------------------------------------------------------------------
   - type: web
     name: campusx-backend
-    runtime: image
-    image:
-      url: https://github.com/HarshGosalia05/ByteBrain.git
-      branch: main
-      buildContext: .
-      dockerfilePath: backend/Dockerfile
+    runtime: docker
+    repo: https://github.com/HarshGosalia05/ByteBrain.git
+    branch: main
+    dockerfilePath: backend/Dockerfile
+    dockerContext: .
     plan: starter
     healthCheckPath: /api/v1/health
-    healthCheckPolicy:
-      responseTimeoutSeconds: 30
     envVars:
       # --- Required Secrets (set in Render Dashboard) ---
       - key: DB_PASSWORD
@@ -75,12 +72,11 @@ services:
   # ---------------------------------------------------------------------------
   - type: web
     name: campusx-frontend
-    runtime: image
-    image:
-      url: https://github.com/HarshGosalia05/ByteBrain.git
-      branch: main
-      buildContext: .
-      dockerfilePath: Dockerfile
+    runtime: docker
+    repo: https://github.com/HarshGosalia05/ByteBrain.git
+    branch: main
+    dockerfilePath: Dockerfile
+    dockerContext: .
     plan: starter
     envVars:
       # --- Required Secrets (set in Render Dashboard) ---
