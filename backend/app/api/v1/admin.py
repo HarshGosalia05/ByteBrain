@@ -1,3 +1,4 @@
+import time
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 import asyncpg
@@ -42,11 +43,21 @@ async def get_dashboard(
     semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
 ):
     """Institution-level dashboard analytics for admins."""
-    return await service.get_dashboard(
+    _t0 = time.monotonic()
+    print(
+        f"[ADMIN-DASHBOARD] request received dept={department_code} batch={batch} year={academic_year} sem={semester}",
+        flush=True,
+    )
+    result = await service.get_dashboard(
         department_code=department_code,
         academic_year=batch or academic_year,
         semester=semester,
     )
+    print(
+        f"[ADMIN-DASHBOARD] response ready total_ms={int((time.monotonic() - _t0) * 1000)}",
+        flush=True,
+    )
+    return result
 
 
 @router.get("/academic", response_model=AcademicOverviewResponse)
@@ -59,11 +70,21 @@ async def get_academic_overview(
     semester: Optional[int] = Query(None, ge=1, le=8, description="Filter by semester (1-8)"),
 ):
     """MD-03 Part A — institution academic overview."""
-    return await service.get_academic_overview(
+    _t0 = time.monotonic()
+    print(
+        f"[ADMIN-ACADEMIC] request received dept={department_code} batch={batch} year={academic_year} sem={semester}",
+        flush=True,
+    )
+    result = await service.get_academic_overview(
         department_code=department_code,
         academic_year=batch or academic_year,
         semester=semester,
     )
+    print(
+        f"[ADMIN-ACADEMIC] response ready total_ms={int((time.monotonic() - _t0) * 1000)}",
+        flush=True,
+    )
+    return result
 
 
 @router.get("/academic/departments", response_model=DepartmentAnalyticsResponse)
@@ -117,7 +138,12 @@ async def get_attendance_intelligence(
     offset: int = Query(0, ge=0, description="Page offset"),
 ):
     """MD-04 Admin Attendance Intelligence."""
-    return await service.get_attendance_intelligence(
+    _t0 = time.monotonic()
+    print(
+        f"[ADMIN-ATTENDANCE] request received dept={department_code} batch={batch} year={academic_year} sem={semester} search={search} limit={limit} offset={offset}",
+        flush=True,
+    )
+    result = await service.get_attendance_intelligence(
         department_code=department_code,
         academic_year=batch or academic_year,
         semester=semester,
@@ -125,6 +151,11 @@ async def get_attendance_intelligence(
         limit=limit,
         offset=offset,
     )
+    print(
+        f"[ADMIN-ATTENDANCE] response ready total_ms={int((time.monotonic() - _t0) * 1000)}",
+        flush=True,
+    )
+    return result
 
 
 @router.get("/risk", response_model=RiskIntelligenceResponse)
