@@ -36,7 +36,6 @@ export default async function AnalyticsOverviewPage(props: {
         ? parseInt(searchParams.semester_no, 10) || null
         : null,
     batch,
-    academic_year: batch,
   }
 
   const [deptRes, perfRes, attRes, backlogRes, riskRes, subjectsRes, filterOptionsRes] = await Promise.all([
