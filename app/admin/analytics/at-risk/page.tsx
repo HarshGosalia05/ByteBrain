@@ -33,7 +33,6 @@ export default async function AtRiskAnalyticsPage(props: {
         ? parseInt(searchParams.semester_no, 10) || null
         : null,
     batch,
-    academic_year: batch,
   }
 
   const [riskRes, thresholdRes, subjectsRes, filterOptionsRes] = await Promise.all([
