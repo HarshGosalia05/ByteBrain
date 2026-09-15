@@ -1,6 +1,27 @@
 name: CampusX
 
 services:
+  CampusX-db:
+    image: postgres:15-alpine
+    container_name: CampusX-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-campusx}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - campusx-pgdata:/var/lib/postgresql/data
+    networks:
+      - CampusX-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-campusx}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   CampusX-backend:
     build:
       context: .
@@ -12,6 +33,7 @@ services:
       - "${PORT:-8000}:8000"
     environment:
       - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@CampusX-db:5432/${DB_NAME:-campusx}
     env_file:
       - path: .env.local
         required: false
@@ -19,6 +41,9 @@ services:
         required: false
     networks:
       - CampusX-network
+    depends_on:
+      CampusX-db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request, sys, os; port=os.environ.get('PORT','8000'); sys.exit(0 if urllib.request.urlopen(f'http://localhost:{port}/api/v1/health').getcode() == 200 else 1)"]
       interval: 30s
@@ -52,3 +77,6 @@ services:
 networks:
   CampusX-network:
     driver: bridge
+
+volumes:
+  campusx-pgdata:
