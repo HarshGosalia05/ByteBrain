@@ -3109,6 +3109,7 @@ class FacultyRepository:
                     """
                     SELECT max(substring(performance_id from 4)::bigint)
                     FROM student_subject_performance
+                    WHERE performance_id ~ '^PER[0-9]+$'
                     """
                 )
 
@@ -3991,6 +3992,7 @@ class FacultyRepository:
                     """
                     SELECT COALESCE(max(substring(semester_summary_id from 4)::bigint), 0) + 1
                     FROM student_semester_summary
+                    WHERE semester_summary_id ~ '^SEM[0-9]+$'
                     """
                 )
                 await conn.execute(

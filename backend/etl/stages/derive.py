@@ -286,7 +286,7 @@ class DeriveStage(Stage):
         sem_map = {r["student_id"]: r for r in sem_rows}
         max_id_row = await conn.fetchval(
             f"SELECT COALESCE(max(substring(semester_summary_id from 4)::bigint), 0) "
-            f"FROM {TABLE_SEMESTER_SUMMARY}"
+            f"FROM {TABLE_SEMESTER_SUMMARY} WHERE semester_summary_id ~ '^SEM[0-9]+$'"
         )
         next_id = int(max_id_row) + 1
 
