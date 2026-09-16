@@ -397,6 +397,7 @@ Video Demo :
 
 https://drive.google.com/file/d/1UaWi3bRm8_0xRwjvzTC67ql5AlwkJvpH/view?usp=sharing
 
+Live :- https://campusx-frontend-0byk.onrender.com/
 
 ## 📸 Screenshots & UI Previews
 
