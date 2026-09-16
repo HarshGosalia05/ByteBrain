@@ -393,6 +393,11 @@ npm run test:frontend
 
 ---
 
+Video Demo :
+
+https://drive.google.com/file/d/1UaWi3bRm8_0xRwjvzTC67ql5AlwkJvpH/view?usp=sharing
+
+
 ## 📸 Screenshots & UI Previews
 
 *(Drop application screenshots here before final presentation)*
